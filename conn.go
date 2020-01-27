@@ -139,17 +139,17 @@ func (c *Conn) Close() error {
 	return c.closeWithError(nil)
 }
 
-// LocalAddr implement net.Conn
+// LocalAddr return socket local addr
 func (c *Conn) LocalAddr() net.Addr {
 	return c.g.localAddr
 }
 
-// RemoteAddr implement net.Conn
+// RemoteAddr return socket remote addr
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.remoteAddr
 }
 
-// SetDeadline implement net.Conn
+// SetDeadline set socket recv & send deadline
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -166,7 +166,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline implement net.Conn
+// SetReadDeadline set socket recv deadline
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed && len(c.writeList) == 0 {
@@ -179,7 +179,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline implement net.Conn
+// SetWriteDeadline set socket send deadline
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -192,8 +192,45 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// SetsockoptLinger 1 & 0 help to decrease time_wait
-func (c *Conn) SetsockoptLinger(onoff int32, linger int32) error {
+// SetNoDelay set socket nodelay
+func (c *Conn) SetNoDelay(nodelay bool) error {
+	if nodelay {
+		return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1)
+	}
+	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 0)
+}
+
+// SetReadBuffer set socket recv buffer length
+func (c *Conn) SetReadBuffer(bytes int) error {
+	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, bytes)
+}
+
+// SetWriteBuffer set socket send buffer length
+func (c *Conn) SetWriteBuffer(bytes int) error {
+	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, bytes)
+}
+
+// SetKeepAlive set socket keepalive
+func (c *Conn) SetKeepAlive(keepalive bool) error {
+	if keepalive {
+		return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1)
+	}
+	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0)
+}
+
+// SetKeepAlivePeriod set socket keepalive peroid
+func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
+	d += (time.Second - time.Nanosecond)
+	secs := int(d.Seconds())
+	if err := syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, secs); err != nil {
+		return err
+	}
+	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
+}
+
+// SetLinger set socket linger
+// to decrease time_wait, plz set onoff=1 && linger=0
+func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return syscall.SetsockoptLinger(c.fd, syscall.SOL_SOCKET, syscall.SO_LINGER, &syscall.Linger{
 		Onoff:  onoff,  // 1
 		Linger: linger, // 0

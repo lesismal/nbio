@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -14,55 +16,72 @@ var addr = "127.0.0.1:8888"
 var g *Gopher
 
 func init() {
-	g = echoServer(1024)
+	g = echoServer(1024 * 64)
 	go http.ListenAndServe(":6060", nil)
 }
 
-func Test1k(t *testing.T) {
-	testEcho(t, 1024, 1024)
-}
-func Test2k(t *testing.T) {
-	testEcho(t, 2048, 1024)
-}
-
-func Test4k(t *testing.T) {
-	testEcho(t, 4096, 1024)
-}
-
-func Test8k(t *testing.T) {
-	testEcho(t, 8192, 1024)
-}
-
-func Test10k(t *testing.T) {
-	testEcho(t, 10240, 1024)
-}
-
-func Test12k(t *testing.T) {
-	testEcho(t, 12288, 1024)
-}
-
-func Test1kTiny(t *testing.T) {
+func Test1k16B(t *testing.T) {
 	testEcho(t, 1024, 16)
 }
 
-func Test2kTiny(t *testing.T) {
-	testEcho(t, 2048, 16)
+func Test1k64B(t *testing.T) {
+	testEcho(t, 1024, 64)
 }
 
-func Test4kTiny(t *testing.T) {
-	testEcho(t, 4096, 16)
+func Test1k128B(t *testing.T) {
+	testEcho(t, 1024, 128)
+}
+
+func Test1k1k(t *testing.T) {
+	testEcho(t, 1024, 1024)
+}
+
+func Test1k2k(t *testing.T) {
+	testEcho(t, 1024, 1024*2)
+}
+
+func Test1k4k(t *testing.T) {
+	testEcho(t, 1024, 1024*4)
+}
+
+func Test1k8k(t *testing.T) {
+	testEcho(t, 1024, 1024*8)
+}
+
+func Test2k16B(t *testing.T) {
+	testEcho(t, 1024*2, 16)
+}
+
+func Test2k64B(t *testing.T) {
+	testEcho(t, 1024*2, 64)
+}
+
+func Test2k128B(t *testing.T) {
+	testEcho(t, 1024*2, 128)
+}
+
+func Test2k1k(t *testing.T) {
+	testEcho(t, 1024*2, 1024)
+}
+
+func Test2k2k(t *testing.T) {
+	testEcho(t, 1024*2, 1024*2)
+}
+
+func Test2k4k(t *testing.T) {
+	testEcho(t, 1024*2, 1024*4)
+}
+
+func Test2k8k(t *testing.T) {
+	testEcho(t, 1024*2, 1024*8)
 }
 
 func BenchmarkEcho4K(b *testing.B) {
-	benchmarkEcho(b, 4096)
+	benchmarkEcho(b, 1024*4)
 }
 
-func BenchmarkEcho64K(b *testing.B) {
-	benchmarkEcho(b, 65536)
-}
-
-func BenchmarkEcho128K(b *testing.B) {
-	benchmarkEcho(b, 128*1024)
+func BenchmarkEcho8K(b *testing.B) {
+	benchmarkEcho(b, 1024*8)
 }
 
 func echoServer(bufsize int) *Gopher {
@@ -70,20 +89,20 @@ func echoServer(bufsize int) *Gopher {
 
 		Network:      "tcp",
 		Address:      addr,
-		NPoller:      2,
-		NWorker:      4,
+		NPoller:      1,
+		NWorker:      1,
 		QueueSize:    1024,
 		BufferSize:   uint32(bufsize),
 		BufferNum:    1024 * 2,
-		PollInterval: 200,    //ms
-		MaxTimeout:   120000, //ms
+		PollInterval: time.Millisecond * 200,
+		MaxTimeout:   time.Second * 10,
 	})
 	if err != nil {
 		log.Fatalf("NewGopher failed: %v\n", err)
 	}
 
 	g.OnOpen(func(c *Conn) {
-		c.SetsockoptLinger(1, 0)
+		c.SetLinger(1, 0)
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		dataCopy := append([]byte{}, data...)
@@ -99,26 +118,59 @@ func echoServer(bufsize int) *Gopher {
 }
 
 func testEcho(t *testing.T, clientNum int, bufsize int) {
+	var (
+		qps   int64
+		wg    sync.WaitGroup
+		total int64 = 100000
+	)
 	for i := 0; i < clientNum; i++ {
-		func() {
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 			data := make([]byte, bufsize)
-			conn, err := net.DialTimeout("tcp", addr, time.Second)
+			//conn, err := net.DialTimeout("tcp", addr, time.Second)
+			conn, err := net.Dial("tcp", addr)
 			if err != nil {
-				t.Fatal(err)
+				t.Log(err)
+				return
 			}
 			defer conn.Close()
 
-			conn.SetWriteDeadline(time.Now().Add(time.Second * 5))
-			n, err := conn.Write(data)
-			if err != nil || n < bufsize {
-				t.Fatalf("Write failed: %v, %v", err, n)
-			}
-			conn.SetReadDeadline(time.Now().Add(time.Second * 5))
-			n, err = io.ReadFull(conn, data)
-			if err != nil {
-				t.Fatalf("Read failed: %v, %v", err, n)
+			for {
+				// err = conn.(*net.TCPConn).SetReadBuffer(1024 * 64)
+				// if err != nil {
+				// 	log.Println("++ SetReadBuffer failed: ", err)
+				// 	return
+				// }
+				// err = conn.(*net.TCPConn).SetWriteBuffer(1024 * 64)
+				// if err != nil {
+				// 	log.Println("++ SetWriteBuffer failed: ", err)
+				// 	return
+				// }
+				// conn.SetWriteDeadline(time.Now().Add(time.Second * 5))
+				n, err := conn.Write(data)
+				if err != nil || n < bufsize {
+					t.Logf("Write failed: %v, %v", err, n)
+					break
+				}
+				// conn.SetReadDeadline(time.Now().Add(time.Second * 5))
+				n, err = io.ReadFull(conn, data)
+				if err != nil {
+					t.Logf("Read failed: %v, %v", err, n)
+					break
+				}
+				if atomic.AddInt64(&qps, 1) >= total {
+					return
+				}
 			}
 		}()
+	}
+
+	wg.Wait()
+
+	if atomic.LoadInt64(&qps) < total {
+		t.Fatalf("test %v %v failed, qps: %v", clientNum, bufsize, atomic.LoadInt64(&qps))
 	}
 }
 
@@ -130,8 +182,7 @@ func benchmarkEcho(b *testing.B, bufsize int) {
 	}
 	defer conn.Close()
 
-	for j := 0; j < b.N; j++ {
-		// send
+	for i := 0; i < b.N; i++ {
 		n, err := conn.Write(data)
 		if err != nil || n < bufsize {
 			b.Fatalf("Write failed: %v, %v", err, n)
@@ -142,4 +193,5 @@ func benchmarkEcho(b *testing.B, bufsize int) {
 			b.Fatalf("Read failed: %v, %v", err, n)
 		}
 	}
+	// b.Logf("benchmark b.N: %v", b.N)
 }
