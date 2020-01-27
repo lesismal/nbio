@@ -63,6 +63,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 }
 
 // Write implement net.Conn
+// IF return syscall.EINVAL, should Close
+// ELSE the data would be send or push to write list
 func (c *Conn) Write(b []byte) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -115,6 +117,8 @@ func (c *Conn) Write(b []byte) error {
 }
 
 // Writev wrap writevimplement and extend net.Conn
+// IF return syscall.EINVAL, should Close
+// ELSE the data would be send or push to write list
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	c.mux.Lock()
 
