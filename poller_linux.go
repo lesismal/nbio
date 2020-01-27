@@ -102,10 +102,7 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 		}
 
 		if ev.Events&syscall.EPOLLOUT != 0 {
-			if err := c.Flush(); err != nil && err != syscall.EAGAIN {
-				c.closeWithError(err)
-				return
-			}
+			c.flush()
 		}
 	}
 }

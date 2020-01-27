@@ -1,6 +1,7 @@
 package nbio
 
 import (
+	"bytes"
 	"io"
 	"log"
 	"net"
@@ -19,6 +20,10 @@ var testQps int64 = 100000
 func init() {
 	g = echoServer(1024 * 64)
 	go http.ListenAndServe(":6060", nil)
+}
+
+func TestHuge1V100M(t *testing.T) {
+	testHuge(t, 1, 1024*1024*100)
 }
 
 func Test1k16B(t *testing.T) {
@@ -77,14 +82,6 @@ func Test2k8k(t *testing.T) {
 	testEcho(t, 1024*2, testQps, 1024*8)
 }
 
-func TestHuge1V100M(t *testing.T) {
-	testHuge(t, 1, 1024*1024*100)
-}
-
-func TestHuge10V100M(t *testing.T) {
-	testHuge(t, 1, 1024*1024*100)
-}
-
 func BenchmarkEcho4K(b *testing.B) {
 	benchmarkEcho(b, 1024*4)
 }
@@ -95,16 +92,16 @@ func BenchmarkEcho8K(b *testing.B) {
 
 func echoServer(bufsize int) *Gopher {
 	g, err := NewGopher(Config{
-
-		Network:      "tcp",
-		Address:      addr,
-		NPoller:      1,
-		NWorker:      1,
-		QueueSize:    1024,
-		BufferSize:   uint32(bufsize),
-		BufferNum:    1024 * 2,
-		PollInterval: time.Millisecond * 200,
-		MaxTimeout:   time.Second * 10,
+		Network:        "tcp",
+		Address:        addr,
+		NPoller:        1,
+		NWorker:        1,
+		QueueSize:      1024,
+		BufferSize:     uint32(bufsize),
+		BufferNum:      1024 * 2,
+		PollInterval:   time.Millisecond * 200,
+		MaxTimeout:     time.Second * 10,
+		MaxWriteBuffer: 1024 * 1024 * 100,
 	})
 	if err != nil {
 		log.Fatalf("NewGopher failed: %v\n", err)
@@ -177,7 +174,8 @@ func testHuge(t *testing.T, clientNum int, bufsize int) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			data := make([]byte, bufsize)
+			wx := make([]byte, bufsize)
+			rx := make([]byte, bufsize)
 			conn, err := net.Dial("tcp", addr)
 			if err != nil {
 				t.Log(err)
@@ -186,15 +184,22 @@ func testHuge(t *testing.T, clientNum int, bufsize int) {
 			defer conn.Close()
 
 			go func() {
-				n, err := conn.Write(data)
+				n, err := conn.Write(wx)
 				if err != nil || n < bufsize {
 					t.Logf("Write failed: %v, %v", err, n)
 				}
 			}()
-			n, err := io.ReadFull(conn, data)
+
+			n, err := io.ReadFull(conn, rx)
+			t.Log("pong size:", n)
 			if err != nil {
-				t.Logf("Read failed: %v, %v", err, n)
+				t.Logf("Read failed: %v", err)
 			}
+
+			if !bytes.Equal(wx, rx) {
+				t.Fatal("incorrect receiving")
+			}
+			t.Log("bytes compare successful")
 		}()
 	}
 
