@@ -24,7 +24,7 @@ const (
 	_DEFAULT_BUFFER_NUM uint32 = 1024
 
 	// default max write buffer size of 1 Conn
-	_DEFAULT_MAX_WRITE_BUFFER uint32 = 1024 * 16
+	_DEFAULT_MAX_WRITE_BUFFER uint32 = 1024 * 64
 
 	// default interval of poller tick and timer wheel
 	_DEFAULT_POLL_INTERVAL = time.Millisecond * 200

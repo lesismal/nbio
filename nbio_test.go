@@ -14,6 +14,7 @@ import (
 
 var addr = "127.0.0.1:8888"
 var g *Gopher
+var testQps int64 = 100000
 
 func init() {
 	g = echoServer(1024 * 64)
@@ -21,59 +22,67 @@ func init() {
 }
 
 func Test1k16B(t *testing.T) {
-	testEcho(t, 1024, 16)
+	testEcho(t, 1024, testQps, 16)
 }
 
 func Test1k64B(t *testing.T) {
-	testEcho(t, 1024, 64)
+	testEcho(t, 1024, testQps, 64)
 }
 
 func Test1k128B(t *testing.T) {
-	testEcho(t, 1024, 128)
+	testEcho(t, 1024, testQps, 128)
 }
 
 func Test1k1k(t *testing.T) {
-	testEcho(t, 1024, 1024)
+	testEcho(t, 1024, testQps, 1024)
 }
 
 func Test1k2k(t *testing.T) {
-	testEcho(t, 1024, 1024*2)
+	testEcho(t, 1024, testQps, 1024*2)
 }
 
 func Test1k4k(t *testing.T) {
-	testEcho(t, 1024, 1024*4)
+	testEcho(t, 1024, testQps, 1024*4)
 }
 
 func Test1k8k(t *testing.T) {
-	testEcho(t, 1024, 1024*8)
+	testEcho(t, 1024, testQps, 1024*8)
 }
 
 func Test2k16B(t *testing.T) {
-	testEcho(t, 1024*2, 16)
+	testEcho(t, 1024*2, testQps, 16)
 }
 
 func Test2k64B(t *testing.T) {
-	testEcho(t, 1024*2, 64)
+	testEcho(t, 1024*2, testQps, 64)
 }
 
 func Test2k128B(t *testing.T) {
-	testEcho(t, 1024*2, 128)
+	testEcho(t, 1024*2, testQps, 128)
 }
 
 func Test2k1k(t *testing.T) {
-	testEcho(t, 1024*2, 1024)
+	testEcho(t, 1024*2, testQps, 1024)
 }
 
 func Test2k2k(t *testing.T) {
-	testEcho(t, 1024*2, 1024*2)
+	testEcho(t, 1024*2, testQps, 1024*2)
 }
 
 func Test2k4k(t *testing.T) {
-	testEcho(t, 1024*2, 1024*4)
+	testEcho(t, 1024*2, testQps, 1024*4)
 }
 
 func Test2k8k(t *testing.T) {
-	testEcho(t, 1024*2, 1024*8)
+	testEcho(t, 1024*2, testQps, 1024*8)
+}
+
+func TestHuge1V100M(t *testing.T) {
+	testHuge(t, 1, 1024*1024*100)
+}
+
+func TestHuge10V100M(t *testing.T) {
+	testHuge(t, 1, 1024*1024*100)
 }
 
 func BenchmarkEcho4K(b *testing.B) {
@@ -117,11 +126,10 @@ func echoServer(bufsize int) *Gopher {
 	return g
 }
 
-func testEcho(t *testing.T, clientNum int, bufsize int) {
+func testEcho(t *testing.T, clientNum int, total int64, bufsize int) {
 	var (
-		qps   int64
-		wg    sync.WaitGroup
-		total int64 = 100000
+		qps int64
+		wg  sync.WaitGroup
 	)
 	for i := 0; i < clientNum; i++ {
 
@@ -129,7 +137,6 @@ func testEcho(t *testing.T, clientNum int, bufsize int) {
 		go func() {
 			defer wg.Done()
 			data := make([]byte, bufsize)
-			//conn, err := net.DialTimeout("tcp", addr, time.Second)
 			conn, err := net.Dial("tcp", addr)
 			if err != nil {
 				t.Log(err)
@@ -138,23 +145,11 @@ func testEcho(t *testing.T, clientNum int, bufsize int) {
 			defer conn.Close()
 
 			for {
-				// err = conn.(*net.TCPConn).SetReadBuffer(1024 * 64)
-				// if err != nil {
-				// 	log.Println("++ SetReadBuffer failed: ", err)
-				// 	return
-				// }
-				// err = conn.(*net.TCPConn).SetWriteBuffer(1024 * 64)
-				// if err != nil {
-				// 	log.Println("++ SetWriteBuffer failed: ", err)
-				// 	return
-				// }
-				// conn.SetWriteDeadline(time.Now().Add(time.Second * 5))
 				n, err := conn.Write(data)
 				if err != nil || n < bufsize {
 					t.Logf("Write failed: %v, %v", err, n)
 					break
 				}
-				// conn.SetReadDeadline(time.Now().Add(time.Second * 5))
 				n, err = io.ReadFull(conn, data)
 				if err != nil {
 					t.Logf("Read failed: %v, %v", err, n)
@@ -172,6 +167,38 @@ func testEcho(t *testing.T, clientNum int, bufsize int) {
 	if atomic.LoadInt64(&qps) < total {
 		t.Fatalf("test %v %v failed, qps: %v", clientNum, bufsize, atomic.LoadInt64(&qps))
 	}
+}
+
+func testHuge(t *testing.T, clientNum int, bufsize int) {
+	var (
+		wg sync.WaitGroup
+	)
+	for i := 0; i < clientNum; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			data := make([]byte, bufsize)
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Log(err)
+				return
+			}
+			defer conn.Close()
+
+			go func() {
+				n, err := conn.Write(data)
+				if err != nil || n < bufsize {
+					t.Logf("Write failed: %v, %v", err, n)
+				}
+			}()
+			n, err := io.ReadFull(conn, data)
+			if err != nil {
+				t.Logf("Read failed: %v, %v", err, n)
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 func benchmarkEcho(b *testing.B, bufsize int) {
@@ -193,5 +220,4 @@ func benchmarkEcho(b *testing.B, bufsize int) {
 			b.Fatalf("Read failed: %v, %v", err, n)
 		}
 	}
-	// b.Logf("benchmark b.N: %v", b.N)
 }
