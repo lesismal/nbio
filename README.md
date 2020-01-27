@@ -27,12 +27,12 @@ import (
 )
 
 func onOpen(c *nbio.Conn) {
-	c.SetReadDeadline(time.Now().Add(time.Second * 13))
+	c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	fmt.Println("onOpen:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"))
 }
 
-func onClose(c *nbio.Conn) {
-	fmt.Println("onClose:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"))
+func onClose(c *nbio.Conn, err error) {
+	fmt.Println("onClose:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"), err)
 }
 
 func onData(c *nbio.Conn, data []byte) {
@@ -45,13 +45,13 @@ func main() {
 	g, err := nbio.NewGopher(nbio.Config{
 		Network:      "tcp",
 		Address:      ":8888",
-		NPoller:      4,
-		NWorker:      8,
+		NPoller:      2,
+		NWorker:      4,
 		QueueSize:    1024,
-		BufferSize:   1024 * 64,
+		BufferSize:   1024 * 8,
 		BufferNum:    1024 * 2,
-		PollInterval: 200,       //ms
-		MaxTimeout:   10 * 1000, //ms
+		PollInterval: time.Millisecond * 200,
+		MaxTimeout:   time.Second * 10,
 	})
 	if err != nil {
 		fmt.Printf("nbio.New failed: %v\n", err)

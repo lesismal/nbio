@@ -299,7 +299,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 		conf.NPoller = cpuNum
 	}
 	if conf.NWorker == 0 {
-		conf.NWorker = cpuNum * 64
+		conf.NWorker = cpuNum * 2
 	}
 	if conf.QueueSize == 0 {
 		conf.QueueSize = _DEFAULT_QUEUE_SIZE

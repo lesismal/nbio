@@ -7,7 +7,7 @@ import (
 )
 
 func onOpen(c *nbio.Conn) {
-	c.SetReadDeadline(time.Now().Add(time.Second * 13))
+	c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	fmt.Println("onOpen:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"))
 }
 
@@ -25,10 +25,10 @@ func main() {
 	g, err := nbio.NewGopher(nbio.Config{
 		Network:      "tcp",
 		Address:      ":8888",
-		NPoller:      4,
-		NWorker:      8,
+		NPoller:      2,
+		NWorker:      4,
 		QueueSize:    1024,
-		BufferSize:   1024 * 64,
+		BufferSize:   1024 * 8,
 		BufferNum:    1024 * 2,
 		PollInterval: time.Millisecond * 200,
 		MaxTimeout:   time.Second * 10,
