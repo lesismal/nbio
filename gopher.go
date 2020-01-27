@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 )
 
 const (
@@ -25,11 +26,11 @@ const (
 	// default max write buffer size of 1 Conn
 	_DEFAULT_MAX_WRITE_BUFFER uint32 = 1024 * 16
 
-	// default interval of poller tick and timer wheel, ms
-	_DEFAULT_POLL_INTERVAL uint32 = 200 //ms
+	// default interval of poller tick and timer wheel
+	_DEFAULT_POLL_INTERVAL = time.Millisecond * 200
 
 	// default max timeout ms of conn.Read and conn.Write
-	_DEFAULT_MAX_TIMEOUT uint32 = 120 * 1000 //ms
+	_DEFAULT_MAX_TIMEOUT = time.Second * 120
 )
 
 // Config Of Gopher
@@ -61,11 +62,11 @@ type Config struct {
 	// read buffer size
 	BufferSize uint32
 
-	// interval of poller tick and timer wheel, ms
-	PollInterval uint32
+	// interval of poller tick and timer wheel
+	PollInterval time.Duration
 
-	// max timeout ms of conn.Read and conn.Write, ms
-	MaxTimeout uint32
+	// max timeout ms of conn.Read and conn.Write
+	MaxTimeout time.Duration
 
 	// max write buffer size
 	MaxWriteBuffer uint32
@@ -110,8 +111,8 @@ type Gopher struct {
 	memControl     bool
 	bufferNum      uint32
 	bufferSize     uint32
-	pollInterval   uint32
-	maxTimeout     uint32
+	pollInterval   time.Duration
+	maxTimeout     time.Duration
 	maxWriteBuffer uint32
 
 	localAddr net.Addr
@@ -126,10 +127,12 @@ type Gopher struct {
 	maxLoad  int64
 
 	onOpen  func(c *Conn)
-	onClose func(c *Conn)
+	onClose func(c *Conn, err error)
 	onData  func(c *Conn, data []byte)
 
-	onRead func(c *Conn, b []byte) (int, error)
+	onRead     func(c *Conn, b []byte) (int, error)
+	onMemAlloc func(c *Conn) []byte
+	onMemFree  func(c *Conn, b []byte)
 }
 
 // Start init and start pollers and workers
@@ -137,7 +140,7 @@ func (g *Gopher) Start() error {
 	var err error
 
 	if g.network != "" && g.address != "" {
-		fd, addr, err := Listen(g.network, g.address)
+		fd, addr, err := listen(g.network, g.address)
 		if err != nil {
 			return err
 		}
@@ -200,7 +203,7 @@ func (g *Gopher) OnOpen(h func(c *Conn)) {
 }
 
 // OnClose register callback for disconnected
-func (g *Gopher) OnClose(h func(c *Conn)) {
+func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 	g.onClose = h
 }
 
@@ -212,6 +215,16 @@ func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
 // OnRead register callback for conn.Read
 func (g *Gopher) OnRead(h func(c *Conn, b []byte) (int, error)) {
 	g.onRead = h
+}
+
+// OnMemAlloc register callback for memory allocating
+func (g *Gopher) OnMemAlloc(h func(c *Conn) []byte) {
+	g.onMemAlloc = h
+}
+
+// OnMemFree register callback for memory release
+func (g *Gopher) OnMemFree(h func(c *Conn, b []byte)) {
+	g.onMemFree = h
 }
 
 func (g *Gopher) acceptable() bool {
@@ -227,17 +240,25 @@ func (g *Gopher) decrease() {
 }
 
 // borrow memory from gopher
-func (g *Gopher) borrow() []byte {
+func (g *Gopher) borrow(c *Conn) []byte {
 	if g.memControl {
 		return <-g.chBuffers
+	} else {
+		if g.onMemAlloc != nil {
+			return g.onMemAlloc(c)
+		}
 	}
 	return nil
 }
 
 // payback memory to gopher
-func (g *Gopher) payback(buffer []byte) {
+func (g *Gopher) payback(c *Conn, b []byte) {
 	if g.memControl {
-		g.chBuffers <- buffer[:g.bufferSize]
+		g.chBuffers <- b[:g.bufferSize]
+	} else {
+		if g.onMemFree != nil {
+			g.onMemFree(c, b)
+		}
 	}
 }
 
@@ -283,10 +304,10 @@ func NewGopher(conf Config) (*Gopher, error) {
 	if conf.QueueSize == 0 {
 		conf.QueueSize = _DEFAULT_QUEUE_SIZE
 	}
-	if conf.PollInterval == 0 {
+	if conf.PollInterval.Milliseconds() == 0 {
 		conf.PollInterval = _DEFAULT_POLL_INTERVAL
 	}
-	if conf.MaxTimeout == 0 {
+	if conf.MaxTimeout.Milliseconds() == 0 {
 		conf.MaxTimeout = _DEFAULT_MAX_TIMEOUT
 	}
 

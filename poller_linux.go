@@ -33,7 +33,7 @@ func (p *poller) start() {
 		p.twWrite.start()
 	}
 
-	timeout := int(p.g.pollInterval)
+	timeout := int(p.g.pollInterval.Milliseconds())
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.pfd, events, timeout)
 		if err != nil && err != syscall.EINTR {
@@ -79,13 +79,13 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 
 		if ev.Events&syscall.EPOLLIN != 0 {
 			for {
-				buffer := p.g.borrow()
+				buffer := p.g.borrow(c)
 				n, err := c.Read(buffer[:])
 				if err == nil && n > 0 {
 					w := p.g.workers[uint32(fd)%uint32(len(p.g.workers))]
 					w.pushEvent(event{c: c, t: _EVENT_DATA, b: buffer[:n]})
 				} else {
-					p.g.payback(buffer)
+					p.g.payback(c, buffer)
 					if err == syscall.EINTR {
 						continue
 					}
@@ -102,7 +102,7 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 		}
 
 		if ev.Events&syscall.EPOLLOUT != 0 {
-			if err := c.dump(); err != nil && err != syscall.EAGAIN {
+			if err := c.Flush(); err != nil && err != syscall.EAGAIN {
 				c.closeWithError(err)
 				return
 			}
@@ -137,8 +137,8 @@ func newPoller(g *Gopher, idx int) (*poller, error) {
 	}
 
 	if p.g.maxTimeout > 0 {
-		p.twRead = newTimerWheel(int(g.maxTimeout/g.pollInterval+1), time.Millisecond*time.Duration(g.pollInterval), errReadTimeout)
-		p.twWrite = newTimerWheel(int(g.maxTimeout/g.pollInterval+1), time.Millisecond*time.Duration(g.pollInterval), errWriteTimeout)
+		p.twRead = newTimerWheel(int(g.maxTimeout/g.pollInterval+1), g.pollInterval, errReadTimeout)
+		p.twWrite = newTimerWheel(int(g.maxTimeout/g.pollInterval+1), g.pollInterval, errWriteTimeout)
 	}
 
 	return p, nil

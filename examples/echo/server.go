@@ -11,8 +11,8 @@ func onOpen(c *nbio.Conn) {
 	fmt.Println("onOpen:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"))
 }
 
-func onClose(c *nbio.Conn) {
-	fmt.Println("onClose:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"))
+func onClose(c *nbio.Conn, err error) {
+	fmt.Println("onClose:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"), err)
 }
 
 func onData(c *nbio.Conn, data []byte) {
@@ -30,8 +30,8 @@ func main() {
 		QueueSize:    1024,
 		BufferSize:   1024 * 64,
 		BufferNum:    1024 * 2,
-		PollInterval: 200,       //ms
-		MaxTimeout:   10 * 1000, //ms
+		PollInterval: time.Millisecond * 200,
+		MaxTimeout:   time.Second * 10,
 	})
 	if err != nil {
 		fmt.Printf("nbio.New failed: %v\n", err)

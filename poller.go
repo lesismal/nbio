@@ -42,7 +42,7 @@ func (p *poller) accept() error {
 		return nil
 	}
 
-	c := NewConn(p.g, int(fd), sockaddrToAddr(saddr))
+	c := NewConn(int(fd), sockaddrToAddr(saddr))
 	o := p.g.pollers[int(fd)%len(p.g.pollers)]
 	o.addConn(c)
 
@@ -52,10 +52,10 @@ func (p *poller) accept() error {
 func (p *poller) addConn(c *Conn) error {
 	err := p.addRead(c.fd)
 	if err == nil {
+		c.g = p.g
 		p.mux.Lock()
 		p.conns[c.fd] = c
 		p.mux.Unlock()
-
 		p.g.workers[uint32(c.Hash())%p.g.workerNum].pushEvent(event{c: c, t: _EVENT_OPEN})
 	}
 

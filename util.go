@@ -108,8 +108,8 @@ func determineTCPProto(proto string, ip *net.TCPAddr) (string, error) {
 	return "", errUnsupportedProtocol
 }
 
-// Listen on network address
-func Listen(network, address string) (int, net.Addr, error) {
+// listen on network address
+func listen(network, address string) (int, net.Addr, error) {
 	var (
 		err        error
 		soType, fd int

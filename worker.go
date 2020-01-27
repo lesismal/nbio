@@ -63,7 +63,7 @@ func (w *worker) start() {
 				if w.g.onData != nil {
 					w.g.onData(e.c, e.b)
 				}
-				w.g.payback(e.b)
+				w.g.payback(e.c, e.b)
 			case _EVENT_CLOSE:
 				w.onCloseEvent(e.c)
 			default:
@@ -77,6 +77,6 @@ func (w *worker) start() {
 func (w *worker) onCloseEvent(c *Conn) {
 	atomic.AddInt32(&w.online, -1)
 	if w.g.onClose != nil {
-		w.g.onClose(c)
+		w.g.onClose(c, c.closeErr)
 	}
 }

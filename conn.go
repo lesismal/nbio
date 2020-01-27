@@ -26,8 +26,6 @@ type Conn struct {
 	fd     int // file descriptor
 	rIndex int // read timer index
 	wIndex int // write timer index
-	nread  int // total read
-	nwrite int // total write
 
 	left      int      // left to send
 	writeList [][]byte // send queue
@@ -36,6 +34,8 @@ type Conn struct {
 	closeErr error // err on closed
 
 	remoteAddr net.Addr // remote addr
+
+	session interface{} // user session
 }
 
 // Fd return system file descriptor
@@ -58,11 +58,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 	if c.g.onRead != nil {
 		return c.g.onRead(c, b)
 	}
-	n, err := syscall.Read(int(c.fd), b)
-	if n > 0 {
-		c.nread += n
-	}
-	return n, err
+
+	return syscall.Read(int(c.fd), b)
 }
 
 // Write implement net.Conn
@@ -87,7 +84,6 @@ func (c *Conn) Write(b []byte) error {
 		for {
 			n, err = syscall.Write(int(c.fd), b)
 			if n > 0 {
-				c.nwrite += n
 				if n < len(b) {
 					b = b[n:]
 					c.writeList = append(c.writeList, b)
@@ -204,6 +200,23 @@ func (c *Conn) SetsockoptLinger(onoff int32, linger int32) error {
 	})
 }
 
+// Session return user session
+func (c *Conn) Session() interface{} {
+	return c.session
+}
+
+// SetSession set user session
+func (c *Conn) SetSession(session interface{}) bool {
+	if session == nil {
+		return false
+	}
+	c.mux.Lock()
+	ok := (c.session == session)
+	c.session = session
+	c.mux.Unlock()
+	return ok
+}
+
 func (c *Conn) writev(in [][]byte) (int, error) {
 	if len(c.writeList) == 0 {
 		return c.writeDirect(in)
@@ -259,7 +272,6 @@ func (c *Conn) writeDirect(in [][]byte) (int, error) {
 		if nwrite > 0 {
 			totalWrite += nwrite
 			c.left -= nwrite
-			c.nwrite += nwrite
 			if nwrite < ntotal {
 
 				ntotal = nwrite
@@ -309,14 +321,16 @@ func (c *Conn) closeWithError(err error) error {
 		c.g.decrease()
 		c.g.pollers[fd%len(c.g.pollers)].deleteConn(c)
 		c.closed = true
+		c.session = nil
 		c.closeErr = err
 		c.mux.Unlock()
 
-		if err != nil {
-			c.g.workers[fd%len(c.g.workers)].pushEvent(event{c: c, t: _EVENT_CLOSE})
-		} else {
-			c.g.workers[fd%len(c.g.workers)].onCloseEvent(c)
-		}
+		// if err != nil {
+		// 	c.g.workers[fd%len(c.g.workers)].pushEvent(event{c: c, t: _EVENT_CLOSE})
+		// } else {
+		// 	c.g.workers[fd%len(c.g.workers)].onCloseEvent(c)
+		// }
+		c.g.workers[fd%len(c.g.workers)].onCloseEvent(c)
 
 		return syscallClose(fd)
 	}
@@ -325,7 +339,7 @@ func (c *Conn) closeWithError(err error) error {
 	return nil
 }
 
-func (c *Conn) dump() error {
+func (c *Conn) Flush() error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if c.closed {
@@ -344,9 +358,8 @@ func (c *Conn) dump() error {
 }
 
 // NewConn is a factory impl
-func NewConn(g *Gopher, fd int, remoteAddr net.Addr) *Conn {
+func NewConn(fd int, remoteAddr net.Addr) *Conn {
 	return &Conn{
-		g:          g,
 		fd:         fd,
 		remoteAddr: remoteAddr,
 	}
