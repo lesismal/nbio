@@ -154,6 +154,7 @@ func listen(network, address string) (int, error) {
 	return fd, nil
 }
 
+// Dial return socket Conn
 func Dial(network string, address string) (*Conn, error) {
 	sa, _, err := getSockaddr(network, address)
 	if err != nil {
