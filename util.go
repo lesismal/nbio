@@ -109,50 +109,79 @@ func determineTCPProto(proto string, ip *net.TCPAddr) (string, error) {
 }
 
 // listen on network address
-func listen(network, address string) (int, net.Addr, error) {
+func listen(network, address string) (int, error) {
 	var (
 		err        error
 		soType, fd int
-		netAddr    net.Addr
 		sockaddr   syscall.Sockaddr
 	)
 
 	if sockaddr, soType, err = getSockaddr(network, address); err != nil {
-		return -1, netAddr, err
+		return -1, err
 	}
-
-	netAddr = sockaddrToAddr(sockaddr)
 
 	syscall.ForkLock.RLock()
 	defer syscall.ForkLock.RUnlock()
 	if fd, err = syscall.Socket(soType, syscall.SOCK_STREAM, syscall.IPPROTO_TCP); err != nil {
-		return -1, netAddr, err
+		return -1, err
 	}
 
 	if err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
 		syscallClose(fd)
-		return -1, netAddr, err
+		return -1, err
 	}
 
 	if err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, _REUSE_PORT, 1); err != nil {
 		syscallClose(fd)
-		return -1, netAddr, err
+		return -1, err
 	}
 
 	if err = syscall.Bind(fd, sockaddr); err != nil {
 		syscallClose(fd)
-		return -1, netAddr, err
+		return -1, err
 	}
 
 	if err = syscall.Listen(fd, listenerBacklogMaxSize); err != nil {
 		syscallClose(fd)
-		return -1, netAddr, err
+		return -1, err
 	}
 
 	if err = syscall.SetNonblock(fd, true); err != nil {
 		syscallClose(fd)
-		return -1, netAddr, err
+		return -1, err
 	}
 
-	return fd, netAddr, nil
+	return fd, nil
+}
+
+func Dial(network string, address string) (*Conn, error) {
+	sa, _, err := getSockaddr(network, address)
+	if err != nil {
+		return nil, err
+	}
+
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+	if err != nil {
+		return nil, err
+	}
+
+	err = syscall.Connect(fd, sa)
+	if err != nil {
+		return nil, err
+	}
+
+	err = syscall.SetNonblock(fd, true)
+	if err != nil {
+		syscallClose(fd)
+		return nil, err
+	}
+
+	la, err := syscall.Getsockname(fd)
+	if err != nil {
+		return nil, err
+	}
+
+	c := NewConn(fd, sockaddrToAddr(la), sockaddrToAddr(sa))
+
+	return c, nil
 }

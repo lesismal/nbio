@@ -2,6 +2,7 @@ package nbio
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -24,6 +25,10 @@ func init() {
 
 func TestHuge1V100M(t *testing.T) {
 	testHuge(t, 1, 1024*1024*100)
+}
+
+func TestClient(t *testing.T) {
+	testClient(t, 1024)
 }
 
 func Test1k16B(t *testing.T) {
@@ -164,6 +169,48 @@ func testEcho(t *testing.T, clientNum int, total int64, bufsize int) {
 	if atomic.LoadInt64(&qps) < total {
 		t.Fatalf("test %v %v failed, qps: %v", clientNum, bufsize, atomic.LoadInt64(&qps))
 	}
+}
+
+func testClient(t *testing.T, clientNum int) {
+	wg := sync.WaitGroup{}
+
+	g, err := NewGopher(Config{
+		NPoller: 1,
+		NWorker: 1,
+	})
+	if err != nil {
+		log.Fatalf("NewGopher failed: %v\n", err)
+	}
+	defer g.Stop()
+
+	g.OnOpen(func(c *Conn) {
+		c.SetLinger(1, 0)
+	})
+	g.OnData(func(c *Conn, data []byte) {
+		c.Close()
+	})
+	g.OnClose(func(c *Conn, err error) {
+		wg.Done()
+	})
+	err = g.Start()
+	if err != nil {
+		log.Fatalf("Start failed: %v\n", err)
+	}
+
+	for i := 0; i < clientNum; i++ {
+		idx := i
+		wg.Add(1)
+		go func() {
+			c, err := Dial("tcp", addr)
+			if err != nil {
+				t.Fatalf("Dial failed: %v", err)
+			}
+			g.AddConn(c)
+			c.Write([]byte(fmt.Sprintf("client %v", idx)))
+		}()
+	}
+
+	wg.Wait()
 }
 
 func testHuge(t *testing.T, clientNum int, bufsize int) {

@@ -17,8 +17,8 @@ type poller struct {
 	lfd int // listen fd
 	pfd int // epoll fd
 
-	twRead  *timerWheel
-	twWrite *timerWheel
+	twRead  *timerWheel // read timeout
+	twWrite *timerWheel // write timeout
 
 	conns map[int]*Conn
 
@@ -42,7 +42,13 @@ func (p *poller) accept() error {
 		return nil
 	}
 
-	c := NewConn(int(fd), sockaddrToAddr(saddr))
+	laddr, err := syscall.Getsockname(fd)
+	if err != nil {
+		syscallClose(fd)
+		return nil
+	}
+
+	c := NewConn(int(fd), sockaddrToAddr(laddr), sockaddrToAddr(saddr))
 	o := p.g.pollers[int(fd)%len(p.g.pollers)]
 	o.addConn(c)
 

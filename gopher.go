@@ -2,7 +2,6 @@ package nbio
 
 import (
 	"fmt"
-	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -115,8 +114,6 @@ type Gopher struct {
 	maxTimeout     time.Duration
 	maxWriteBuffer uint32
 
-	localAddr net.Addr
-
 	chDebug   chan empty
 	chBuffers chan []byte
 
@@ -140,7 +137,7 @@ func (g *Gopher) Start() error {
 	var err error
 
 	if g.network != "" && g.address != "" {
-		fd, addr, err := listen(g.network, g.address)
+		fd, err := listen(g.network, g.address)
 		if err != nil {
 			return err
 		}
@@ -148,7 +145,6 @@ func (g *Gopher) Start() error {
 		syscall.SetNonblock(fd, true)
 
 		g.lfd = fd
-		g.localAddr = addr
 	}
 
 	for i := uint32(0); i < g.pollerNum; i++ {
@@ -243,10 +239,8 @@ func (g *Gopher) decrease() {
 func (g *Gopher) borrow(c *Conn) []byte {
 	if g.memControl {
 		return <-g.chBuffers
-	} else {
-		if g.onMemAlloc != nil {
-			return g.onMemAlloc(c)
-		}
+	} else if g.onMemAlloc != nil {
+		return g.onMemAlloc(c)
 	}
 	return nil
 }
