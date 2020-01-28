@@ -79,26 +79,17 @@ func (c *Conn) Write(b []byte) (int, error) {
 		return -1, errClosed
 	}
 
-	if len(b) == 0 {
-		c.mux.Unlock()
-		return -1, errInvalidData
-	}
-
-	if c.g.memControl && c.left+len(b) > int(c.g.maxWriteBuffer) {
-		c.mux.Unlock()
-		return -1, syscall.EINVAL
-	}
-
 	n, err := c.write(b)
 	if err != nil && err != syscall.EAGAIN {
 		c.closeWithErrorWithoutLock(errInvalidData)
+		c.mux.Unlock()
 		return n, err
 	}
 
 	if c.left == 0 {
 		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
 		if tw != nil {
-			tw.delete(c, &c.rIndex)
+			tw.delete(c, &c.wIndex)
 		}
 	} else {
 		c.addWrite()
@@ -121,13 +112,14 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 
 	n, err := c.writev(in)
 	if err != nil && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(errInvalidData)
+		c.closeWithErrorWithoutLock(err)
+		c.mux.Unlock()
 		return n, err
 	}
 	if c.left == 0 {
 		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
 		if tw != nil {
-			tw.delete(c, &c.rIndex)
+			tw.delete(c, &c.wIndex)
 		}
 	} else {
 		c.addWrite()
@@ -269,6 +261,10 @@ func (c *Conn) write(b []byte) (int, error) {
 		return 0, nil
 	}
 
+	if c.overflow(len(b)) {
+		return -1, syscall.EINVAL
+	}
+
 	c.left += len(b)
 
 	var (
@@ -313,13 +309,14 @@ func (c *Conn) flush() error {
 	c.writeList = nil
 	_, err := c.writev(wl)
 	if err != nil && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(errInvalidData)
+		c.closeWithErrorWithoutLock(err)
+		c.mux.Unlock()
 		return err
 	}
 	if c.left == 0 {
 		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
 		if tw != nil {
-			tw.delete(c, &c.rIndex)
+			tw.delete(c, &c.wIndex)
 		}
 	} else {
 		c.addWrite()
@@ -349,7 +346,7 @@ func (c *Conn) writeQueue(in [][]byte) (int, error) {
 		return 0, nil
 	}
 
-	if c.g.memControl && c.left+ntotal > int(c.g.maxWriteBuffer) {
+	if c.overflow(ntotal) {
 		return -1, syscall.EINVAL
 	}
 
@@ -377,7 +374,7 @@ func (c *Conn) writeDirect(in [][]byte) (int, error) {
 		return 0, nil
 	}
 
-	if c.g.memControl && c.left+ntotal > int(c.g.maxWriteBuffer) {
+	if c.overflow(ntotal) {
 		return -1, syscall.EINVAL
 	}
 
@@ -393,41 +390,38 @@ func (c *Conn) writeDirect(in [][]byte) (int, error) {
 			totalWrite += nwrite
 			c.left -= nwrite
 			if nwrite < ntotal {
-				ntotal = nwrite
 				for i := 0; i < len(in); i++ {
-					if len(in[i]) < ntotal {
-						ntotal -= len(in[i])
-					} else if len(in[i]) == ntotal {
+					if len(in[i]) < nwrite {
+						nwrite -= len(in[i])
+					} else if len(in[i]) == nwrite {
 						in = in[i+1:]
 						iovec = iovec[i+1:]
 						iovec[0] = syscall.Iovec{&(in[0][0]), uint64(len(in[0]))}
 						break
 					} else {
-						in[i] = in[i][ntotal:]
+						in[i] = in[i][nwrite:]
 						in = in[i:]
 						iovec = iovec[i:]
 						iovec[0] = syscall.Iovec{&(in[0][0]), uint64(len(in[0]))}
 						break
 					}
 				}
-				if len(in) > 0 {
-					c.writeList = append(c.writeList, in...)
-				}
+				c.writeList = append(c.writeList, in...)
 			}
-			return totalWrite, err
 		}
 
-		if err == syscall.EAGAIN {
-			return totalWrite, err
-		} else if err == syscall.EINTR {
+		if err == syscall.EINTR {
 			continue
-		} else if err != nil {
-			return -1, err
 		}
-		return totalWrite, err
+
+		break
 	}
 
 	return totalWrite, err
+}
+
+func (c *Conn) overflow(n int) bool {
+	return c.g.memControl && c.left+n > int(c.g.maxWriteBuffer)
 }
 
 func (c *Conn) closeWithError(err error) error {
