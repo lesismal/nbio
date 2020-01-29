@@ -82,8 +82,9 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 	n, err := c.write(b)
 	if err != nil && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(errInvalidData)
+		c.closed = true
 		c.mux.Unlock()
+		c.closeWithErrorWithoutLock(errInvalidData)
 		return n, err
 	}
 
@@ -113,8 +114,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 
 	n, err := c.writev(in)
 	if err != nil && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(err)
+		c.closed = true
 		c.mux.Unlock()
+		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 	if c.left == 0 {
@@ -312,8 +314,9 @@ func (c *Conn) flush() error {
 	c.writeList = nil
 	_, err := c.writev(wl)
 	if err != nil && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(err)
+		c.closed = true
 		c.mux.Unlock()
+		c.closeWithErrorWithoutLock(err)
 		return err
 	}
 	if c.left == 0 {
@@ -434,24 +437,25 @@ func (c *Conn) overflow(n int) bool {
 // closeWithError with lock
 func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
-	err = c.closeWithErrorWithoutLock(err)
+	if !c.closed {
+		c.closed = true
+		c.mux.Unlock()
+		return c.closeWithErrorWithoutLock(err)
+	}
 	c.mux.Unlock()
-	return err
+	return nil
 }
 
 // closeWithErrorWithoutLock
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	fd := c.fd
-	if !c.closed {
-		c.g.decrease()
-		c.g.pollers[fd%len(c.g.pollers)].deleteConn(c)
-		c.closed = true
-		c.session = nil
-		c.closeErr = err
-		c.g.workers[fd%len(c.g.workers)].onCloseEvent(c)
-		return syscallClose(fd)
-	}
-	return nil
+	c.g.decrease()
+	c.g.pollers[fd%len(c.g.pollers)].deleteConn(c)
+
+	c.session = nil
+	c.closeErr = err
+	c.g.workers[fd%len(c.g.workers)].onCloseEvent(c)
+	return syscallClose(fd)
 }
 
 // NewConn is a factory impl
