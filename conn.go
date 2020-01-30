@@ -246,10 +246,13 @@ func (c *Conn) SetSession(session interface{}) bool {
 		return false
 	}
 	c.mux.Lock()
-	ok := (c.session == session)
-	c.session = session
+	if c.session == nil {
+		c.session = session
+		c.mux.Unlock()
+		return true
+	}
 	c.mux.Unlock()
-	return ok
+	return false
 }
 
 // addWrite event

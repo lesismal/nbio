@@ -95,6 +95,61 @@ func BenchmarkEcho8K(b *testing.B) {
 	benchmarkEcho(b, 1024*8)
 }
 
+func Test10k(t *testing.T) {
+	test10k(t, 10240, 1024)
+}
+
+func test10k(t *testing.T, par int, msgsize int) {
+	t.Log("testing concurrent:", par, "connections")
+
+	addr := "127.0.0.1:18888"
+
+	g, err := NewGopher(Config{
+		Network:        "tcp",
+		Address:        addr,
+		NPoller:        1,
+		NWorker:        1,
+		QueueSize:      1024,
+		BufferSize:     1024,
+		BufferNum:      1024 * 2,
+		PollInterval:   time.Millisecond * 200,
+		MaxTimeout:     time.Second * 10,
+		MaxWriteBuffer: 1024 * 1024 * 100,
+	})
+	if err != nil {
+		log.Fatalf("NewGopher failed: %v\n", err)
+	}
+
+	total := 0
+	die := make(chan struct{})
+
+	g.OnData(func(c *Conn, data []byte) {
+		total += len(data)
+		if total >= par*msgsize {
+			t.Logf("total: %v", total)
+			close(die)
+		}
+	})
+
+	err = g.Start()
+	if err != nil {
+		log.Fatalf("Start failed: %v\n", err)
+	}
+
+	go func() {
+		for i := 0; i < par; i++ {
+			data := make([]byte, msgsize)
+			c, err := Dial("tcp", addr)
+			if err != nil {
+				t.Fatalf("Dial failed: %v", err)
+			}
+			g.AddConn(c)
+			c.Write(data)
+		}
+	}()
+	<-die
+}
+
 func echoServer(bufsize int) *Gopher {
 	g, err := NewGopher(Config{
 		Network:        "tcp",
