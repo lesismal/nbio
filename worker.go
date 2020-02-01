@@ -43,9 +43,7 @@ func (w *worker) pushEvent(e event) {
 }
 
 func (w *worker) start() {
-	if w.g != nil {
-		defer w.g.Done()
-	}
+	defer w.g.Done()
 
 	log.Printf("worker[%v] start", w.idx)
 	defer log.Printf("worker[%v] stopped", w.idx)

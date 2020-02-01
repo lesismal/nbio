@@ -5,62 +5,68 @@ import (
 	"time"
 )
 
+type wheel struct {
+	mux    sync.Mutex
+	values map[*Conn]time.Time
+}
+
 type timerWheel struct {
 	mux      sync.Mutex
 	index    int
 	expire   time.Time
 	interval time.Duration
 	closeErr error
-	wheels   []map[*Conn]time.Time
+	wheels   []wheel
 }
 
 func (tw *timerWheel) check(now time.Time) int {
-	tw.mux.Lock()
 	if now.After(tw.expire) {
-		if len(tw.wheels[tw.index]) > 0 {
-			wheelMap := tw.wheels[tw.index]
-			for c, expr := range wheelMap {
+		w := &tw.wheels[tw.index]
+		w.mux.Lock()
+		if len(w.values) > 0 {
+			for c, expr := range w.values {
 				if expr.IsZero() || now.After(expr) {
 					c.closeWithError(tw.closeErr)
-					delete(wheelMap, c)
+					delete(w.values, c)
 				}
 			}
+			w.mux.Unlock()
 			tw.expire = now.Add(tw.interval)
 			tw.index = (tw.index + 1) % len(tw.wheels)
 		} else {
+			w.mux.Unlock()
 			tw.expire = now.Add(tw.interval)
 			tw.index = (tw.index + 1) % len(tw.wheels)
 		}
-
-		tw.mux.Unlock()
 		return int(tw.interval.Milliseconds())
 	}
-	tw.mux.Unlock()
-
 	return int(tw.expire.Sub(now).Milliseconds())
 }
 
 func (tw *timerWheel) reset(c *Conn, pindex *int, t time.Time) {
-	tw.mux.Lock()
-
-	newIndex := (tw.index + int(t.Sub(time.Now())/tw.interval) + 1) % len(tw.wheels)
+	newIndex := int(uint32((tw.index + int(t.Sub(time.Now())/tw.interval) + 1)) % uint32(len(tw.wheels)))
 	if newIndex != *pindex {
 		if uint32(*pindex) < uint32(len(tw.wheels)) {
-			delete(tw.wheels[*pindex], c)
+			w := &tw.wheels[*pindex]
+			w.mux.Lock()
+			delete(w.values, c)
+			w.mux.Unlock()
 		}
 		*pindex = newIndex
-		tw.wheels[newIndex][c] = t
+		w := &tw.wheels[newIndex]
+		w.mux.Lock()
+		w.values[c] = t
+		w.mux.Unlock()
 	}
-
-	tw.mux.Unlock()
 }
 
 func (tw *timerWheel) delete(c *Conn, pindex *int) {
-	tw.mux.Lock()
 	if uint32(*pindex) < uint32(len(tw.wheels)) {
-		delete(tw.wheels[*pindex], c)
+		w := &tw.wheels[*pindex]
+		w.mux.Lock()
+		delete(w.values, c)
+		w.mux.Unlock()
 	}
-	tw.mux.Unlock()
 }
 
 func (tw *timerWheel) start() {
@@ -72,10 +78,10 @@ func newTimerWheel(wheelNum int, interval time.Duration, closeErr error) *timerW
 		index:    0,
 		interval: interval,
 		closeErr: closeErr,
-		wheels:   make([]map[*Conn]time.Time, wheelNum),
+		wheels:   make([]wheel, wheelNum),
 	}
 	for i := 0; i < wheelNum; i++ {
-		tw.wheels[i] = make(map[*Conn]time.Time, 64)
+		tw.wheels[i].values = make(map[*Conn]time.Time, 128)
 	}
 	return tw
 }

@@ -60,8 +60,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 	}
 
 	if c.g.onRead != nil {
-		n, err := c.g.onRead(c, b)
 		c.mux.Unlock()
+		n, err := c.g.onRead(c, b)
 		return n, err
 	}
 

@@ -15,9 +15,7 @@ const (
 )
 
 func (p *poller) start() {
-	if p.g != nil {
-		defer p.g.Done()
-	}
+	defer p.g.Done()
 
 	log.Printf("poller[%v] start", p.idx)
 	defer log.Printf("poller[%v] stopped", p.idx)
@@ -80,7 +78,7 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 		if ev.Events&syscall.EPOLLIN != 0 {
 			for {
 				buffer := p.g.borrow(c)
-				n, err := c.Read(buffer[:])
+				n, err := c.Read(buffer)
 				if err == nil && n > 0 {
 					w := p.g.workers[uint32(fd)%uint32(len(p.g.workers))]
 					w.pushEvent(event{c: c, t: _EVENT_DATA, b: buffer[:n]})
