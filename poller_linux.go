@@ -5,7 +5,6 @@ package nbio
 import (
 	"io"
 	"log"
-	"math"
 	"os"
 	"syscall"
 )
@@ -13,8 +12,6 @@ import (
 const (
 	_EPOLLET        = 0x80000000
 	_EPOLLEXCLUSIVE = (1 << 28)
-
-	_TIME_FOREVER = int(math.MaxInt32)
 )
 
 func (p *poller) start() {
@@ -28,7 +25,7 @@ func (p *poller) start() {
 
 	if p.listener {
 		for !p.shutdown {
-			n, err := syscall.EpollWait(p.pfd, events, _TIME_FOREVER)
+			n, err := syscall.EpollWait(p.pfd, events, -1)
 			if err != nil && err != syscall.EINTR {
 				return
 			}
@@ -42,7 +39,7 @@ func (p *poller) start() {
 		}
 	} else {
 		for !p.shutdown {
-			n, err := syscall.EpollWait(p.pfd, events, _TIME_FOREVER)
+			n, err := syscall.EpollWait(p.pfd, events, -1)
 			if err != nil && err != syscall.EINTR {
 				return
 			}
