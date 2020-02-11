@@ -2,7 +2,9 @@ package nbio
 
 import (
 	"fmt"
+	"log"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -27,8 +29,8 @@ type Config struct {
 	// tcp network
 	Network string
 
-	// tcp address
-	Address string
+	// tcp addrs
+	Addrs []string
 
 	// max load
 	MaxLoad uint32
@@ -76,7 +78,7 @@ type Gopher struct {
 
 	lfds           []int
 	network        string
-	address        string
+	addrs          []string
 	listenerNum    uint32
 	pollerNum      uint32
 	memControl     bool
@@ -105,15 +107,17 @@ func (g *Gopher) Start() error {
 	var err error
 
 	g.lfds = []int{}
-	if g.network != "" && g.address != "" {
-		fd, err := listen(g.network, g.address)
-		if err != nil {
-			return err
+	if g.network != "" && len(g.addrs) > 0 {
+		for _, addr := range g.addrs {
+			fd, err := listen(g.network, addr)
+			if err != nil {
+				return err
+			}
+
+			syscall.SetNonblock(fd, true)
+
+			g.lfds = append(g.lfds, fd)
 		}
-
-		syscall.SetNonblock(fd, true)
-
-		g.lfds = append(g.lfds, fd)
 	}
 
 	for i := uint32(0); i < g.listenerNum; i++ {
@@ -147,6 +151,8 @@ func (g *Gopher) Start() error {
 		g.pollers[i].buffer = make([]byte, g.bufferSize)
 		go g.pollers[i].start()
 	}
+
+	log.Printf("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
 
 	return nil
 }
@@ -263,7 +269,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 		conf.MaxLoad = _DEFAULT_MAX_LOAD
 	}
 
-	if conf.Address != "" && conf.NListener == 0 {
+	if len(conf.Addrs) > 0 && conf.NListener == 0 {
 		conf.NListener = 1
 	}
 	if conf.NPoller == 0 {
@@ -280,7 +286,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 
 	g := &Gopher{
 		network:        conf.Network,
-		address:        conf.Address,
+		addrs:          conf.Addrs,
 		maxLoad:        int64(conf.MaxLoad),
 		listenerNum:    conf.NListener,
 		pollerNum:      conf.NPoller,

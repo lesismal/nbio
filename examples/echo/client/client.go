@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	addr = "127.0.0.1:8888"
+	addrs = []string{"127.0.0.1:8888", "127.0.0.1:9999"}
 )
 
 func main() {
@@ -47,9 +47,10 @@ func main() {
 
 	for i := 0; i < clientNum; i++ {
 		wg.Add(1)
+		idx := i
 		data := make([]byte, bufsize)
 		go func() {
-			c, err := nbio.Dial("tcp", addr)
+			c, err := nbio.Dial("tcp", addrs[idx%2])
 			if err != nil {
 				fmt.Printf("Dial failed: %v\n", err)
 			}
