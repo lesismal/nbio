@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var addr = "127.0.0.1:8888"
+var addrs = []string{"127.0.0.1:8888"}
 var g *Gopher
 var testQps int64 = 100000
 
@@ -102,11 +102,11 @@ func Test10k(t *testing.T) {
 func test10k(t *testing.T, par int, msgsize int) {
 	t.Log("testing concurrent:", par, "connections")
 
-	addr := "127.0.0.1:18888"
+	addrs := []string{"127.0.0.1:18888"}
 
 	g, err := NewGopher(Config{
 		Network: "tcp",
-		Address: addr,
+		Addrs:   addrs,
 		NPoller: 1,
 		// NWorker:        1,
 		// QueueSize:      1024,
@@ -139,7 +139,7 @@ func test10k(t *testing.T, par int, msgsize int) {
 	go func() {
 		for i := 0; i < par; i++ {
 			data := make([]byte, msgsize)
-			c, err := Dial("tcp", addr)
+			c, err := Dial("tcp", addrs[0])
 			if err != nil {
 				t.Fatalf("Dial failed: %v", err)
 			}
@@ -153,7 +153,7 @@ func test10k(t *testing.T, par int, msgsize int) {
 func echoServer(bufsize int) *Gopher {
 	g, err := NewGopher(Config{
 		Network: "tcp",
-		Address: addr,
+		Addrs:   addrs,
 		NPoller: 1,
 		// NWorker:        1,
 		// QueueSize:      1024,
@@ -194,7 +194,7 @@ func testEcho(t *testing.T, clientNum int, total int64, bufsize int) {
 		go func() {
 			defer wg.Done()
 			data := make([]byte, bufsize)
-			conn, err := net.Dial("tcp", addr)
+			conn, err := net.Dial("tcp", addrs[0])
 			if err != nil {
 				t.Log(err)
 				return
@@ -265,7 +265,7 @@ func testClient(t *testing.T, clientNum int) {
 		idx := i
 		wg.Add(1)
 		go func() {
-			c, err := Dial("tcp", addr)
+			c, err := Dial("tcp", addrs[0])
 			if err != nil {
 				t.Fatalf("Dial failed: %v", err)
 			}
@@ -287,7 +287,7 @@ func testHuge(t *testing.T, clientNum int, bufsize int) {
 			defer wg.Done()
 			wx := make([]byte, bufsize)
 			rx := make([]byte, bufsize)
-			conn, err := net.Dial("tcp", addr)
+			conn, err := net.Dial("tcp", addrs[0])
 			if err != nil {
 				t.Log(err)
 				return
@@ -319,7 +319,7 @@ func testHuge(t *testing.T, clientNum int, bufsize int) {
 
 func benchmarkEcho(b *testing.B, bufsize int) {
 	data := make([]byte, bufsize)
-	conn, err := net.DialTimeout("tcp", addr, time.Second)
+	conn, err := net.DialTimeout("tcp", addrs[0], time.Second)
 	if err != nil {
 		b.Fatal(err)
 	}
