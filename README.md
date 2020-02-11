@@ -45,13 +45,6 @@ func main() {
 	g, err := nbio.NewGopher(nbio.Config{
 		Network:      "tcp",
 		Address:      ":8888",
-		NPoller:      2,
-		NWorker:      4,
-		QueueSize:    1024,
-		BufferSize:   1024 * 8,
-		BufferNum:    1024 * 2,
-		PollInterval: time.Millisecond * 200,
-		MaxTimeout:   time.Second * 10,
 	})
 	if err != nil {
 		fmt.Printf("nbio.New failed: %v\n", err)
@@ -68,7 +61,7 @@ func main() {
 		return
 	}
 
-	go func() {
+	go func() { 
 		for {
 			time.Sleep(time.Second * 5)
 			fmt.Println(g.State().String())

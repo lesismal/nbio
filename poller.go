@@ -3,6 +3,7 @@ package nbio
 import (
 	"log"
 	"sync"
+	"sync/atomic"
 	"syscall"
 )
 
@@ -14,24 +15,37 @@ type poller struct {
 	g *Gopher
 
 	idx int // index
-	lfd int // listen fd
 	pfd int // epoll fd
 
-	twRead  *timerWheel // read timeout
-	twWrite *timerWheel // write timeout
+	currLoad int64
 
-	conns map[int]*Conn
+	buffer []byte // read buffer
 
+	pollType string
+	listener bool // is listener
 	shutdown bool
 }
 
-func (p *poller) accept() error {
-	fd, saddr, err := syscall.Accept(p.lfd)
+// Online return poller's total online
+func (p *poller) Online() int64 {
+	return atomic.LoadInt64(&p.currLoad)
+}
+
+func (p *poller) increase() {
+	atomic.AddInt64(&p.currLoad, 1)
+}
+
+func (p *poller) decrease() {
+	atomic.AddInt64(&p.currLoad, -1)
+}
+
+func (p *poller) accept(lfd int) error {
+	fd, saddr, err := syscall.Accept(lfd)
 	if err != nil {
 		return err
 	}
 
-	if !p.g.acceptable() {
+	if !p.g.acceptable(int(fd)) {
 		syscallClose(fd)
 		return nil
 	}
@@ -56,41 +70,35 @@ func (p *poller) accept() error {
 }
 
 func (p *poller) addConn(c *Conn) error {
-	err := p.addRead(c.fd)
+	err := p.setRead(c.fd)
 	if err == nil {
 		c.g = p.g
-		p.mux.Lock()
-		p.conns[c.fd] = c
-		p.mux.Unlock()
-		p.g.workers[uint32(c.Hash())%p.g.workerNum].pushEvent(event{c: c, t: _EVENT_OPEN})
+		p.g.conns[c.fd] = c
+		p.increase()
+		if p.g.onOpen != nil {
+			p.g.onOpen(c)
+		}
 	}
 
 	return err
 }
 
 func (p *poller) getConn(fd int) (*Conn, bool) {
-	p.mux.Lock()
-	c, ok := p.conns[fd]
-	p.mux.Unlock()
-	return c, ok
+	c := p.g.conns[fd]
+	return c, c != nil
 }
 
 func (p *poller) deleteConn(c *Conn) {
-	p.mux.Lock()
-	delete(p.conns, c.fd)
-	p.mux.Unlock()
+	p.g.conns[c.fd] = nil
+	p.decrease()
+	p.g.decrease()
+	if p.g.onClose != nil {
+		p.g.onClose(c, c.closeErr)
+	}
 }
 
 func (p *poller) stop() {
 	log.Printf("poller[%v] stop...", p.idx)
 	p.shutdown = true
 	syscallClose(p.pfd)
-	p.mux.Lock()
-	tmp := p.conns
-	p.conns = map[int]*Conn{}
-	p.mux.Unlock()
-
-	for _, c := range tmp {
-		c.Close()
-	}
 }

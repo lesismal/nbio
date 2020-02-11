@@ -105,15 +105,15 @@ func test10k(t *testing.T, par int, msgsize int) {
 	addr := "127.0.0.1:18888"
 
 	g, err := NewGopher(Config{
-		Network:        "tcp",
-		Address:        addr,
-		NPoller:        1,
-		NWorker:        1,
-		QueueSize:      1024,
-		BufferSize:     1024,
-		BufferNum:      1024 * 2,
-		PollInterval:   time.Millisecond * 200,
-		MaxTimeout:     time.Second * 10,
+		Network: "tcp",
+		Address: addr,
+		NPoller: 1,
+		// NWorker:        1,
+		// QueueSize:      1024,
+		BufferSize: 1024,
+		// BufferNum:  1024 * 2,
+		// PollInterval:   time.Millisecond * 200,
+		// MaxTimeout:     time.Second * 10,
 		MaxWriteBuffer: 1024 * 1024 * 100,
 	})
 	if err != nil {
@@ -152,15 +152,15 @@ func test10k(t *testing.T, par int, msgsize int) {
 
 func echoServer(bufsize int) *Gopher {
 	g, err := NewGopher(Config{
-		Network:        "tcp",
-		Address:        addr,
-		NPoller:        1,
-		NWorker:        1,
-		QueueSize:      1024,
-		BufferSize:     uint32(bufsize),
-		BufferNum:      1024 * 2,
-		PollInterval:   time.Millisecond * 200,
-		MaxTimeout:     time.Second * 10,
+		Network: "tcp",
+		Address: addr,
+		NPoller: 1,
+		// NWorker:        1,
+		// QueueSize:      1024,
+		BufferSize: uint32(bufsize),
+		// BufferNum:      1024 * 2,
+		// PollInterval:   time.Millisecond * 200,
+		// MaxTimeout:     time.Second * 10,
 		MaxWriteBuffer: 1024 * 1024 * 100,
 	})
 	if err != nil {
@@ -231,26 +231,35 @@ func testClient(t *testing.T, clientNum int) {
 
 	g, err := NewGopher(Config{
 		NPoller: 1,
-		NWorker: 1,
+		// NWorker: 1,
+		BufferSize: 1024 * 64,
 	})
 	if err != nil {
 		log.Fatalf("NewGopher failed: %v\n", err)
 	}
-	defer g.Stop()
-
+	cntOpen := 0
 	g.OnOpen(func(c *Conn) {
+		cntOpen++
+		// log.Println("onOpen:", c.Fd(), cntOpen)
 		c.SetLinger(1, 0)
 	})
+	cntData := 0
 	g.OnData(func(c *Conn, data []byte) {
+		cntData++
+		// log.Println("onData:", c.Fd(), cntData)
 		c.Close()
 	})
+	cntClose := 0
 	g.OnClose(func(c *Conn, err error) {
+		cntClose++
+		// log.Println("onClose:", c.Fd(), cntClose)
 		wg.Done()
 	})
 	err = g.Start()
 	if err != nil {
 		log.Fatalf("Start failed: %v\n", err)
 	}
+	defer g.Stop()
 
 	for i := 0; i < clientNum; i++ {
 		idx := i

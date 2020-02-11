@@ -14,17 +14,15 @@ var (
 
 func main() {
 	var (
-		wg        sync.WaitGroup
-		bufsize   = 1024 * 8
-		clientNum = 1000
-		totalSend int64
-		totalRecv int64
+		wg         sync.WaitGroup
+		qps        int64
+		bufsize    = 1024 * 8
+		clientNum  = 1024
+		totalRead  int64
+		totalWrite int64
 	)
 
-	g, err := nbio.NewGopher(nbio.Config{
-		NPoller: 4,
-		NWorker: 8,
-	})
+	g, err := nbio.NewGopher(nbio.Config{})
 	if err != nil {
 		fmt.Printf("NewGopher failed: %v\n", err)
 	}
@@ -34,9 +32,10 @@ func main() {
 		c.SetLinger(1, 0)
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		atomic.AddInt64(&totalRecv, int64(len(data)))
-		atomic.AddInt64(&totalSend, int64(len(data)))
-		c.Write(data)
+		atomic.AddInt64(&qps, 1)
+		atomic.AddInt64(&totalRead, int64(len(data)))
+		atomic.AddInt64(&totalWrite, int64(len(data)))
+		c.Write(append([]byte(nil), data...))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		fmt.Printf("OnClose: %v, %v\n", c.LocalAddr().String(), c.RemoteAddr().String())
@@ -56,7 +55,7 @@ func main() {
 			}
 			g.AddConn(c)
 			c.Write([]byte(data))
-			atomic.AddInt64(&totalSend, int64(len(data)))
+			atomic.AddInt64(&totalWrite, int64(len(data)))
 		}()
 	}
 
@@ -68,12 +67,9 @@ func main() {
 	}()
 
 	go func() {
-		lstTr, lstTs := int64(0), int64(0)
 		for {
 			time.Sleep(time.Second)
-			tr, ts := atomic.LoadInt64(&totalRecv), atomic.LoadInt64(&totalSend)
-			fmt.Printf("totalRecv & totalSend: %v / %v, qps: %v / %v\n", tr, ts, tr-lstTr, ts-lstTs)
-			lstTr, lstTs = tr, ts
+			fmt.Printf("qps: %v, total read: %.1f M, total write: %.1f M\n", atomic.SwapInt64(&qps, 0), float64(atomic.SwapInt64(&totalRead, 0))/1024/1024, float64(atomic.SwapInt64(&totalWrite, 0))/1024/1024)
 		}
 	}()
 
