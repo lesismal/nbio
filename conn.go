@@ -25,8 +25,6 @@ type Conn struct {
 	g *Gopher // g
 
 	fd     int // file descriptor
-	rIndex int // read timer index
-	wIndex int // write timer index
 	rTimer *time.Timer
 	wTimer *time.Timer
 
