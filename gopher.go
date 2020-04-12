@@ -35,6 +35,9 @@ type Config struct {
 	// max load
 	MaxLoad uint32
 
+	// redundancy fd num
+	RedundancyFdNum uint32
+
 	// listener num
 	NListener uint32
 
@@ -268,7 +271,9 @@ func NewGopher(conf Config) (*Gopher, error) {
 	if conf.MaxLoad == 0 {
 		conf.MaxLoad = _DEFAULT_MAX_LOAD
 	}
-
+	if conf.RedundancyFdNum == 0 {
+		conf.RedundancyFdNum = _DEFAULT_REDUNDANCY_FD_NUM
+	}
 	if len(conf.Addrs) > 0 && conf.NListener == 0 {
 		conf.NListener = 1
 	}
@@ -295,7 +300,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 		maxWriteBuffer: conf.MaxWriteBuffer,
 		listeners:      make([]*poller, conf.NListener),
 		pollers:        make([]*poller, conf.NPoller),
-		conns:          make([]*Conn, conf.MaxLoad+_DEFAULT_REDUNDANCY_FD_NUM),
+		conns:          make([]*Conn, conf.MaxLoad+conf.RedundancyFdNum),
 	}
 
 	return g, nil
