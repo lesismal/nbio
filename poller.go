@@ -70,14 +70,14 @@ func (p *poller) accept(lfd int) error {
 }
 
 func (p *poller) addConn(c *Conn) error {
+	if p.g.onOpen != nil {
+		p.g.onOpen(c)
+	}
 	err := p.setRead(c.fd)
 	if err == nil {
 		c.g = p.g
 		p.g.conns[c.fd] = c
 		p.increase()
-		if p.g.onOpen != nil {
-			p.g.onOpen(c)
-		}
 	}
 
 	return err
