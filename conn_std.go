@@ -21,8 +21,6 @@ type Conn struct {
 	closed   bool
 	closeErr error
 
-	readBuffer []byte
-
 	// user session
 	session interface{}
 }

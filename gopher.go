@@ -78,7 +78,7 @@ type Gopher struct {
 	currLoad int64
 	maxLoad  int64
 
-	conns      map[*Conn]struct{}
+	conns      map[*Conn][]byte
 	connsLinux []*Conn
 
 	listeners []*poller
@@ -309,7 +309,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
-		conns:              map[*Conn]struct{}{},
+		conns:              map[*Conn][]byte{},
 		connsLinux:         make([]*Conn, conf.MaxLoad+1024),
 		onOpen:             func(c *Conn) {},
 		onClose:            func(c *Conn, err error) {},
@@ -318,10 +318,14 @@ func NewGopher(conf Config) (*Gopher, error) {
 
 	if runtime.GOOS != "linux" {
 		g.onMemAlloc = func(c *Conn) []byte {
-			if c.readBuffer == nil {
-				c.readBuffer = make([]byte, g.readBufferSize)
+			g.mux.Lock()
+			buf, ok := g.conns[c]
+			if !ok {
+				buf = make([]byte, g.readBufferSize)
+				g.conns[c] = buf
 			}
-			return c.readBuffer
+			g.mux.Unlock()
+			return buf
 		}
 	}
 

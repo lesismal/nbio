@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"sync"
 	"sync/atomic"
 	"syscall"
 )
@@ -216,8 +215,8 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	if isListener {
 		if len(g.lfds) > 0 {
 			for _, lfd := range g.lfds {
-				epollExclusive := (1 << 28)
-				if err := syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, lfd, &syscall.EpollEvent{Fd: int32(lfd), Events: syscall.EPOLLIN | epollExclusive}); err != nil {
+				// EPOLLEXCLUSIVE := (1 << 28)
+				if err := syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, lfd, &syscall.EpollEvent{Fd: int32(lfd), Events: syscall.EPOLLIN | (1 << 28)}); err != nil {
 					syscallClose(fd)
 					return nil, err
 				}

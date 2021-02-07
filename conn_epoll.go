@@ -14,23 +14,23 @@ import (
 type Conn struct {
 	mux sync.Mutex
 
-	g *Gopher // g
+	g *Gopher
 
-	fd     int // file descriptor
+	fd     int
 	rTimer *time.Timer
 	wTimer *time.Timer
 
-	leftSize  int      // leftSize to send
-	sendQueue [][]byte // send queue
+	leftSize  int
+	sendQueue [][]byte
 
-	closed   bool  // is closed
-	isWAdded bool  // write event
-	closeErr error // err on closed
+	closed   bool
+	isWAdded bool
+	closeErr error
 
-	lAddr net.Addr // local addr
-	rAddr net.Addr // remote addr
+	lAddr net.Addr
+	rAddr net.Addr
 
-	session interface{} // user session
+	session interface{}
 }
 
 // Hash returns a hash code
