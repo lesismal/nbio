@@ -7,65 +7,52 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 )
 
 const (
-	// default max load of 1 gopher
-	_DEFAULT_MAX_LOAD uint32 = 65535
+	// DefaultMaxLoad .
+	DefaultMaxLoad uint32 = 1024 * 100
 
-	// redundancy
-	_DEFAULT_REDUNDANCY_FD_NUM uint32 = 128
+	// DefaultReadBufferSize .
+	DefaultReadBufferSize uint32 = 1024 * 16
 
-	// default read buffer size of 1 Conn
-	_DEFAULT_BUFFER_SIZE uint32 = 1024 * 64
-
-	// default max write buffer size of 1 Conn
-	_DEFAULT_MAX_WRITE_BUFFER uint32 = 1024 * 64
+	// DefaultMaxWriteBufferSize .
+	DefaultMaxWriteBufferSize uint32 = 1024 * 1024
 )
 
 // Config Of Gopher
 type Config struct {
-	// tcp network
+	// Network .
 	Network string
 
-	// tcp addrs
+	// Addrs .
 	Addrs []string
 
-	// max load
+	// MaxLoad .
 	MaxLoad uint32
 
-	// redundancy fd num
-	RedundancyFdNum uint32
-
-	// listener num
+	// NListener .
 	NListener uint32
 
-	// poller num
+	// NPoller .
 	NPoller uint32
 
-	// is without memory control
-	WithoutMemControl bool
+	// ReadBufferSize .
+	ReadBufferSize uint32
 
-	// read buffer size
-	BufferSize uint32
-
-	// max write buffer size
-	MaxWriteBuffer uint32
+	// MaxWriteBufferSize .
+	MaxWriteBufferSize uint32
 }
 
 // State of Gopher
 type State struct {
-	Online  int
+	// Online .
+	Online int
+	// Pollers .
 	Pollers []struct{ Online int }
-	Buffer  struct {
-		EachSize  int
-		Available int
-		Capacity  int
-	}
 }
 
-// String return Gopher's State Info
+// String returns Gopher's State Info
 func (state *State) String() string {
 	// str := fmt.Sprintf("****************************************\n[%v]:\n", time.Now().Format("2006.01.02 15:04:05"))
 	str := fmt.Sprintf("online: %v\n", state.Online)
@@ -78,29 +65,29 @@ func (state *State) String() string {
 // Gopher is a manager of poller
 type Gopher struct {
 	sync.WaitGroup
+	mux sync.Mutex
 
-	lfds           []int
-	network        string
-	addrs          []string
-	listenerNum    uint32
-	pollerNum      uint32
-	memControl     bool
-	bufferSize     uint32
-	maxWriteBuffer uint32
+	network            string
+	addrs              []string
+	listenerNum        uint32
+	pollerNum          uint32
+	readBufferSize     uint32
+	maxWriteBufferSize uint32
 
-	conns     []*Conn
-	listeners []*poller
-	pollers   []*poller
-
+	lfds     []int
 	currLoad int64
 	maxLoad  int64
 
-	onOpen  func(c *Conn)
-	onClose func(c *Conn, err error)
-	onData  func(c *Conn, data []byte)
+	conns      map[*Conn]struct{}
+	connsLinux []*Conn
 
-	onRead func(c *Conn, b []byte) (int, error)
+	listeners []*poller
+	pollers   []*poller
 
+	onOpen     func(c *Conn)
+	onClose    func(c *Conn, err error)
+	onData     func(c *Conn, data []byte)
+	onRead     func(c *Conn, b []byte) (int, error)
 	onMemAlloc func(c *Conn) []byte
 	onMemFree  func(c *Conn, buffer []byte)
 }
@@ -110,38 +97,55 @@ func (g *Gopher) Start() error {
 	var err error
 
 	g.lfds = []int{}
-	if g.network != "" && len(g.addrs) > 0 {
+
+	if runtime.GOOS == "linux" {
 		for _, addr := range g.addrs {
-			fd, err := listen(g.network, addr)
+			fd, err := listen(g.network, addr, g.maxLoad)
 			if err != nil {
 				return err
 			}
 
-			syscall.SetNonblock(fd, true)
-
 			g.lfds = append(g.lfds, fd)
 		}
-	}
 
-	for i := uint32(0); i < g.listenerNum; i++ {
-		g.listeners[i], err = newPoller(g, true, int(i))
-		if err != nil {
-			for j := 0; j < int(i); j++ {
-				syscallClose(g.lfds[j])
-				g.listeners[j].stop()
+		for i := uint32(0); i < g.listenerNum; i++ {
+			g.listeners[i], err = newPoller(g, true, int(i))
+			if err != nil {
+				for j := 0; j < int(i); j++ {
+					if runtime.GOOS == "linux" {
+						syscallClose(g.lfds[j])
+					}
+					g.listeners[j].stop()
+				}
+				return err
 			}
-			return err
 		}
-		go g.listeners[i].start()
+	} else {
+		g.listeners = make([]*poller, len(g.addrs))
+		for i := range g.addrs {
+			g.listeners[i], err = newPoller(g, true, int(i))
+			if err != nil {
+				for j := 0; j < i; j++ {
+					g.listeners[j].stop()
+				}
+			}
+		}
 	}
 
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i], err = newPoller(g, false, int(i))
 		if err != nil {
-			for j := 0; j < int(len(g.lfds)); j++ {
-				syscallClose(g.lfds[j])
-				g.listeners[j].stop()
+			if runtime.GOOS == "linux" {
+				for j := 0; j < int(len(g.lfds)); j++ {
+					syscallClose(g.lfds[j])
+					g.listeners[j].stop()
+				}
+			} else {
+				for j := 0; j < len(g.addrs); j++ {
+					g.listeners[j].stop()
+				}
 			}
+
 			for j := 0; j < int(i); j++ {
 				g.pollers[j].stop()
 			}
@@ -151,8 +155,13 @@ func (g *Gopher) Start() error {
 
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.Add(1)
-		g.pollers[i].buffer = make([]byte, g.bufferSize)
+		if runtime.GOOS == "linux" {
+			g.pollers[i].readBuffer = make([]byte, g.readBufferSize)
+		}
 		go g.pollers[i].start()
+	}
+	for _, l := range g.listeners {
+		go l.start()
 	}
 
 	log.Printf("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
@@ -168,79 +177,102 @@ func (g *Gopher) Stop() {
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i].stop()
 	}
-	for _, c := range g.conns {
+	for c := range g.conns {
+		if c != nil {
+			c.Close()
+		}
+	}
+	for _, c := range g.connsLinux {
 		if c != nil {
 			c.Close()
 		}
 	}
 }
 
-// AddConn add conn to a poller
+// AddConn adds conn to a poller
 func (g *Gopher) AddConn(c *Conn) {
 	g.increase()
 	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
 }
 
-// Online return Gopher's total online
+// Online returns Gopher's total online
 func (g *Gopher) Online() int64 {
 	return atomic.LoadInt64(&g.currLoad)
 }
 
-// OnOpen register callback for new connection
+// OnOpen registers callback for new connection
 func (g *Gopher) OnOpen(h func(c *Conn)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
 	g.onOpen = h
 }
 
-// OnClose register callback for disconnected
+// OnClose registers callback for disconnected
 func (g *Gopher) OnClose(h func(c *Conn, err error)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
 	g.onClose = h
 }
 
-// OnData register callback for data
+// OnData registers callback for data
 func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
 	g.onData = h
 }
 
-// OnRead register callback for conn.Read
+// OnRead registers callback for conn.Read
 func (g *Gopher) OnRead(h func(c *Conn, b []byte) (int, error)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
 	g.onRead = h
 }
 
-// OnMemAlloc register callback for memory allocating
+// OnMemAlloc registers callback for memory allocating
 func (g *Gopher) OnMemAlloc(h func(c *Conn) []byte) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
 	g.onMemAlloc = h
 }
 
-// OnMemFree register callback for memory release
+// OnMemFree registers callback for memory release
 func (g *Gopher) OnMemFree(h func(c *Conn, b []byte)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
 	g.onMemFree = h
 }
 
-// get memory from gopher
+// State returns Gopher's state info
+func (g *Gopher) State() *State {
+	state := &State{
+		Online:  int(g.Online()),
+		Pollers: make([]struct{ Online int }, len(g.pollers)),
+	}
+
+	for i := 0; i < len(g.pollers); i++ {
+		state.Pollers[i].Online = int(g.pollers[i].online())
+	}
+
+	return state
+}
+
 func (g *Gopher) borrow(c *Conn) []byte {
 	if g.onMemAlloc != nil {
 		return g.onMemAlloc(c)
 	}
-	return g.pollers[uint32(c.fd)%g.pollerNum].buffer
+	return g.pollers[uint32(c.Hash())%g.pollerNum].readBuffer
 }
 
-// payback memory to gopher
 func (g *Gopher) payback(c *Conn, buffer []byte) {
 	if g.onMemFree != nil {
 		g.onMemFree(c, buffer)
 	}
-}
-
-func (g *Gopher) acceptable(fd int) bool {
-	if fd < 0 || fd >= len(g.conns) {
-		return false
-	}
-	if atomic.AddInt64(&g.currLoad, 1) > g.maxLoad {
-		atomic.AddInt64(&g.currLoad, -1)
-		return false
-	}
-
-	return true
 }
 
 func (g *Gopher) increase() {
@@ -251,28 +283,11 @@ func (g *Gopher) decrease() {
 	atomic.AddInt64(&g.currLoad, -1)
 }
 
-// State return Gopher's state info
-func (g *Gopher) State() *State {
-	state := &State{
-		Online:  int(g.Online()),
-		Pollers: make([]struct{ Online int }, len(g.pollers)),
-	}
-
-	for i := 0; i < len(g.pollers); i++ {
-		state.Pollers[i].Online = int(g.pollers[i].Online())
-	}
-
-	return state
-}
-
 // NewGopher is a factory impl
 func NewGopher(conf Config) (*Gopher, error) {
 	cpuNum := uint32(runtime.NumCPU())
 	if conf.MaxLoad == 0 {
-		conf.MaxLoad = _DEFAULT_MAX_LOAD
-	}
-	if conf.RedundancyFdNum == 0 {
-		conf.RedundancyFdNum = _DEFAULT_REDUNDANCY_FD_NUM
+		conf.MaxLoad = DefaultMaxLoad
 	}
 	if len(conf.Addrs) > 0 && conf.NListener == 0 {
 		conf.NListener = 1
@@ -280,27 +295,34 @@ func NewGopher(conf Config) (*Gopher, error) {
 	if conf.NPoller == 0 {
 		conf.NPoller = cpuNum
 	}
-	if conf.BufferSize == 0 {
-		conf.BufferSize = _DEFAULT_BUFFER_SIZE
-	}
-	if !conf.WithoutMemControl {
-		if conf.MaxWriteBuffer == 0 {
-			conf.MaxWriteBuffer = _DEFAULT_MAX_WRITE_BUFFER
-		}
+	if conf.ReadBufferSize == 0 {
+		conf.ReadBufferSize = DefaultReadBufferSize
 	}
 
 	g := &Gopher{
-		network:        conf.Network,
-		addrs:          conf.Addrs,
-		maxLoad:        int64(conf.MaxLoad),
-		listenerNum:    conf.NListener,
-		pollerNum:      conf.NPoller,
-		memControl:     !conf.WithoutMemControl,
-		bufferSize:     conf.BufferSize,
-		maxWriteBuffer: conf.MaxWriteBuffer,
-		listeners:      make([]*poller, conf.NListener),
-		pollers:        make([]*poller, conf.NPoller),
-		conns:          make([]*Conn, conf.MaxLoad+conf.RedundancyFdNum),
+		network:            conf.Network,
+		addrs:              conf.Addrs,
+		maxLoad:            int64(conf.MaxLoad),
+		listenerNum:        conf.NListener,
+		pollerNum:          conf.NPoller,
+		readBufferSize:     conf.ReadBufferSize,
+		maxWriteBufferSize: conf.MaxWriteBufferSize,
+		listeners:          make([]*poller, conf.NListener),
+		pollers:            make([]*poller, conf.NPoller),
+		conns:              map[*Conn]struct{}{},
+		connsLinux:         make([]*Conn, conf.MaxLoad+1024),
+		onOpen:             func(c *Conn) {},
+		onClose:            func(c *Conn, err error) {},
+		onData:             func(c *Conn, data []byte) {},
+	}
+
+	if runtime.GOOS != "linux" {
+		g.onMemAlloc = func(c *Conn) []byte {
+			if c.readBuffer == nil {
+				c.readBuffer = make([]byte, g.readBufferSize)
+			}
+			return c.readBuffer
+		}
 	}
 
 	return g, nil

@@ -1,7 +1,8 @@
+// +build linux
+
 package nbio
 
 import (
-	"errors"
 	"net"
 	"sync"
 	"syscall"
@@ -9,16 +10,7 @@ import (
 	"unsafe"
 )
 
-var (
-	errClosed       = errors.New("conn closed")
-	errInvalidData  = errors.New("invalid data")
-	errWriteWaiting = errors.New("write waiting")
-	errTimeout      = errors.New("timeout")
-	errReadTimeout  = errors.New("read timeout")
-	errWriteTimeout = errors.New("write timeout")
-)
-
-// Conn implement net.Conn
+// Conn implements net.Conn
 type Conn struct {
 	mux sync.Mutex
 
@@ -28,8 +20,8 @@ type Conn struct {
 	rTimer *time.Timer
 	wTimer *time.Timer
 
-	left      int      // left to send
-	writeList [][]byte // send queue
+	leftSize  int      // leftSize to send
+	sendQueue [][]byte // send queue
 
 	closed   bool  // is closed
 	isWAdded bool  // write event
@@ -41,17 +33,12 @@ type Conn struct {
 	session interface{} // user session
 }
 
-// Fd return system file descriptor
-func (c *Conn) Fd() int {
-	return c.fd
-}
-
-// Hash return a hashcode
+// Hash returns a hash code
 func (c *Conn) Hash() int {
 	return c.fd
 }
 
-// Read implement net.Conn
+// Read implements Read
 func (c *Conn) Read(b []byte) (int, error) {
 	c.mux.Lock()
 
@@ -71,9 +58,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	return n, err
 }
 
-// Write implement net.Conn
-// IF return syscall.EINVAL, should Close
-// ELSE the data would be send or push to write list
+// Write implements Write
 func (c *Conn) Write(b []byte) (int, error) {
 	c.mux.Lock()
 	if c.closed {
@@ -85,11 +70,14 @@ func (c *Conn) Write(b []byte) (int, error) {
 	if err != nil && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
 		c.closeWithErrorWithoutLock(errInvalidData)
 		return n, err
 	}
 
-	if c.left == 0 {
+	if c.leftSize == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -101,9 +89,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Writev wrap writevimplement and extend net.Conn
-// IF return syscall.EINVAL, should Close
-// ELSE the data would be send or push to write list
+// Writev implements Writev
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	c.mux.Lock()
 
@@ -116,10 +102,13 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	if err != nil && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
 		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
-	if c.left == 0 {
+	if c.leftSize == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -131,22 +120,22 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	return n, err
 }
 
-// Close implement net.Conn
+// Close implements Close
 func (c *Conn) Close() error {
 	return c.closeWithError(nil)
 }
 
-// LocalAddr return socket local addr
+// LocalAddr implements LocalAddr
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
-// RemoteAddr return socket remote addr
+// RemoteAddr implements RemoteAddr
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.rAddr
 }
 
-// SetDeadline set socket recv & send deadline
+// SetDeadline implements SetDeadline
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -170,10 +159,10 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline set socket recv deadline
+// SetReadDeadline implements SetReadDeadline
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mux.Lock()
-	if !c.closed && len(c.writeList) == 0 {
+	if !c.closed && len(c.sendQueue) == 0 {
 		now := time.Now()
 		if t.Before(now) {
 			c.closeWithErrorWithoutLock(errReadTimeout)
@@ -189,7 +178,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline set socket send deadline
+// SetWriteDeadline implements SetWriteDeadline
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -208,7 +197,7 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// SetNoDelay set socket nodelay
+// SetNoDelay implements SetNoDelay
 func (c *Conn) SetNoDelay(nodelay bool) error {
 	if nodelay {
 		return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1)
@@ -216,17 +205,17 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 0)
 }
 
-// SetReadBuffer set socket recv buffer length
+// SetReadBuffer implements SetReadBuffer
 func (c *Conn) SetReadBuffer(bytes int) error {
 	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, bytes)
 }
 
-// SetWriteBuffer set socket send buffer length
+// SetWriteBuffer implements SetWriteBuffer
 func (c *Conn) SetWriteBuffer(bytes int) error {
 	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, bytes)
 }
 
-// SetKeepAlive set socket keepalive
+// SetKeepAlive implements SetKeepAlive
 func (c *Conn) SetKeepAlive(keepalive bool) error {
 	if keepalive {
 		return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1)
@@ -234,7 +223,7 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0)
 }
 
-// SetKeepAlivePeriod set socket keepalive peroid
+// SetKeepAlivePeriod implements SetKeepAlivePeriod
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	d += (time.Second - time.Nanosecond)
 	secs := int(d.Seconds())
@@ -244,8 +233,7 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
 }
 
-// SetLinger set socket linger
-// to decrease time_wait, plz set onoff=1 && linger=0
+// SetLinger implements SetLinger
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return syscall.SetsockoptLinger(c.fd, syscall.SOL_SOCKET, syscall.SO_LINGER, &syscall.Linger{
 		Onoff:  onoff,  // 1
@@ -253,12 +241,12 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	})
 }
 
-// Session return user session
+// Session returns user session
 func (c *Conn) Session() interface{} {
 	return c.session
 }
 
-// SetSession set user session
+// SetSession sets user session
 func (c *Conn) SetSession(session interface{}) bool {
 	if session == nil {
 		return false
@@ -273,22 +261,20 @@ func (c *Conn) SetSession(session interface{}) bool {
 	return false
 }
 
-// setRead event
 func (c *Conn) setRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
-		c.g.pollers[c.fd%len(c.g.pollers)].setRead(c.fd)
+		c.g.pollers[c.Hash()%len(c.g.pollers)].setRead(c.fd)
 	}
 }
 
 func (c *Conn) setReadWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		c.g.pollers[c.fd%len(c.g.pollers)].setReadWrite(c.fd)
+		c.g.pollers[c.Hash()%len(c.g.pollers)].setReadWrite(c.fd)
 	}
 }
 
-// write buffer
 func (c *Conn) write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
@@ -298,21 +284,21 @@ func (c *Conn) write(b []byte) (int, error) {
 		return -1, syscall.EINVAL
 	}
 
-	c.left += len(b)
+	c.leftSize += len(b)
 
 	var (
 		err    error
 		nwrite int
 	)
 
-	if len(c.writeList) == 0 {
+	if len(c.sendQueue) == 0 {
 		for {
 			n, err := syscall.Write(int(c.fd), b)
 			if n > 0 {
 				nwrite += n
-				c.left -= n
+				c.leftSize -= n
 				if n < len(b) {
-					c.writeList = append(c.writeList, b[n:])
+					c.sendQueue = append(c.sendQueue, b[n:])
 					return n, err
 				}
 			}
@@ -323,13 +309,12 @@ func (c *Conn) write(b []byte) (int, error) {
 			break
 		}
 	} else {
-		c.writeList = append(c.writeList, b)
+		c.sendQueue = append(c.sendQueue, b)
 	}
 
 	return nwrite, err
 }
 
-// flush dump write list data to socket
 func (c *Conn) flush() error {
 	c.mux.Lock()
 	if c.closed {
@@ -337,17 +322,22 @@ func (c *Conn) flush() error {
 		return errClosed
 	}
 
-	wl := c.writeList
-	c.left = 0
-	c.writeList = nil
-	_, err := c.writev(wl)
+	var err error
+	var sendQ = c.sendQueue
+	c.leftSize = 0
+	c.sendQueue = nil
+	if len(sendQ) == 1 {
+		_, err = c.write(sendQ[0])
+	} else {
+		_, err = c.writev(sendQ)
+	}
 	if err != nil && err != syscall.EAGAIN && err != syscall.EINTR {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
 		return err
 	}
-	if c.left == 0 {
+	if c.leftSize == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -359,16 +349,14 @@ func (c *Conn) flush() error {
 	return err
 }
 
-// writev
 func (c *Conn) writev(in [][]byte) (int, error) {
-	if len(c.writeList) == 0 {
-		return c.writevSocket(in)
+	if len(c.sendQueue) == 0 {
+		return c.writevToSocket(in)
 	}
-	return c.writeCache(in)
+	return c.writeToSendQueue(in)
 }
 
-// writeCache
-func (c *Conn) writeCache(in [][]byte) (int, error) {
+func (c *Conn) writeToSendQueue(in [][]byte) (int, error) {
 	var ntotal int
 	for _, b := range in {
 		if len(b) == 0 {
@@ -385,14 +373,13 @@ func (c *Conn) writeCache(in [][]byte) (int, error) {
 		return -1, syscall.EINVAL
 	}
 
-	c.left += ntotal
-	c.writeList = append(c.writeList, in...)
+	c.leftSize += ntotal
+	c.sendQueue = append(c.sendQueue, in...)
 
 	return 0, nil
 }
 
-// writevSocket
-func (c *Conn) writevSocket(in [][]byte) (int, error) {
+func (c *Conn) writevToSocket(in [][]byte) (int, error) {
 	var (
 		err    error
 		ntotal int
@@ -413,7 +400,7 @@ func (c *Conn) writevSocket(in [][]byte) (int, error) {
 		return -1, syscall.EINVAL
 	}
 
-	c.left += ntotal
+	c.leftSize += ntotal
 
 	nwRaw, _, errno := syscall.Syscall(syscall.SYS_WRITEV, uintptr(c.fd), uintptr(unsafe.Pointer(&iovec[0])), uintptr(len(iovec)))
 	if errno != 0 {
@@ -421,7 +408,7 @@ func (c *Conn) writevSocket(in [][]byte) (int, error) {
 	}
 	nwrite = int(nwRaw)
 	if nwrite > 0 {
-		c.left -= nwrite
+		c.leftSize -= nwrite
 		if nwrite < ntotal {
 			for i := 0; i < len(in); i++ {
 				if len(in[i]) < nwrite {
@@ -439,19 +426,17 @@ func (c *Conn) writevSocket(in [][]byte) (int, error) {
 					break
 				}
 			}
-			c.writeList = append(c.writeList, in...)
+			c.sendQueue = append(c.sendQueue, in...)
 		}
 	}
 
 	return int(nwRaw), err
 }
 
-// overflow control write list size of each fd
 func (c *Conn) overflow(n int) bool {
-	return c.g.memControl && c.left+n > int(c.g.maxWriteBuffer)
+	return c.g.maxWriteBufferSize > 0 && (c.leftSize+n > int(c.g.maxWriteBufferSize))
 }
 
-// closeWithError with lock
 func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -463,21 +448,52 @@ func (c *Conn) closeWithError(err error) error {
 	return nil
 }
 
-// closeWithErrorWithoutLock
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	fd := c.fd
 	c.session = nil
 	c.closeErr = err
-	c.g.pollers[fd%len(c.g.pollers)].deleteConn(c)
+	c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
 
 	return syscallClose(fd)
 }
 
-// NewConn is a factory impl
-func NewConn(fd int, lAddr, rAddr net.Addr) *Conn {
+func newConn(fd int, lAddr, rAddr net.Addr) *Conn {
 	return &Conn{
 		fd:    fd,
 		lAddr: lAddr,
 		rAddr: rAddr,
 	}
+}
+
+// Dial wraps syscall.Connect
+func Dial(network string, address string) (*Conn, error) {
+	sa, _, err := getSockaddr(network, address)
+	if err != nil {
+		return nil, err
+	}
+
+	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
+	if err != nil {
+		return nil, err
+	}
+
+	err = syscall.Connect(fd, sa)
+	if err != nil {
+		return nil, err
+	}
+
+	err = syscall.SetNonblock(fd, true)
+	if err != nil {
+		syscallClose(fd)
+		return nil, err
+	}
+
+	la, err := syscall.Getsockname(fd)
+	if err != nil {
+		return nil, err
+	}
+
+	c := newConn(fd, sockaddrToAddr(la), sockaddrToAddr(sa))
+
+	return c, nil
 }

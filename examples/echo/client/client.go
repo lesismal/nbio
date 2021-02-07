@@ -2,14 +2,15 @@ package main
 
 import (
 	"fmt"
-	"github.com/lesismal/nbio"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lesismal/nbio"
 )
 
 var (
-	addrs = []string{"127.0.0.1:8888", "127.0.0.1:9999"}
+	addrs = []string{"localhost:8888", "localhost:9999"}
 )
 
 func main() {
@@ -17,7 +18,7 @@ func main() {
 		wg         sync.WaitGroup
 		qps        int64
 		bufsize    = 1024 * 8
-		clientNum  = 1024
+		clientNum  = 128
 		totalRead  int64
 		totalWrite int64
 	)
@@ -32,6 +33,7 @@ func main() {
 		c.SetLinger(1, 0)
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
+		// fmt.Println("--- ondata:", len(data))
 		atomic.AddInt64(&qps, 1)
 		atomic.AddInt64(&totalRead, int64(len(data)))
 		atomic.AddInt64(&totalWrite, int64(len(data)))
@@ -40,6 +42,7 @@ func main() {
 	g.OnClose(func(c *nbio.Conn, err error) {
 		fmt.Printf("OnClose: %v, %v\n", c.LocalAddr().String(), c.RemoteAddr().String())
 	})
+
 	err = g.Start()
 	if err != nil {
 		fmt.Printf("Start failed: %v\n", err)
