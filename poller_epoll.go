@@ -9,6 +9,12 @@ import (
 	"net"
 	"sync/atomic"
 	"syscall"
+	"time"
+)
+
+const (
+	interval   = time.Second / 10  // 100 ms
+	maxTimeout = time.Second * 120 // 120 s
 )
 
 type poller struct {
@@ -20,11 +26,16 @@ type poller struct {
 
 	currLoad int64
 
+	shutdown bool
+
+	isListener bool
+
 	readBuffer []byte
 
-	pollType   string
-	isListener bool
-	shutdown   bool
+	pollType string
+
+	twRead  *timerWheel
+	twWrite *timerWheel
 }
 
 func (p *poller) online() int64 {
@@ -85,10 +96,11 @@ func (p *poller) acceptable(fd int) bool {
 }
 
 func (p *poller) addConn(c *Conn) error {
+	c.g = p.g
+
 	p.g.onOpen(c)
 
 	fd := c.fd
-	c.g = p.g
 	err := p.setRead(fd)
 	if err == nil {
 		p.g.connsLinux[fd] = c
@@ -123,7 +135,9 @@ func (p *poller) start() {
 	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
 	p.shutdown = false
 
-	msec := -1
+	twout := 0
+	now := time.Now()
+	msec := int(interval.Milliseconds())
 	events := make([]syscall.EpollEvent, 128)
 	if p.isListener {
 		for !p.shutdown {
@@ -145,6 +159,13 @@ func (p *poller) start() {
 					return
 				}
 			}
+
+			// now = time.Now()
+			// msec = p.twRead.check(now)
+			// twout = p.twWrite.check(now)
+			// if twout < msec {
+			// 	msec = twout
+			// }
 		}
 	} else {
 		for !p.shutdown {
@@ -162,6 +183,13 @@ func (p *poller) start() {
 
 			for i := 0; i < n; i++ {
 				p.readWrite(&events[i])
+			}
+
+			now = time.Now()
+			msec = p.twRead.check(now)
+			twout = p.twWrite.check(now)
+			if twout < msec {
+				msec = twout
 			}
 		}
 	}
@@ -237,6 +265,11 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		p.pollType = "listener"
 	} else {
 		p.pollType = "poller"
+
+		p.twRead = newTimerWheel(int(maxTimeout/interval)+1, interval, errReadTimeout)
+		p.twRead.start()
+		p.twWrite = newTimerWheel(int(maxTimeout/interval)+1, interval, errWriteTimeout)
+		p.twWrite.start()
 	}
 
 	return p, nil

@@ -16,9 +16,10 @@ type Conn struct {
 
 	g *Gopher
 
-	fd     int
-	rTimer *time.Timer
-	wTimer *time.Timer
+	fd int
+
+	rIndex int
+	wIndex int
 
 	leftSize  int
 	sendQueue [][]byte
@@ -70,17 +71,21 @@ func (c *Conn) Write(b []byte) (int, error) {
 	if err != nil && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
+		// if c.wTimer != nil {
+		// 	c.wTimer.Stop()
+		// }
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		tw.delete(c, &c.wIndex)
 		c.closeWithErrorWithoutLock(errInvalidData)
 		return n, err
 	}
 
 	if c.leftSize == 0 {
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
+		// if c.wTimer != nil {
+		// 	c.wTimer.Stop()
+		// }
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		tw.delete(c, &c.wIndex)
 	} else {
 		c.setReadWrite()
 	}
@@ -102,16 +107,20 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	if err != nil && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
+		// if c.wTimer != nil {
+		// 	c.wTimer.Stop()
+		// }
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		tw.delete(c, &c.wIndex)
 		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 	if c.leftSize == 0 {
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
+		// if c.wTimer != nil {
+		// 	c.wTimer.Stop()
+		// }
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		tw.delete(c, &c.wIndex)
 	} else {
 		c.setReadWrite()
 	}
@@ -139,20 +148,13 @@ func (c *Conn) RemoteAddr() net.Addr {
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		now := time.Now()
-		if t.Before(now) {
-			c.closeWithErrorWithoutLock(errTimeout)
-			return errTimeout
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
+		if tw != nil {
+			tw.reset(c, &c.rIndex, t)
 		}
-		if c.rTimer == nil {
-			c.rTimer = time.AfterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
-		} else {
-			c.rTimer.Reset(t.Sub(now))
-		}
-		if c.wTimer == nil {
-			c.wTimer = time.AfterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
-		} else {
-			c.wTimer.Reset(t.Sub(now))
+		tw = c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		if tw != nil {
+			tw.reset(c, &c.wIndex, t)
 		}
 	}
 	c.mux.Unlock()
@@ -162,16 +164,10 @@ func (c *Conn) SetDeadline(t time.Time) error {
 // SetReadDeadline implements SetReadDeadline
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mux.Lock()
-	if !c.closed && len(c.sendQueue) == 0 {
-		now := time.Now()
-		if t.Before(now) {
-			c.closeWithErrorWithoutLock(errReadTimeout)
-			return errReadTimeout
-		}
-		if c.rTimer == nil {
-			c.rTimer = time.AfterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
-		} else {
-			c.rTimer.Reset(t.Sub(now))
+	if !c.closed {
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
+		if tw != nil {
+			tw.reset(c, &c.rIndex, t)
 		}
 	}
 	c.mux.Unlock()
@@ -182,15 +178,9 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		now := time.Now()
-		if t.Before(now) {
-			c.closeWithErrorWithoutLock(errWriteTimeout)
-			return errWriteTimeout
-		}
-		if c.wTimer == nil {
-			c.wTimer = time.AfterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
-		} else {
-			c.wTimer.Reset(t.Sub(now))
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		if tw != nil {
+			tw.reset(c, &c.wIndex, t)
 		}
 	}
 	c.mux.Unlock()
@@ -338,9 +328,11 @@ func (c *Conn) flush() error {
 		return err
 	}
 	if c.leftSize == 0 {
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
+		// if c.wTimer != nil {
+		// 	c.wTimer.Stop()
+		// }
+		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		tw.delete(c, &c.wIndex)
 	} else {
 		c.setReadWrite()
 	}
