@@ -187,7 +187,7 @@ func (g *Gopher) Stop() {
 	conns := g.conns
 	g.conns = map[*Conn][]byte{}
 	connsLinux := g.connsLinux
-	g.connsLinux = make([]*Conn{}, len(connsLinux))
+	g.connsLinux = make([]*Conn, len(connsLinux))
 	g.mux.Unlock()
 
 	for c := range conns {
