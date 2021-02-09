@@ -32,10 +32,8 @@ func (c *Conn) Hash() int {
 
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
-	c.mux.Lock()
 	if c.g.onRead != nil {
 		n, err := c.g.onRead(c, b)
-		c.mux.Unlock()
 		return n, err
 	}
 
@@ -46,7 +44,6 @@ func (c *Conn) Read(b []byte) (int, error) {
 		}
 		c.Close()
 	}
-	c.mux.Unlock()
 	return nread, err
 }
 
