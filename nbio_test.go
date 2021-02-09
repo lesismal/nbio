@@ -55,11 +55,11 @@ func TestEcho(t *testing.T) {
 	defer g.Stop()
 
 	g.OnOpen(func(c *Conn) {
+		log.Printf("connected local addr 111: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
 		c.SetSession(1)
 		if c.Session() != 1 {
-			t.Fatalf("invalid session: %v", c.Session())
+			log.Fatalf("invalid session: %v", c.Session())
 		}
-		log.Printf("connected local addr 111: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
 		c.SetLinger(1, 0)
 		c.SetNoDelay(true)
 		c.SetKeepAlive(true)
@@ -76,21 +76,24 @@ func TestEcho(t *testing.T) {
 		}
 	})
 
+	one := func(n int) {
+		c, err := Dial("tcp", addr)
+		if err != nil {
+			log.Fatalf("Dial failed: %v", err)
+		}
+		g.AddConn(c)
+		if n%2 == 0 {
+			c.Write(make([]byte, msgSize))
+		} else {
+			c.Writev([][]byte{make([]byte, msgSize)})
+		}
+	}
+
 	for i := 0; i < clientNum; i++ {
-		n := i
-		if runtime.GOOS == "windows" {
-			go func() {
-				c, err := Dial("tcp", addr)
-				if err != nil {
-					log.Fatalf("Dial failed: %v", err)
-				}
-				g.AddConn(c)
-				if n%2 == 0 {
-					c.Write(make([]byte, msgSize))
-				} else {
-					c.Writev([][]byte{make([]byte, msgSize)})
-				}
-			}()
+		if runtime.GOOS == "linux" {
+			one(i)
+		} else {
+			go one(i)
 		}
 	}
 
