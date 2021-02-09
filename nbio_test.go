@@ -16,8 +16,9 @@ func init() {
 	g, err := NewGopher(Config{
 		Network: "tcp",
 		Addrs:   addrs,
-		NPoller: 1,
+		MaxLoad: 10,
 	})
+	g.maxLoad = 1024 * 100
 	if err != nil {
 		log.Fatalf("NewGopher failed: %v\n", err)
 	}
@@ -193,6 +194,14 @@ func TestTimeout(t *testing.T) {
 	one()
 
 	<-done
+}
+
+func TestFuzz(t *testing.T) {
+	gopher.maxLoad = 10
+	for i := 0; i < 100; i++ {
+		Dial("tcp", addr)
+	}
+	time.Sleep(time.Second / 100)
 }
 
 func TestStop(t *testing.T) {

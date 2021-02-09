@@ -316,7 +316,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
 		conns:              map[*Conn][]byte{},
-		connsLinux:         make([]*Conn, conf.MaxLoad+1024),
+		connsLinux:         make([]*Conn, conf.MaxLoad+64),
 		onOpen:             func(c *Conn) {},
 		onClose:            func(c *Conn, err error) {},
 		onData:             func(c *Conn, data []byte) {},
