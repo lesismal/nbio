@@ -190,5 +190,6 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
+	log.Println(gopher.State().String())
 	gopher.Stop()
 }
