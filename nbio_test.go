@@ -23,7 +23,7 @@ func init() {
 	}
 
 	g.OnOpen(func(c *Conn) {
-		c.SetReadDeadline(time.Now().Add(time.Second / 5))
+		c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		c.Write(append([]byte{}, data...))
@@ -147,6 +147,44 @@ func Test10k(t *testing.T) {
 			}()
 		}
 	}()
+
+	<-done
+}
+
+func TestTimeout(t *testing.T) {
+	g, err := NewGopher(Config{})
+	if err != nil {
+		log.Fatalf("NewGopher failed: %v\n", err)
+	}
+	err = g.Start()
+	if err != nil {
+		log.Fatalf("Start failed: %v\n", err)
+	}
+	defer g.Stop()
+
+	var done = make(chan int)
+	var begin time.Time
+	var timeout = time.Second / 20
+	g.OnOpen(func(c *Conn) {
+		begin = time.Now()
+		c.SetReadDeadline(begin.Add(timeout))
+	})
+	g.OnClose(func(c *Conn, err error) {
+		to := time.Since(begin)
+		if to > timeout+time.Second/10 {
+			log.Fatalf("timeout: %v, want: %v", to, timeout)
+		}
+		close(done)
+	})
+
+	one := func() {
+		c, err := Dial("tcp", addr)
+		if err != nil {
+			log.Fatalf("Dial failed: %v", err)
+		}
+		g.AddConn(c)
+	}
+	one()
 
 	<-done
 }
