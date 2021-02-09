@@ -175,20 +175,29 @@ func (g *Gopher) Start() error {
 
 // Stop pollers
 func (g *Gopher) Stop() {
+
 	for i := uint32(0); i < g.listenerNum; i++ {
 		g.listeners[i].stop()
 	}
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i].stop()
 	}
-	for c := range g.conns {
+
+	g.mux.Lock()
+	conns := g.conns
+	g.conns = map[*Conn][]byte{}
+	connsLinux := g.connsLinux
+	g.connsLinux = []*Conn{}
+	g.mux.Unlock()
+
+	for c := range conns {
 		if c != nil {
 			c.Close()
 		}
 	}
-	for _, c := range g.connsLinux {
+	for _, c := range connsLinux {
 		if c != nil {
-			c.Close()
+			go c.Close()
 		}
 	}
 
