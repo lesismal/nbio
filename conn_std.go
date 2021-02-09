@@ -32,18 +32,7 @@ func (c *Conn) Hash() int {
 
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
-	if c.g.onRead != nil {
-		n, err := c.g.onRead(c, b)
-		return n, err
-	}
-
 	nread, err := c.conn.Read(b)
-	if err != nil {
-		if c.closeErr == nil {
-			c.closeErr = err
-		}
-		c.Close()
-	}
 	return nread, err
 }
 
