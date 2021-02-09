@@ -51,7 +51,7 @@ func (tw *timerWheel) check(now time.Time) int {
 }
 
 func (tw *timerWheel) reset(c *Conn, pindex *int, t time.Time) {
-	newIndex := int(uint32((tw.index + int(t.Sub(time.Now())/tw.interval))) % uint32(len(tw.wheels)))
+	newIndex := int(uint32((tw.index + 1 + int(t.Sub(time.Now())/tw.interval))) % uint32(len(tw.wheels)))
 	if newIndex != *pindex {
 		if uint32(*pindex) < uint32(len(tw.wheels)) {
 			w := &tw.wheels[*pindex]
