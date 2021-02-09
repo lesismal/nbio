@@ -164,8 +164,11 @@ func (g *Gopher) Start() error {
 		go l.start()
 	}
 
-	log.Printf("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
-
+	if len(g.addrs) == 0 {
+		log.Printf("gopher start")
+	} else {
+		log.Printf("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
+	}
 	return nil
 }
 
