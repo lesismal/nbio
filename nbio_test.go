@@ -55,7 +55,6 @@ func TestEcho(t *testing.T) {
 	defer g.Stop()
 
 	g.OnOpen(func(c *Conn) {
-		log.Printf("connected local addr 111: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
 		c.SetSession(1)
 		if c.Session() != 1 {
 			log.Fatalf("invalid session: %v", c.Session())
@@ -67,7 +66,7 @@ func TestEcho(t *testing.T) {
 		c.SetDeadline(time.Now().Add(time.Second))
 		c.SetReadBuffer(1024 * 4)
 		c.SetWriteBuffer(1024 * 4)
-		log.Printf("connected local addr 222: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
+		log.Printf("connected, local addr: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		recved := atomic.AddInt64(&total, int64(len(data)))
