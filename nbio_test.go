@@ -128,24 +128,21 @@ func Test10k(t *testing.T) {
 		}
 	})
 
+	one := func() {
+		c, err := Dial("tcp", addr)
+		if err != nil {
+			log.Fatalf("Dial failed: %v", err)
+		}
+		g.AddConn(c)
+	}
 	go func() {
 		for i := 0; i < int(clientNum); i++ {
 			go func() {
-				if runtime.GOOS == "windows" {
-					go func() {
-						c, err := Dial("tcp", addr)
-						if err != nil {
-							log.Fatalf("Dial failed: %v", err)
-						}
-						g.AddConn(c)
-					}()
-					// 	time.Sleep(time.Second / 1000)
+				if runtime.GOOS == "linux" {
+					one()
 				} else {
-					c, err := Dial("tcp", addr)
-					if err != nil {
-						log.Fatalf("Dial failed: %v", err)
-					}
-					g.AddConn(c)
+					go one()
+					// 	time.Sleep(time.Second / 1000)
 				}
 			}()
 		}
