@@ -85,7 +85,9 @@ func (p *poller) acceptable(fd int) bool {
 		return false
 	}
 	if fd >= len(p.g.connsLinux) {
-		p.g.connsLinux = append(p.g.connsLinux, make([]*Conn, 1024)...)
+		p.g.mux.Lock()
+		p.g.connsLinux = append(p.g.connsLinux, make([]*Conn, fd-len(p.g.connsLinux)+1024)...)
+		p.g.mux.Unlock()
 	}
 	if atomic.AddInt64(&p.g.currLoad, 1) > p.g.maxLoad {
 		atomic.AddInt64(&p.g.currLoad, -1)
