@@ -133,7 +133,6 @@ func (p *poller) start() {
 	p.shutdown = false
 
 	twout := 0
-	now := time.Now()
 	msec := int(interval.Milliseconds())
 	events := make([]syscall.EpollEvent, 1024)
 	if p.isListener {
@@ -156,13 +155,6 @@ func (p *poller) start() {
 					return
 				}
 			}
-
-			// now = time.Now()
-			// msec = p.twRead.check(now)
-			// twout = p.twWrite.check(now)
-			// if twout < msec {
-			// 	msec = twout
-			// }
 		}
 	} else {
 		for !p.shutdown {
@@ -182,7 +174,7 @@ func (p *poller) start() {
 				p.readWrite(&events[i])
 			}
 
-			now = time.Now()
+			now := time.Now()
 			msec = p.twRead.check(now)
 			twout = p.twWrite.check(now)
 			if twout < msec {
