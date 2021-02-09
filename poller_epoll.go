@@ -98,14 +98,14 @@ func (p *poller) acceptable(fd int) bool {
 func (p *poller) addConn(c *Conn) error {
 	c.g = p.g
 
-	p.g.onOpen(c)
-
 	fd := c.fd
 	err := p.setRead(fd)
 	if err == nil {
 		p.g.connsLinux[fd] = c
 		p.increase()
 	}
+
+	p.g.onOpen(c)
 
 	return err
 }
