@@ -76,6 +76,13 @@ func TestEcho(t *testing.T) {
 		}
 	})
 
+	g.OnMemAlloc(func(c *Conn) []byte {
+		return make([]byte, 1024)
+	})
+	g.OnMemFree(func(c *Conn, b []byte) {
+
+	})
+
 	one := func(n int) {
 		c, err := Dial("tcp", addr)
 		if err != nil {
