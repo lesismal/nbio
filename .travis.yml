@@ -1,6 +1,6 @@
 language: go
 os:
-    - linux
+    - darwin
 go:
     - 1.13.x
 

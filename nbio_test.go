@@ -201,7 +201,9 @@ func TestFuzz(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		Dial("tcp", addr)
 	}
-	time.Sleep(time.Second / 100)
+
+	listen("", "", 0)
+	syscallClose(54321)
 }
 
 func TestStop(t *testing.T) {
