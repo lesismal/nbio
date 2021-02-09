@@ -66,6 +66,11 @@ func (p *poller) readConn(c *Conn) {
 		n, err := c.Read(buffer)
 		if err == nil {
 			p.g.onData(c, buffer[:n])
+		} else {
+			if c.closeErr == nil {
+				c.closeErr = err
+			}
+			c.Close()
 		}
 		p.g.payback(c, buffer)
 		if err != nil {
@@ -84,14 +89,14 @@ func (p *poller) acceptable() bool {
 }
 
 func (p *poller) addConn(c *Conn) error {
-	p.g.onOpen(c)
-
 	c.g = p.g
 	p.g.mux.Lock()
 	p.g.conns[c] = make([]byte, p.g.readBufferSize)
 	p.g.mux.Unlock()
 	p.increase()
 	go p.readConn(c)
+
+	p.g.onOpen(c)
 
 	return nil
 }
@@ -111,10 +116,7 @@ func (p *poller) stop() {
 	if p.isListener {
 		p.listener.Close()
 	}
-	select {
-	case p.chStop <- struct{}{}:
-	default:
-	}
+	close(p.chStop)
 }
 
 func (p *poller) start() {
@@ -153,7 +155,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		g:          g,
 		index:      index,
 		isListener: isListener,
-		chStop:     make(chan struct{}, 1),
+		chStop:     make(chan struct{}),
 	}
 
 	if isListener {

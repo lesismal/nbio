@@ -2,9 +2,7 @@ package nbio
 
 import (
 	"fmt"
-	"log"
 	"runtime"
-	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -87,106 +85,39 @@ type Gopher struct {
 	onOpen     func(c *Conn)
 	onClose    func(c *Conn, err error)
 	onData     func(c *Conn, data []byte)
-	onRead     func(c *Conn, b []byte) (int, error)
 	onMemAlloc func(c *Conn) []byte
 	onMemFree  func(c *Conn, buffer []byte)
 }
 
-// Start init and start pollers
-func (g *Gopher) Start() error {
-	var err error
-
-	g.lfds = []int{}
-
-	if runtime.GOOS == "linux" {
-		for _, addr := range g.addrs {
-			fd, err := listen(g.network, addr, g.maxLoad)
-			if err != nil {
-				return err
-			}
-
-			g.lfds = append(g.lfds, fd)
-		}
-
-		for i := uint32(0); i < g.listenerNum; i++ {
-			g.listeners[i], err = newPoller(g, true, int(i))
-			if err != nil {
-				for j := 0; j < int(i); j++ {
-					if runtime.GOOS == "linux" {
-						syscallClose(g.lfds[j])
-					}
-					g.listeners[j].stop()
-				}
-				return err
-			}
-		}
-	} else {
-		g.listeners = make([]*poller, len(g.addrs))
-		for i := range g.addrs {
-			g.listeners[i], err = newPoller(g, true, int(i))
-			if err != nil {
-				for j := 0; j < i; j++ {
-					g.listeners[j].stop()
-				}
-			}
-		}
-	}
-
-	for i := uint32(0); i < g.pollerNum; i++ {
-		g.pollers[i], err = newPoller(g, false, int(i))
-		if err != nil {
-			if runtime.GOOS == "linux" {
-				for j := 0; j < int(len(g.lfds)); j++ {
-					syscallClose(g.lfds[j])
-					g.listeners[j].stop()
-				}
-			} else {
-				for j := 0; j < len(g.addrs); j++ {
-					g.listeners[j].stop()
-				}
-			}
-
-			for j := 0; j < int(i); j++ {
-				g.pollers[j].stop()
-			}
-			return err
-		}
-	}
-
-	for i := uint32(0); i < g.pollerNum; i++ {
-		g.Add(1)
-		if runtime.GOOS == "linux" {
-			g.pollers[i].readBuffer = make([]byte, g.readBufferSize)
-		}
-		go g.pollers[i].start()
-	}
-	for _, l := range g.listeners {
-		go l.start()
-	}
-
-	log.Printf("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
-
-	return nil
-}
-
 // Stop pollers
 func (g *Gopher) Stop() {
+
 	for i := uint32(0); i < g.listenerNum; i++ {
 		g.listeners[i].stop()
 	}
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i].stop()
 	}
-	for c := range g.conns {
+
+	g.mux.Lock()
+	conns := g.conns
+	g.conns = map[*Conn][]byte{}
+	connsLinux := g.connsLinux
+	g.connsLinux = make([]*Conn, len(connsLinux))
+	g.mux.Unlock()
+
+	for c := range conns {
 		if c != nil {
 			c.Close()
 		}
 	}
-	for _, c := range g.connsLinux {
+	for _, c := range connsLinux {
 		if c != nil {
-			c.Close()
+			go c.Close()
 		}
 	}
+
+	g.Wait()
 }
 
 // AddConn adds conn to a poller
@@ -222,14 +153,6 @@ func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
 		panic("invalid nil handler")
 	}
 	g.onData = h
-}
-
-// OnRead registers callback for conn.Read
-func (g *Gopher) OnRead(h func(c *Conn, b []byte) (int, error)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.onRead = h
 }
 
 // OnMemAlloc registers callback for memory allocating
@@ -310,7 +233,7 @@ func NewGopher(conf Config) (*Gopher, error) {
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
 		conns:              map[*Conn][]byte{},
-		connsLinux:         make([]*Conn, conf.MaxLoad+1024),
+		connsLinux:         make([]*Conn, conf.MaxLoad+64),
 		onOpen:             func(c *Conn) {},
 		onClose:            func(c *Conn, err error) {},
 		onData:             func(c *Conn, data []byte) {},
