@@ -154,13 +154,14 @@ func (g *Gopher) Start() error {
 	}
 
 	for i := uint32(0); i < g.pollerNum; i++ {
-		g.Add(1)
 		if runtime.GOOS == "linux" {
 			g.pollers[i].readBuffer = make([]byte, g.readBufferSize)
 		}
+		g.Add(1)
 		go g.pollers[i].start()
 	}
 	for _, l := range g.listeners {
+		g.Add(1)
 		go l.start()
 	}
 
@@ -190,6 +191,8 @@ func (g *Gopher) Stop() {
 			c.Close()
 		}
 	}
+
+	g.Wait()
 }
 
 // AddConn adds conn to a poller
