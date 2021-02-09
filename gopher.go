@@ -87,7 +87,6 @@ type Gopher struct {
 	onOpen     func(c *Conn)
 	onClose    func(c *Conn, err error)
 	onData     func(c *Conn, data []byte)
-	onRead     func(c *Conn, b []byte) (int, error)
 	onMemAlloc func(c *Conn) []byte
 	onMemFree  func(c *Conn, buffer []byte)
 }
@@ -237,14 +236,6 @@ func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
 		panic("invalid nil handler")
 	}
 	g.onData = h
-}
-
-// OnRead registers callback for conn.Read
-func (g *Gopher) OnRead(h func(c *Conn, b []byte) (int, error)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.onRead = h
 }
 
 // OnMemAlloc registers callback for memory allocating
