@@ -381,7 +381,7 @@ func (c *Conn) writevToSocket(in [][]byte) (int, error) {
 
 	for i, slice := range in {
 		ntotal += len(slice)
-		iovec[i] = syscall.Iovec{&slice[0], uint64(len(slice))}
+		iovec[i] = syscall.Iovec{Base: &slice[0], Len: uint64(len(slice))}
 	}
 
 	if ntotal == 0 {
@@ -408,13 +408,13 @@ func (c *Conn) writevToSocket(in [][]byte) (int, error) {
 				} else if len(in[i]) == nwrite {
 					in = in[i+1:]
 					iovec = iovec[i+1:]
-					iovec[0] = syscall.Iovec{&(in[0][0]), uint64(len(in[0]))}
+					iovec[0] = syscall.Iovec{Base: &(in[0][0]), Len: uint64(len(in[0]))}
 					break
 				} else {
 					in[i] = in[i][nwrite:]
 					in = in[i:]
 					iovec = iovec[i:]
-					iovec[0] = syscall.Iovec{&(in[0][0]), uint64(len(in[0]))}
+					iovec[0] = syscall.Iovec{Base: &(in[0][0]), Len: uint64(len(in[0]))}
 					break
 				}
 			}
