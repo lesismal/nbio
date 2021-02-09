@@ -38,16 +38,75 @@ func init() {
 	gopher = g
 }
 
-func TestAll(t *testing.T) {
-	test10k(t)
-	gopher.Stop()
-}
+func TestEcho(t *testing.T) {
+	var done = make(chan int)
+	var clientNum = 2
+	var msgSize = 1024
+	var total int64 = 0
 
-func test10k(t *testing.T) {
 	g, err := NewGopher(Config{})
 	if err != nil {
 		log.Fatalf("NewGopher failed: %v\n", err)
 	}
+	err = g.Start()
+	if err != nil {
+		log.Fatalf("Start failed: %v\n", err)
+	}
+	defer g.Stop()
+
+	g.OnOpen(func(c *Conn) {
+		c.SetSession(1)
+		if c.Session() != 1 {
+			t.Fatalf("invalid session: %v", c.Session())
+		}
+		log.Printf("connected local addr 111: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
+		c.SetLinger(1, 0)
+		c.SetNoDelay(true)
+		c.SetKeepAlive(true)
+		c.SetKeepAlivePeriod(time.Second * 60)
+		c.SetDeadline(time.Now().Add(time.Second))
+		c.SetReadBuffer(1024 * 4)
+		c.SetWriteBuffer(1024 * 4)
+		log.Printf("connected local addr 222: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
+	})
+	g.OnData(func(c *Conn, data []byte) {
+		recved := atomic.AddInt64(&total, int64(len(data)))
+		if recved >= int64(clientNum*msgSize) {
+			close(done)
+		}
+	})
+
+	for i := 0; i < clientNum; i++ {
+		n := i
+		if runtime.GOOS == "windows" {
+			go func() {
+				c, err := Dial("tcp", addr)
+				if err != nil {
+					log.Fatalf("Dial failed: %v", err)
+				}
+				g.AddConn(c)
+				if n%2 == 0 {
+					c.Write(make([]byte, msgSize))
+				} else {
+					c.Writev([][]byte{make([]byte, msgSize)})
+				}
+			}()
+		}
+	}
+
+	<-done
+}
+
+func Test10k(t *testing.T) {
+	g, err := NewGopher(Config{})
+	if err != nil {
+		log.Fatalf("NewGopher failed: %v\n", err)
+	}
+	err = g.Start()
+	if err != nil {
+		log.Fatalf("Start failed: %v\n", err)
+	}
+	defer g.Stop()
 
 	var total int64 = 0
 	var clientNum int64 = 1024 * 10
@@ -66,11 +125,6 @@ func test10k(t *testing.T) {
 		}
 	})
 
-	err = g.Start()
-	if err != nil {
-		log.Fatalf("Start failed: %v\n", err)
-	}
-
 	go func() {
 		for i := 0; i < int(clientNum); i++ {
 			go func() {
@@ -78,7 +132,7 @@ func test10k(t *testing.T) {
 					go func() {
 						c, err := Dial("tcp", addr)
 						if err != nil {
-							t.Fatalf("Dial failed: %v", err)
+							log.Fatalf("Dial failed: %v", err)
 						}
 						g.AddConn(c)
 					}()
@@ -86,7 +140,7 @@ func test10k(t *testing.T) {
 				} else {
 					c, err := Dial("tcp", addr)
 					if err != nil {
-						t.Fatalf("Dial failed: %v", err)
+						log.Fatalf("Dial failed: %v", err)
 					}
 					g.AddConn(c)
 				}
@@ -95,4 +149,8 @@ func test10k(t *testing.T) {
 	}()
 
 	<-done
+}
+
+func TestStop(t *testing.T) {
+	gopher.Stop()
 }
