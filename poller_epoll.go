@@ -138,7 +138,7 @@ func (p *poller) start() {
 	twout := 0
 	now := time.Now()
 	msec := int(interval.Milliseconds())
-	events := make([]syscall.EpollEvent, 128)
+	events := make([]syscall.EpollEvent, 1024)
 	if p.isListener {
 		for !p.shutdown {
 			n, err := syscall.EpollWait(p.epfd, events, msec)
