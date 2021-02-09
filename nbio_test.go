@@ -38,7 +38,12 @@ func init() {
 	gopher = g
 }
 
-func Test10k(t *testing.T) {
+func TestAll(t *testing.T) {
+	test10k(t)
+	gopher.Stop()
+}
+
+func test10k(t *testing.T) {
 	g, err := NewGopher(Config{})
 	if err != nil {
 		log.Fatalf("NewGopher failed: %v\n", err)
