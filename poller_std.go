@@ -66,6 +66,11 @@ func (p *poller) readConn(c *Conn) {
 		n, err := c.Read(buffer)
 		if err == nil {
 			p.g.onData(c, buffer[:n])
+		} else {
+			if c.closeErr == nil {
+				c.closeErr = err
+			}
+			c.Close()
 		}
 		p.g.payback(c, buffer)
 		if err != nil {
