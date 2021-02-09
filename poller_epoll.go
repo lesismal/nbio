@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-const (
-	interval   = time.Second / 10  // 100 ms
-	maxTimeout = time.Second * 120 // 120 s
-)
-
 type poller struct {
 	g *Gopher
 
