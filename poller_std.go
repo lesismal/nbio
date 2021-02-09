@@ -111,10 +111,7 @@ func (p *poller) stop() {
 	if p.isListener {
 		p.listener.Close()
 	}
-	select {
-	case p.chStop <- struct{}{}:
-	default:
-	}
+	close(p.chStop)
 }
 
 func (p *poller) start() {
@@ -153,7 +150,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		g:          g,
 		index:      index,
 		isListener: isListener,
-		chStop:     make(chan struct{}, 1),
+		chStop:     make(chan struct{}),
 	}
 
 	if isListener {
