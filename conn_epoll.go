@@ -42,20 +42,13 @@ func (c *Conn) Hash() int {
 // Read implements Read
 func (c *Conn) Read(b []byte) (int, error) {
 	c.mux.Lock()
-
 	if c.closed {
 		c.mux.Unlock()
 		return 0, errClosed
 	}
-
-	if c.g.onRead != nil {
-		n, err := c.g.onRead(c, b)
-		c.mux.Unlock()
-		return n, err
-	}
+	c.mux.Unlock()
 
 	n, err := syscall.Read(int(c.fd), b)
-	c.mux.Unlock()
 	return n, err
 }
 
