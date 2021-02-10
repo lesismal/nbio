@@ -119,11 +119,11 @@ func Test10k(t *testing.T) {
 	defer g.Stop()
 
 	var total int64 = 0
-	var clientNum int64 = 1024 * 10
+	var clientNum int64 = 500 * 10
 	var done = make(chan int)
 
 	if runtime.GOOS == "windows" {
-		clientNum = 1024
+		clientNum = 500
 	}
 
 	t.Log("testing concurrent:", clientNum, "connections")
