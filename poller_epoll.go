@@ -52,19 +52,19 @@ func (p *poller) accept(lfd int) error {
 	}
 
 	if !p.acceptable(fd) {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return nil
 	}
 
 	err = syscall.SetNonblock(fd, true)
 	if err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return nil
 	}
 
 	laddr, err := syscall.Getsockname(fd)
 	if err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return nil
 	}
 
@@ -122,7 +122,7 @@ func (p *poller) deleteConn(c *Conn) {
 func (p *poller) stop() {
 	log.Printf("poller[%v] stop...", p.index)
 	p.shutdown = true
-	syscallClose(p.epfd)
+	syscall.Close(p.epfd)
 }
 
 func (p *poller) start() {
@@ -133,7 +133,6 @@ func (p *poller) start() {
 	p.shutdown = false
 
 	twout := 0
-	now := time.Now()
 	msec := int(interval.Milliseconds())
 	events := make([]syscall.EpollEvent, 1024)
 	if p.isListener {
@@ -156,13 +155,6 @@ func (p *poller) start() {
 					return
 				}
 			}
-
-			// now = time.Now()
-			// msec = p.twRead.check(now)
-			// twout = p.twWrite.check(now)
-			// if twout < msec {
-			// 	msec = twout
-			// }
 		}
 	} else {
 		for !p.shutdown {
@@ -182,7 +174,7 @@ func (p *poller) start() {
 				p.readWrite(&events[i])
 			}
 
-			now = time.Now()
+			now := time.Now()
 			msec = p.twRead.check(now)
 			twout = p.twWrite.check(now)
 			if twout < msec {
@@ -242,7 +234,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 			for _, lfd := range g.lfds {
 				// EPOLLEXCLUSIVE := (1 << 28)
 				if err := syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, lfd, &syscall.EpollEvent{Fd: int32(lfd), Events: syscall.EPOLLIN | (1 << 28)}); err != nil {
-					syscallClose(fd)
+					syscall.Close(fd)
 					return nil, err
 				}
 			}
@@ -296,10 +288,6 @@ func sockaddrToAddr(sa syscall.Sockaddr) net.Addr {
 		a = &net.UnixAddr{Net: "unix", Name: sa.Name}
 	}
 	return a
-}
-
-func syscallClose(fd int) error {
-	return syscall.Close(fd)
 }
 
 func getSockaddr(proto, addr string) (sa syscall.Sockaddr, soType int, err error) {
@@ -383,18 +371,18 @@ func listen(network, address string, backlogNum int64) (int, error) {
 	}
 
 	if err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, syscall.SO_REUSEADDR, 1); err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return -1, err
 	}
 
 	socketOptReusePort := 0x0F
 	if err = syscall.SetsockoptInt(fd, syscall.SOL_SOCKET, socketOptReusePort, 1); err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return -1, err
 	}
 
 	if err = syscall.Bind(fd, sockaddr); err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return -1, err
 	}
 
@@ -403,12 +391,12 @@ func listen(network, address string, backlogNum int64) (int, error) {
 		n = syscall.SOMAXCONN
 	}
 	if err = syscall.Listen(fd, n); err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return -1, err
 	}
 
 	if err = syscall.SetNonblock(fd, true); err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return -1, err
 	}
 
