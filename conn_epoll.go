@@ -437,7 +437,9 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	fd := c.fd
 	c.session = nil
 	c.closeErr = err
-	c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+	if c.g != nil {
+		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+	}
 
 	return syscall.Close(fd)
 }
