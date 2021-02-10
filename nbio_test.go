@@ -3,6 +3,7 @@ package nbio
 import (
 	"log"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -123,7 +124,7 @@ func Test10k(t *testing.T) {
 	var done = make(chan int)
 
 	if runtime.GOOS == "windows" {
-		clientNum = 1024
+		clientNum = 100
 	}
 
 	t.Log("testing concurrent:", clientNum, "connections")
@@ -144,14 +145,12 @@ func Test10k(t *testing.T) {
 	}
 	go func() {
 		for i := 0; i < int(clientNum); i++ {
-			go func() {
-				if runtime.GOOS == "linux" {
-					one()
-				} else {
-					go one()
-					// 	time.Sleep(time.Second / 1000)
-				}
-			}()
+			if runtime.GOOS == "linux" {
+				one()
+			} else {
+				go one()
+				// 	time.Sleep(time.Second / 1000)
+			}
 		}
 	}()
 
@@ -198,12 +197,19 @@ func TestTimeout(t *testing.T) {
 
 func TestFuzz(t *testing.T) {
 	gopher.maxLoad = 10
+	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
-		Dial("tcp", addr)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			Dial("tcp", addr)
+		}()
 	}
 
 	listen("", "", 0)
 	syscallClose(54321)
+
+	wg.Wait()
 }
 
 func TestStop(t *testing.T) {
