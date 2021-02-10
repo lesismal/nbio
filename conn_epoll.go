@@ -439,7 +439,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	c.closeErr = err
 	c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
 
-	return syscallClose(fd)
+	return syscall.Close(fd)
 }
 
 func newConn(fd int, lAddr, rAddr net.Addr) *Conn {
@@ -469,7 +469,7 @@ func Dial(network string, address string) (*Conn, error) {
 
 	err = syscall.SetNonblock(fd, true)
 	if err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return nil, err
 	}
 
