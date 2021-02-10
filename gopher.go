@@ -207,7 +207,7 @@ func (g *Gopher) decrease() {
 }
 
 // NewGopher is a factory impl
-func NewGopher(conf Config) (*Gopher, error) {
+func NewGopher(conf Config) *Gopher {
 	cpuNum := uint32(runtime.NumCPU())
 	if conf.MaxLoad == 0 {
 		conf.MaxLoad = DefaultMaxLoad
@@ -252,5 +252,5 @@ func NewGopher(conf Config) (*Gopher, error) {
 		}
 	}
 
-	return g, nil
+	return g
 }
