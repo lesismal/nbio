@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         go: [1.13.x, 1.14.x, 1.15.x]
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os}}
     steps:
       - name: install golang
@@ -34,9 +34,9 @@ jobs:
           go env
           echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
       - name: go test
-        run: go test -coverprofile=coverage.txt -covermode=atomic -v -bench -timeout 60s .
+        run: go test -coverprofile=coverage -covermode=atomic -v -bench -timeout 60s .
       - name: Update Code Coverage
         uses: codecov/codecov-action@v1.2.1
         with:
-          file: ./coverage.txt
+          file: ./coverage
           verbose: true
