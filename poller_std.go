@@ -146,10 +146,6 @@ func (p *poller) start() {
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
-	if g == nil {
-		panic("invalid gopher")
-	}
-
 	p := &poller{
 		g:          g,
 		index:      index,
