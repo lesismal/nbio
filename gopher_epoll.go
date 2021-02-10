@@ -6,6 +6,7 @@ import (
 	"log"
 	"runtime"
 	"strings"
+	"syscall"
 )
 
 // Start init and start pollers
@@ -27,7 +28,7 @@ func (g *Gopher) Start() error {
 		g.listeners[i], err = newPoller(g, true, int(i))
 		if err != nil {
 			for j := 0; j < int(i); j++ {
-				syscallClose(g.lfds[j])
+				syscall.Close(g.lfds[j])
 				g.listeners[j].stop()
 			}
 			return err
@@ -38,7 +39,7 @@ func (g *Gopher) Start() error {
 		g.pollers[i], err = newPoller(g, false, int(i))
 		if err != nil {
 			for j := 0; j < int(len(g.lfds)); j++ {
-				syscallClose(g.lfds[j])
+				syscall.Close(g.lfds[j])
 				g.listeners[j].stop()
 			}
 
