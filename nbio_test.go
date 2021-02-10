@@ -197,9 +197,18 @@ func TestFuzz(t *testing.T) {
 	c, err := Dial("tcp6", addr)
 	if err == nil {
 		log.Printf("Dial tcp6: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+		gopher.AddConn(c)
+		c.SetWriteDeadline(time.Now().Add(time.Second))
+		c.Write([]byte{1})
+		c.Close()
+		c.Write([]byte{1})
+		bs := [][]byte{}
+		bs = append(bs, []byte{1})
+		c.Writev(bs)
 	} else {
 		log.Printf("Dial tcp6: %v", err)
 	}
+
 	g := NewGopher(Config{
 		Network: "tcp4",
 		Addrs:   []string{"localhost:8889", "localhost:8889"},
