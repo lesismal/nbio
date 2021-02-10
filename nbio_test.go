@@ -3,25 +3,23 @@ package nbio
 import (
 	"log"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 )
 
-var addr = "localhost:8888"
+var addr = ":8888"
 var gopher *Gopher
 
 func init() {
 	addrs := []string{addr}
-	g, err := NewGopher(Config{
+	g := NewGopher(Config{
 		Network: "tcp",
 		Addrs:   addrs,
 		MaxLoad: 10,
 	})
 	g.maxLoad = 1024 * 100
-	if err != nil {
-		log.Fatalf("NewGopher failed: %v\n", err)
-	}
 
 	g.OnOpen(func(c *Conn) {
 		c.SetReadDeadline(time.Now().Add(time.Second * 10))
@@ -31,7 +29,7 @@ func init() {
 	})
 	g.OnClose(func(c *Conn, err error) {})
 
-	err = g.Start()
+	err := g.Start()
 	if err != nil {
 		log.Fatalf("Start failed: %v\n", err)
 	}
@@ -45,11 +43,8 @@ func TestEcho(t *testing.T) {
 	var msgSize = 1024
 	var total int64 = 0
 
-	g, err := NewGopher(Config{})
-	if err != nil {
-		log.Fatalf("NewGopher failed: %v\n", err)
-	}
-	err = g.Start()
+	g := NewGopher(Config{})
+	err := g.Start()
 	if err != nil {
 		log.Fatalf("Start failed: %v\n", err)
 	}
@@ -108,28 +103,26 @@ func TestEcho(t *testing.T) {
 }
 
 func Test10k(t *testing.T) {
-	g, err := NewGopher(Config{})
-	if err != nil {
-		log.Fatalf("NewGopher failed: %v\n", err)
-	}
-	err = g.Start()
+	g := NewGopher(Config{})
+	err := g.Start()
 	if err != nil {
 		log.Fatalf("Start failed: %v\n", err)
 	}
 	defer g.Stop()
 
 	var total int64 = 0
-	var clientNum int64 = 500 * 10
+	var clientNum int64 = 1024 * 10
 	var done = make(chan int)
 
 	if runtime.GOOS == "windows" {
-		clientNum = 500
+		clientNum = 100
 	}
 
 	t.Log("testing concurrent:", clientNum, "connections")
 
 	g.OnOpen(func(c *Conn) {
 		c.Close()
+		c.Write([]byte{1})
 		if atomic.AddInt64(&total, 1) == clientNum {
 			close(done)
 		}
@@ -144,14 +137,12 @@ func Test10k(t *testing.T) {
 	}
 	go func() {
 		for i := 0; i < int(clientNum); i++ {
-			go func() {
-				if runtime.GOOS == "linux" {
-					one()
-				} else {
-					go one()
-					// 	time.Sleep(time.Second / 1000)
-				}
-			}()
+			if runtime.GOOS == "linux" {
+				one()
+			} else {
+				go one()
+				// 	time.Sleep(time.Second / 1000)
+			}
 		}
 	}()
 
@@ -159,11 +150,8 @@ func Test10k(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	g, err := NewGopher(Config{})
-	if err != nil {
-		log.Fatalf("NewGopher failed: %v\n", err)
-	}
-	err = g.Start()
+	g := NewGopher(Config{})
+	err := g.Start()
 	if err != nil {
 		log.Fatalf("Start failed: %v\n", err)
 	}
@@ -198,12 +186,27 @@ func TestTimeout(t *testing.T) {
 
 func TestFuzz(t *testing.T) {
 	gopher.maxLoad = 10
+	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
-		Dial("tcp", addr)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			Dial("tcp4", addr)
+		}()
 	}
+	c, err := Dial("tcp6", addr)
+	if err == nil {
+		log.Printf("Dial tcp6: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	} else {
+		log.Printf("Dial tcp6: %v", err)
+	}
+	g := NewGopher(Config{
+		Network: "tcp4",
+		Addrs:   []string{"localhost:8889", "localhost:8889"},
+	})
+	g.Start()
 
-	listen("", "", 0)
-	syscallClose(54321)
+	wg.Wait()
 }
 
 func TestStop(t *testing.T) {
