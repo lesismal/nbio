@@ -220,10 +220,6 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
-	if g == nil {
-		panic("invalid gopher")
-	}
-
 	fd, err := syscall.EpollCreate1(0)
 	if err != nil {
 		return nil, err
