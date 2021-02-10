@@ -1,4 +1,4 @@
-name: Build
+name: build
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
 
 jobs:
   test:
-    name: Build
+    name: build
     strategy:
       fail-fast: false
       matrix:
@@ -21,19 +21,19 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os}}
     steps:
-      - name: Install Golang
+      - name: install golang
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
-      - name: Checkout code
+      - name: checkout code
         uses: actions/checkout@v2
-      - name: Go Env
+      - name: go env
         run: |
           printf "$(go version)\n"
           printf "\n\ngo environment:\n\n"
           go env
           echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
-      - name: Go Test
+      - name: go test
         run: go test -coverprofile=coverage.txt -covermode=atomic -v -bench -timeout 60s .
       - name: Update Code Coverage
         uses: codecov/codecov-action@v1.2.1
