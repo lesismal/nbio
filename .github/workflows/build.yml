@@ -34,7 +34,7 @@ jobs:
           go env
           echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
       - name: go test
-        run: go test -coverprofile=coverage -covermode=atomic -v -bench -timeout 60s .
+        run: go test -timeout 60s -coverprofile="./coverage" 
       - name: Update Code Coverage
         uses: codecov/codecov-action@v1.2.1
         with:
