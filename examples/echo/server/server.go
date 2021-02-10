@@ -23,20 +23,16 @@ func onData(c *nbio.Conn, data []byte) {
 }
 
 func main() {
-	g, err := nbio.NewGopher(nbio.Config{
+	g := nbio.NewGopher(nbio.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888", "localhost:9999"},
 	})
-	if err != nil {
-		fmt.Printf("nbio.New failed: %v\n", err)
-		return
-	}
 
 	g.OnOpen(onOpen)
 	g.OnClose(onClose)
 	g.OnData(onData)
 
-	err = g.Start()
+	err := g.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
