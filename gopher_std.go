@@ -20,13 +20,13 @@ func (g *Gopher) Start() error {
 			for j := 0; j < i; j++ {
 				g.listeners[j].stop()
 			}
+			return err
 		}
 	}
 
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i], err = newPoller(g, false, int(i))
 		if err != nil {
-
 			for j := 0; j < len(g.addrs); j++ {
 				g.listeners[j].stop()
 			}
