@@ -3,11 +3,11 @@
 package nbio
 
 import (
+	"errors"
 	"log"
 	"net"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"time"
 )
 
@@ -175,10 +175,10 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 
 // for build
 func syscallClose(fd int) error {
-	return syscall.EWINDOWS
+	return errors.New("not supported")
 }
 
 // for build
 func listen(network, address string, backlogNum int64) (int, error) {
-	return -1, syscall.EWINDOWS
+	return -1, errors.New("not supported")
 }
