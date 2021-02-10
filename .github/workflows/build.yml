@@ -9,7 +9,7 @@ on:
       - timer
 
 env:
-  GO111MODULE: on
+  GO111MODULE: off
 
 jobs:
   test:
