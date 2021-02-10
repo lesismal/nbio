@@ -23,27 +23,23 @@ func main() {
 		totalWrite int64
 	)
 
-	g, err := nbio.NewGopher(nbio.Config{})
-	if err != nil {
-		fmt.Printf("NewGopher failed: %v\n", err)
-	}
+	g := nbio.NewGopher(nbio.Config{})
 	defer g.Stop()
 
 	g.OnOpen(func(c *nbio.Conn) {
-		c.SetLinger(1, 0)
+		c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		// fmt.Println("--- ondata:", len(data))
 		atomic.AddInt64(&qps, 1)
 		atomic.AddInt64(&totalRead, int64(len(data)))
 		atomic.AddInt64(&totalWrite, int64(len(data)))
 		c.Write(append([]byte(nil), data...))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
-		fmt.Printf("OnClose: %v, %v\n", c.LocalAddr().String(), c.RemoteAddr().String())
+		// fmt.Printf("OnClose: %v, %v\n", c.LocalAddr().String(), c.RemoteAddr().String())
 	})
 
-	err = g.Start()
+	err := g.Start()
 	if err != nil {
 		fmt.Printf("Start failed: %v\n", err)
 	}
