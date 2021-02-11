@@ -1,10 +1,11 @@
 package nbio
 
 import (
+	"container/heap"
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 const (
@@ -63,7 +64,8 @@ func (state *State) String() string {
 // Gopher is a manager of poller
 type Gopher struct {
 	sync.WaitGroup
-	mux sync.Mutex
+	mux  sync.Mutex
+	tmux sync.Mutex
 
 	network            string
 	addrs              []string
@@ -87,10 +89,16 @@ type Gopher struct {
 	onData     func(c *Conn, data []byte)
 	onMemAlloc func(c *Conn) []byte
 	onMemFree  func(c *Conn, buffer []byte)
+
+	timers  timerHeap
+	trigger *time.Timer
+	chTimer chan struct{}
 }
 
 // Stop pollers
 func (g *Gopher) Stop() {
+	g.trigger.Stop()
+	close(g.chTimer)
 
 	for i := uint32(0); i < g.listenerNum; i++ {
 		g.listeners[i].stop()
@@ -98,7 +106,6 @@ func (g *Gopher) Stop() {
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i].stop()
 	}
-
 	g.mux.Lock()
 	conns := g.conns
 	g.conns = map[*Conn][]byte{}
@@ -185,6 +192,64 @@ func (g *Gopher) State() *State {
 	return state
 }
 
+func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
+	g.tmux.Lock()
+	defer g.tmux.Unlock()
+
+	now := time.Now()
+	it := &htimer{
+		index:  len(g.timers),
+		expire: now.Add(timeout),
+		f:      f,
+		parent: g,
+	}
+	heap.Push(&g.timers, it)
+	if g.timers[0] == it {
+		g.trigger.Reset(timeout)
+	}
+
+	return it
+}
+
+func (g *Gopher) removeTimer(it *htimer) {
+	g.tmux.Lock()
+	defer g.tmux.Unlock()
+
+	index := it.index
+	if index < 0 || index >= len(g.timers) {
+		return
+	}
+
+	if g.timers[index] == it {
+		heap.Remove(&g.timers, index)
+		if len(g.timers) > 0 {
+			if index == 0 {
+				g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+			}
+		} else {
+			g.trigger.Reset(timeForever)
+		}
+	}
+}
+
+// ResetTimer removes a timer
+func (g *Gopher) resetTimer(it *htimer) {
+	g.tmux.Lock()
+	defer g.tmux.Unlock()
+
+	index := it.index
+	if index < 0 || index >= len(g.timers) {
+		return
+	}
+
+	if g.timers[index] == it {
+		heap.Fix(&g.timers, index)
+		if index == 0 || it.index == 0 {
+			g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+		}
+	}
+}
+
 func (g *Gopher) borrow(c *Conn) []byte {
 	if g.onMemAlloc != nil {
 		return g.onMemAlloc(c)
@@ -204,53 +269,4 @@ func (g *Gopher) increase() {
 
 func (g *Gopher) decrease() {
 	atomic.AddInt64(&g.currLoad, -1)
-}
-
-// NewGopher is a factory impl
-func NewGopher(conf Config) (*Gopher, error) {
-	cpuNum := uint32(runtime.NumCPU())
-	if conf.MaxLoad == 0 {
-		conf.MaxLoad = DefaultMaxLoad
-	}
-	if len(conf.Addrs) > 0 && conf.NListener == 0 {
-		conf.NListener = 1
-	}
-	if conf.NPoller == 0 {
-		conf.NPoller = cpuNum
-	}
-	if conf.ReadBufferSize == 0 {
-		conf.ReadBufferSize = DefaultReadBufferSize
-	}
-
-	g := &Gopher{
-		network:            conf.Network,
-		addrs:              conf.Addrs,
-		maxLoad:            int64(conf.MaxLoad),
-		listenerNum:        conf.NListener,
-		pollerNum:          conf.NPoller,
-		readBufferSize:     conf.ReadBufferSize,
-		maxWriteBufferSize: conf.MaxWriteBufferSize,
-		listeners:          make([]*poller, conf.NListener),
-		pollers:            make([]*poller, conf.NPoller),
-		conns:              map[*Conn][]byte{},
-		connsLinux:         make([]*Conn, conf.MaxLoad+64),
-		onOpen:             func(c *Conn) {},
-		onClose:            func(c *Conn, err error) {},
-		onData:             func(c *Conn, data []byte) {},
-	}
-
-	if runtime.GOOS != "linux" {
-		g.onMemAlloc = func(c *Conn) []byte {
-			g.mux.Lock()
-			buf, ok := g.conns[c]
-			if !ok {
-				buf = make([]byte, g.readBufferSize)
-				g.conns[c] = buf
-			}
-			g.mux.Unlock()
-			return buf
-		}
-	}
-
-	return g, nil
 }

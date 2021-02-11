@@ -1,4 +1,4 @@
-// +build darwin netbsd freebsd openbsd dragonfly windows
+// +build windows
 
 package nbio
 
@@ -68,8 +68,10 @@ func (c *Conn) Close() error {
 	if !c.closed {
 		c.closed = true
 		err := c.conn.Close()
-		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
 		c.mux.Unlock()
+		if c.g != nil {
+			c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+		}
 		return err
 	}
 	c.mux.Unlock()

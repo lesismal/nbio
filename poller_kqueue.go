@@ -1,4 +1,4 @@
-// +build linux
+// +build darwin netbsd freebsd openbsd dragonfly
 
 package nbio
 
@@ -9,9 +9,8 @@ import (
 	"net"
 	"sync/atomic"
 	"syscall"
+	"time"
 )
-
-const stopFd int = 1
 
 type poller struct {
 	g *Gopher
@@ -108,8 +107,9 @@ func (p *poller) addConn(c *Conn) error {
 	return err
 }
 
-func (p *poller) getConn(fd int) *Conn {
-	return p.g.connsLinux[fd]
+func (p *poller) getConn(fd int) (*Conn, bool) {
+	c := p.g.connsLinux[fd]
+	return c, c != nil
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -122,7 +122,6 @@ func (p *poller) deleteConn(c *Conn) {
 func (p *poller) stop() {
 	log.Printf("poller[%v] stop...", p.index)
 	p.shutdown = true
-	p.addWrite(stopFd)
 	syscall.Close(p.epfd)
 }
 
@@ -133,9 +132,8 @@ func (p *poller) start() {
 	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
 	p.shutdown = false
 
-	// twout := 0
-	fd := 0
-	msec := -1 //int(interval.Milliseconds())
+	twout := 0
+	msec := int(interval.Milliseconds())
 	events := make([]syscall.EpollEvent, 1024)
 	if p.isListener {
 		for !p.shutdown {
@@ -144,22 +142,17 @@ func (p *poller) start() {
 				return
 			}
 
-			if n <= 0 {
-				msec = -1
-				// runtime.Gosched()
-				continue
-			}
-			msec = 20
+			// if n <= 0 {
+			//	msec = -1
+			//	runtime.Gosched()
+			//	continue
+			// }
+			// msec = 0
 
 			for i := 0; i < n; i++ {
-				fd = int(events[i].Fd)
-				switch fd {
-				case stopFd:
-				default:
-					err = p.accept(fd)
-					if err != nil && err != syscall.EAGAIN {
-						return
-					}
+				err = p.accept(int(events[i].Fd))
+				if err != nil && err != syscall.EAGAIN {
+					return
 				}
 			}
 		}
@@ -170,33 +163,29 @@ func (p *poller) start() {
 				return
 			}
 
-			if n <= 0 {
-				msec = -1
-				// runtime.Gosched()
-				continue
-			}
-			msec = 20
+			// if n <= 0 {
+			//	msec = -1
+			//	runtime.Gosched()
+			//	continue
+			// }
+			// msec = 0
 
 			for i := 0; i < n; i++ {
 				p.readWrite(&events[i])
 			}
 
-			// now := time.Now()
-			// msec = p.twRead.check(now)
-			// twout = p.twWrite.check(now)
-			// if twout < msec {
-			// 	msec = twout
-			// }
+			now := time.Now()
+			msec = p.twRead.check(now)
+			twout = p.twWrite.check(now)
+			if twout < msec {
+				msec = twout
+			}
 		}
 	}
 }
 
 func (p *poller) addRead(fd int) error {
 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLIN})
-}
-
-func (p *poller) addWrite(fd int) error {
-	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLOUT})
 }
 
 func (p *poller) modWrite(fd int) error {
@@ -209,8 +198,7 @@ func (p *poller) deleteEvent(fd int) error {
 
 func (p *poller) readWrite(ev *syscall.EpollEvent) {
 	fd := int(ev.Fd)
-	c := p.getConn(fd)
-	if c != nil {
+	if c, ok := p.getConn(fd); ok {
 		if ev.Events&(syscall.EPOLLERR|syscall.EPOLLHUP|syscall.EPOLLRDHUP) != 0 {
 			c.closeWithError(io.EOF)
 			return
@@ -236,7 +224,15 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
-	fd, err := syscall.EpollCreate1(0)
+	fd, err := syscall.Kevent()
+	if err != nil {
+		return nil, err
+	}
+	_, err = syscall.Kevent(fd, []syscall.Kevent_t{{
+		Ident:  0,
+		Filter: syscall.EVFILT_USER,
+		Flags:  syscall.EV_ADD | syscall.EV_CLEAR,
+	}}, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -257,8 +253,8 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 
 	p := &poller{
 		g:          g,
-		epfd:       fd,
 		index:      index,
+		epfd:       fd,
 		isListener: isListener,
 	}
 

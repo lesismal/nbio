@@ -1,8 +1,9 @@
-// +build linux
+// +build linux darwin netbsd freebsd openbsd dragonfly
 
 package nbio
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"syscall"
@@ -18,8 +19,10 @@ type Conn struct {
 
 	fd int
 
-	rIndex int
-	wIndex int
+	// rIndex int
+	// wIndex int
+	rTimer *htimer
+	wTimer *htimer
 
 	leftSize  int
 	sendQueue [][]byte
@@ -64,23 +67,23 @@ func (c *Conn) Write(b []byte) (int, error) {
 	if err != nil && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
-		// if c.wTimer != nil {
-		// 	c.wTimer.Stop()
-		// }
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		tw.delete(c, &c.wIndex)
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		// tw.delete(c, &c.wIndex)
 		c.closeWithErrorWithoutLock(errInvalidData)
 		return n, err
 	}
 
 	if c.leftSize == 0 {
-		// if c.wTimer != nil {
-		// 	c.wTimer.Stop()
-		// }
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		tw.delete(c, &c.wIndex)
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		// tw.delete(c, &c.wIndex)
 	} else {
-		c.setReadWrite()
+		c.modWrite()
 	}
 
 	c.mux.Unlock()
@@ -100,22 +103,22 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	if err != nil && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
-		// if c.wTimer != nil {
-		// 	c.wTimer.Stop()
-		// }
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		tw.delete(c, &c.wIndex)
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		// tw.delete(c, &c.wIndex)
 		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 	if c.leftSize == 0 {
-		// if c.wTimer != nil {
-		// 	c.wTimer.Stop()
-		// }
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		tw.delete(c, &c.wIndex)
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		// tw.delete(c, &c.wIndex)
 	} else {
-		c.setReadWrite()
+		c.modWrite()
 	}
 
 	c.mux.Unlock()
@@ -124,6 +127,12 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 
 // Close implements Close
 func (c *Conn) Close() error {
+	if c.wTimer != nil {
+		c.wTimer.Stop()
+	}
+	if c.rTimer != nil {
+		c.rTimer.Stop()
+	}
 	return c.closeWithError(nil)
 }
 
@@ -141,13 +150,24 @@ func (c *Conn) RemoteAddr() net.Addr {
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
-		if tw != nil {
-			tw.reset(c, &c.rIndex, t)
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
+		// if tw != nil {
+		// 	tw.reset(c, &c.rIndex, t)
+		// }
+		// tw = c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		// if tw != nil {
+		// 	tw.reset(c, &c.wIndex, t)
+		// }
+		now := time.Now()
+		if c.rTimer == nil {
+			c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+		} else {
+			c.rTimer.Reset(t.Sub(now))
 		}
-		tw = c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		if tw != nil {
-			tw.reset(c, &c.wIndex, t)
+		if c.wTimer == nil {
+			c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+		} else {
+			c.wTimer.Reset(t.Sub(now))
 		}
 	}
 	c.mux.Unlock()
@@ -158,9 +178,15 @@ func (c *Conn) SetDeadline(t time.Time) error {
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
-		if tw != nil {
-			tw.reset(c, &c.rIndex, t)
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
+		// if tw != nil {
+		// 	tw.reset(c, &c.rIndex, t)
+		// }
+		now := time.Now()
+		if c.rTimer == nil {
+			c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+		} else {
+			c.rTimer.Reset(t.Sub(now))
 		}
 	}
 	c.mux.Unlock()
@@ -171,9 +197,15 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		if tw != nil {
-			tw.reset(c, &c.wIndex, t)
+		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
+		// if tw != nil {
+		// 	tw.reset(c, &c.wIndex, t)
+		// }
+		now := time.Now()
+		if c.wTimer == nil {
+			c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+		} else {
+			c.wTimer.Reset(t.Sub(now))
 		}
 	}
 	c.mux.Unlock()
@@ -208,12 +240,13 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 
 // SetKeepAlivePeriod implements SetKeepAlivePeriod
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
-	d += (time.Second - time.Nanosecond)
-	secs := int(d.Seconds())
-	if err := syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, secs); err != nil {
-		return err
-	}
-	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
+	return errors.New("not supported")
+	// d += (time.Second - time.Nanosecond)
+	// secs := int(d.Seconds())
+	// if err := syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, secs); err != nil {
+	// 	return err
+	// }
+	// return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
 }
 
 // SetLinger implements SetLinger
@@ -244,17 +277,19 @@ func (c *Conn) SetSession(session interface{}) bool {
 	return false
 }
 
-func (c *Conn) setRead() {
-	if !c.closed && c.isWAdded {
-		c.isWAdded = false
-		c.g.pollers[c.Hash()%len(c.g.pollers)].setRead(c.fd)
+func (c *Conn) modWrite() {
+	if !c.closed && !c.isWAdded {
+		c.isWAdded = true
+		c.g.pollers[c.Hash()%len(c.g.pollers)].modWrite(c.fd)
 	}
 }
 
-func (c *Conn) setReadWrite() {
-	if !c.closed && !c.isWAdded {
-		c.isWAdded = true
-		c.g.pollers[c.Hash()%len(c.g.pollers)].setReadWrite(c.fd)
+func (c *Conn) resetRead() {
+	if !c.closed && c.isWAdded {
+		c.isWAdded = false
+		p := c.g.pollers[c.Hash()%len(c.g.pollers)]
+		p.deleteEvent(c.fd)
+		p.addRead(c.fd)
 	}
 }
 
@@ -321,14 +356,16 @@ func (c *Conn) flush() error {
 		return err
 	}
 	if c.leftSize == 0 {
-		// if c.wTimer != nil {
-		// 	c.wTimer.Stop()
-		// }
-		tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		tw.delete(c, &c.wIndex)
-	} else {
-		c.setReadWrite()
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
+		c.resetRead()
+		// p := c.g.pollers[c.fd%len(c.g.pollers)]
+		// p.twWrite.delete(c, &c.wIndex)
 	}
+	// else {
+	// c.modWrite()
+	// }
 
 	c.mux.Unlock()
 	return err
@@ -437,9 +474,11 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	fd := c.fd
 	c.session = nil
 	c.closeErr = err
-	c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+	if c.g != nil {
+		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+	}
 
-	return syscallClose(fd)
+	return syscall.Close(fd)
 }
 
 func newConn(fd int, lAddr, rAddr net.Addr) *Conn {
@@ -469,7 +508,7 @@ func Dial(network string, address string) (*Conn, error) {
 
 	err = syscall.SetNonblock(fd, true)
 	if err != nil {
-		syscallClose(fd)
+		syscall.Close(fd)
 		return nil, err
 	}
 

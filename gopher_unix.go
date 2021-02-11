@@ -1,4 +1,4 @@
-// +build windows
+// +build linux darwin netbsd freebsd openbsd dragonfly
 
 package nbio
 
@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -17,11 +18,20 @@ func (g *Gopher) Start() error {
 
 	g.lfds = []int{}
 
-	g.listeners = make([]*poller, len(g.addrs))
-	for i := range g.addrs {
+	for _, addr := range g.addrs {
+		fd, err := listen(g.network, addr, g.maxLoad)
+		if err != nil {
+			return err
+		}
+
+		g.lfds = append(g.lfds, fd)
+	}
+
+	for i := uint32(0); i < g.listenerNum; i++ {
 		g.listeners[i], err = newPoller(g, true, int(i))
 		if err != nil {
-			for j := 0; j < i; j++ {
+			for j := 0; j < int(i); j++ {
+				syscall.Close(g.lfds[j])
 				g.listeners[j].stop()
 			}
 			return err
@@ -31,7 +41,8 @@ func (g *Gopher) Start() error {
 	for i := uint32(0); i < g.pollerNum; i++ {
 		g.pollers[i], err = newPoller(g, false, int(i))
 		if err != nil {
-			for j := 0; j < len(g.addrs); j++ {
+			for j := 0; j < int(len(g.lfds)); j++ {
+				syscall.Close(g.lfds[j])
 				g.listeners[j].stop()
 			}
 
@@ -43,6 +54,7 @@ func (g *Gopher) Start() error {
 	}
 
 	for i := uint32(0); i < g.pollerNum; i++ {
+		g.pollers[i].readBuffer = make([]byte, g.readBufferSize)
 		g.Add(1)
 		go g.pollers[i].start()
 	}
@@ -132,19 +144,9 @@ func NewGopher(conf Config) *Gopher {
 		onOpen:             func(c *Conn) {},
 		onClose:            func(c *Conn, err error) {},
 		onData:             func(c *Conn, data []byte) {},
-		trigger:            time.NewTimer(timeForever),
-		chTimer:            make(chan struct{}),
-	}
 
-	g.onMemAlloc = func(c *Conn) []byte {
-		g.mux.Lock()
-		buf, ok := g.conns[c]
-		if !ok {
-			buf = make([]byte, g.readBufferSize)
-			g.conns[c] = buf
-		}
-		g.mux.Unlock()
-		return buf
+		trigger: time.NewTimer(timeForever),
+		chTimer: make(chan struct{}),
 	}
 
 	return g

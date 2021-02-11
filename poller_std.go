@@ -1,9 +1,8 @@
-// +build darwin netbsd freebsd openbsd dragonfly windows
+// +build windows
 
 package nbio
 
 import (
-	"errors"
 	"log"
 	"net"
 	"sync"
@@ -147,10 +146,6 @@ func (p *poller) start() {
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
-	if g == nil {
-		panic("invalid gopher")
-	}
-
 	p := &poller{
 		g:          g,
 		index:      index,
@@ -163,7 +158,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		var addr = g.addrs[index%len(g.addrs)]
 		p.listener, err = net.Listen(g.network, addr)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 		p.pollType = "listener"
 	} else {
@@ -171,14 +166,4 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	}
 
 	return p, nil
-}
-
-// for build
-func syscallClose(fd int) error {
-	return errors.New("not supported")
-}
-
-// for build
-func listen(network, address string, backlogNum int64) (int, error) {
-	return -1, errors.New("not supported")
 }
