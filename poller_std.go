@@ -93,9 +93,8 @@ func (p *poller) addConn(c *Conn) error {
 	p.g.conns[c] = make([]byte, p.g.readBufferSize)
 	p.g.mux.Unlock()
 	p.increase()
-	go p.readConn(c)
-
 	p.g.onOpen(c)
+	go p.readConn(c)
 
 	return nil
 }
