@@ -205,7 +205,7 @@ func TestHeapTimer(t *testing.T) {
 	})
 	<-ch1
 	to1 := time.Since(t1)
-	if to1 < timeout-timeout/10 || to1 > timeout+timeout/10 {
+	if to1 < timeout-timeout/5 || to1 > timeout+timeout/5 {
 		log.Fatalf("invalid to1: %v", to1)
 	}
 
@@ -217,7 +217,7 @@ func TestHeapTimer(t *testing.T) {
 	it2.Reset(timeout * 2)
 	<-ch2
 	to2 := time.Since(t2)
-	if to2 < timeout*2-timeout/10 || to2 > timeout*2+timeout/10 {
+	if to2 < timeout*2-timeout/5 || to2 > timeout*2+timeout/5 {
 		log.Fatalf("invalid to2: %v", to2)
 	}
 
@@ -226,7 +226,7 @@ func TestHeapTimer(t *testing.T) {
 		close(ch3)
 	})
 	it3.Stop()
-	<-time.After(timeout + timeout/10)
+	<-time.After(timeout + timeout/4)
 	select {
 	case <-ch3:
 		log.Fatalf("stop failed")
