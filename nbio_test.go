@@ -194,10 +194,6 @@ func TestHeapTimer(t *testing.T) {
 
 	timeout := time.Second / 20
 
-	// g.afterFunc(timeout, func() {
-	// 	panic("test")
-	// })
-
 	t1 := time.Now()
 	ch1 := make(chan int)
 	g.afterFunc(timeout, func() {
@@ -246,6 +242,11 @@ func TestHeapTimer(t *testing.T) {
 			ch4 <- n
 		})
 	}
+
+	g.afterFunc(timeout, func() {
+		panic("test")
+	})
+
 	for i := 0; i < 5; i++ {
 		n := <-ch4
 		if n != i+1 {
