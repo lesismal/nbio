@@ -121,8 +121,8 @@ func (p *poller) deleteConn(c *Conn) {
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Info("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer log.Info("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	log.Debug("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer log.Debug("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer func() {
 		syscall.Close(p.epfd)
 		syscall.Close(p.evtfd)
@@ -191,7 +191,7 @@ func (p *poller) start() {
 }
 
 func (p *poller) stop() {
-	log.Info("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	log.Debug("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	n := uint64(1)
 	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])

@@ -260,8 +260,8 @@ func (g *Gopher) resetTimer(it *htimer) {
 
 func (g *Gopher) timerLoop() {
 	defer g.Done()
-	log.Info("gopher[%v] timer start", g.Name)
-	defer log.Info("gopher[%v] timer stopped", g.Name)
+	log.Debug("gopher[%v] timer start", g.Name)
+	defer log.Debug("gopher[%v] timer stopped", g.Name)
 	for {
 		select {
 		case <-g.trigger.C:

@@ -36,4 +36,4 @@ jobs:
           go env
           echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
       - name: go test
-        run: go test -timeout 30s -coverprofile="./coverage"
+        run: go test -timeout 60s -coverprofile="./coverage"

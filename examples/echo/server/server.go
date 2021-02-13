@@ -2,49 +2,26 @@ package main
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/lesismal/nbio"
 )
 
-func onOpen(c *nbio.Conn) {
-	// c.SetReadDeadline(time.Now().Add(time.Second * 3))
-	fmt.Println("onOpen:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"))
-}
-
-func onClose(c *nbio.Conn, err error) {
-	fmt.Println("onClose:", c.RemoteAddr().String(), time.Now().Format("15:04:05.000"), err)
-}
-
-func onData(c *nbio.Conn, data []byte) {
-	// c.SetReadDeadline(time.Now().Add(time.Second * 3))
-	// c.SetWriteDeadline(time.Now().Add(time.Second * 3))
-	c.Write(append([]byte{}, data...))
-}
-
 func main() {
 	g := nbio.NewGopher(nbio.Config{
-		NPoller: 1,
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888", "localhost:9999"},
+		Addrs:   []string{"localhost:8888"},
 	})
 
-	g.OnOpen(onOpen)
-	g.OnClose(onClose)
-	g.OnData(onData)
+	g.OnData(func(c *nbio.Conn, data []byte) {
+		c.Write(append([]byte{}, data...))
+	})
 
 	err := g.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
 	}
-
-	/*go func() {
-		for {
-			time.Sleep(time.Second * 5)
-			fmt.Println(g.State().String())
-		}
-	}()*/
+	defer g.Stop()
 
 	g.Wait()
 }

@@ -159,14 +159,14 @@ func TestTimeout(t *testing.T) {
 
 	var done = make(chan int)
 	var begin time.Time
-	var timeout = time.Second / 20
+	var timeout = time.Second / 10
 	g.OnOpen(func(c *Conn) {
 		begin = time.Now()
 		c.SetReadDeadline(begin.Add(timeout))
 	})
 	g.OnClose(func(c *Conn, err error) {
 		to := time.Since(begin)
-		if to > timeout+time.Second/10 {
+		if to > timeout+time.Second/5 {
 			log.Fatalf("timeout: %v, want: %v", to, timeout)
 		}
 		close(done)

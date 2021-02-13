@@ -112,8 +112,8 @@ func (p *poller) deleteConn(c *Conn) {
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Info("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer log.Info("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	log.Debug("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer log.Debug("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 
 	if p.isListener {
 		var err error
@@ -136,7 +136,7 @@ func (p *poller) start() {
 }
 
 func (p *poller) stop() {
-	log.Info("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	log.Debug("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	if p.isListener {
 		p.listener.Close()

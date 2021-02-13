@@ -1,77 +1,56 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
-	"sync"
-	"sync/atomic"
+	"math/rand"
 	"time"
 
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/log"
 )
 
-var (
-	addrs = []string{"localhost:8888", "localhost:8888"}
-)
+var ()
 
 func main() {
 	var (
-		wg         sync.WaitGroup
-		qps        int64
-		bufsize    = 64 //1024 * 8
-		clientNum  = 128
-		totalRead  int64
-		totalWrite int64
+		ret         []byte
+		buf         = make([]byte, 1024)
+		addr        = "localhost:8888"
+		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	)
 
-	g := nbio.NewGopher(nbio.Config{NPoller:1})
-	defer g.Stop()
+	log.SetLevel(log.LevelInfo)
+	rand.Read(buf)
 
-	g.OnOpen(func(c *nbio.Conn) {
-		// c.SetReadDeadline(time.Now().Add(time.Second * 10))
-	})
+	g := nbio.NewGopher(nbio.Config{})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		atomic.AddInt64(&qps, 1)
-		atomic.AddInt64(&totalRead, int64(len(data)))
-		atomic.AddInt64(&totalWrite, int64(len(data)))
-		c.Write(append([]byte(nil), data...))
-	})
-	g.OnClose(func(c *nbio.Conn, err error) {
-		fmt.Printf("OnClose: %v, %v\n", c.LocalAddr().String(), c.RemoteAddr().String())
+		ret = append(ret, data...)
+		if len(ret) == len(buf) {
+			if bytes.Equal(buf, ret) {
+				cancel()
+			}
+		}
 	})
 
 	err := g.Start()
 	if err != nil {
 		fmt.Printf("Start failed: %v\n", err)
 	}
+	defer g.Stop()
 
-	for i := 0; i < clientNum; i++ {
-		wg.Add(1)
-		idx := i
-		data := make([]byte, bufsize)
-		go func() {
-			c, err := nbio.Dial("tcp", addrs[idx%2])
-			if err != nil {
-				fmt.Printf("Dial failed: %v\n", err)
-			}
-			g.AddConn(c)
-			c.Write([]byte(data))
-			atomic.AddInt64(&totalWrite, int64(len(data)))
-		}()
+	c, err := nbio.Dial("tcp", addr)
+	if err != nil {
+		fmt.Printf("Dial failed: %v\n", err)
 	}
+	g.AddConn(c)
+	c.Write(buf)
 
-	go func() {
-		for {
-			time.Sleep(time.Second * 5)
-			fmt.Println(g.State().String())
-		}
-	}()
-
-	go func() {
-		for {
-			time.Sleep(time.Second)
-			fmt.Printf("qps: %v, total read: %.1f M, total write: %.1f M\n", atomic.SwapInt64(&qps, 0), float64(atomic.SwapInt64(&totalRead, 0))/1024/1024, float64(atomic.SwapInt64(&totalWrite, 0))/1024/1024)
-		}
-	}()
-
-	wg.Wait()
+	select {
+	case <-ctx.Done():
+		log.Info("success")
+	case <-time.After(time.Second * 2):
+		log.Error("timeout")
+	}
 }
