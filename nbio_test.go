@@ -295,36 +295,68 @@ LOOP_RECV:
 }
 
 func TestFuzz(t *testing.T) {
+	preMaxLoad := gopher.maxLoad
 	gopher.maxLoad = 10
 	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
-		go func() {
+		go func(idx int) {
 			defer wg.Done()
-			Dial("tcp4", addr)
-		}()
+			if idx%2 == 0 {
+				Dial("tcp4", addr)
+			} else {
+				Dial("tcp6", addr)
+			}
+		}(i)
 	}
-	c, err := Dial("tcp6", addr)
-	if err == nil {
-		log.Printf("Dial tcp6: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
-		gopher.AddConn(c)
-		c.SetWriteDeadline(time.Now().Add(time.Second))
-		c.Write([]byte{1})
-		c.Close()
-		c.Write([]byte{1})
-		bs := [][]byte{}
-		bs = append(bs, []byte{1})
-		c.Writev(bs)
-	} else {
-		log.Printf("Dial tcp6: %v", err)
-	}
+	wg.Wait()
 
-	g := NewGopher(Config{
+	wg = sync.WaitGroup{}
+	wg.Add(1)
+
+	readed := 0
+	g := NewGopher(Config{})
+	g.OnData(func(c *Conn, data []byte) {
+		readed += len(data)
+		if readed == 4 {
+			wg.Done()
+		}
+	})
+	g.Start()
+	defer g.Stop()
+
+	func() {
+		gopher.maxLoad = preMaxLoad
+
+		c, err := Dial("tcp4", addr)
+		if err == nil {
+			log.Printf("Dial tcp6: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+			g.AddConn(c)
+			c.SetWriteDeadline(time.Now().Add(time.Second))
+			c.Write([]byte{1})
+
+			time.Sleep(time.Second / 10)
+
+			bs := [][]byte{}
+			bs = append(bs, []byte{1})
+			bs = append(bs, []byte{1})
+			bs = append(bs, []byte{1})
+			c.Writev(bs)
+
+			time.Sleep(time.Second / 10)
+
+			c.Close()
+			c.Write([]byte{1})
+		} else {
+			log.Fatalf("Dial tcp6: %v", err)
+		}
+	}()
+
+	gErr := NewGopher(Config{
 		Network: "tcp4",
 		Addrs:   []string{"localhost:8889", "localhost:8889"},
 	})
-	g.Start()
-
+	gErr.Start()
 	wg.Wait()
 }
 
