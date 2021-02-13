@@ -78,8 +78,8 @@ type Gopher struct {
 	currLoad int64
 	maxLoad  int64
 
-	conns      map[*Conn][]byte
-	connsLinux []*Conn
+	connsStd  map[*Conn][]byte
+	connsUnix []*Conn
 
 	listeners []*poller
 	pollers   []*poller
@@ -107,10 +107,10 @@ func (g *Gopher) Stop() {
 		g.pollers[i].stop()
 	}
 	g.mux.Lock()
-	conns := g.conns
-	g.conns = map[*Conn][]byte{}
-	connsLinux := g.connsLinux
-	g.connsLinux = make([]*Conn, len(connsLinux))
+	conns := g.connsStd
+	g.connsStd = map[*Conn][]byte{}
+	connsUnix := g.connsUnix
+	g.connsUnix = make([]*Conn, len(connsUnix))
 	g.mux.Unlock()
 
 	for c := range conns {
@@ -118,7 +118,7 @@ func (g *Gopher) Stop() {
 			c.Close()
 		}
 	}
-	for _, c := range connsLinux {
+	for _, c := range connsUnix {
 		if c != nil {
 			go c.Close()
 		}
