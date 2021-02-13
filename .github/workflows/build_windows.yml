@@ -36,3 +36,10 @@ jobs:
           echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
       - name: go test
         run: go test -timeout 30s -coverprofile="./coverage"
+      - name: update code coverage report
+        uses: codecov/codecov-action@v1.2.1
+        with:
+          file: ./coverage
+          flags: unittests
+          verbose: true
+          name: codecov-nbio
