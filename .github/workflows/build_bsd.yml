@@ -1,4 +1,4 @@
-name: build
+name: build-macos
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
 
 jobs:
   test:
-    name: build
+    name: build-macos
     strategy:
       fail-fast: false
       matrix:

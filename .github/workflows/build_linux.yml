@@ -1,4 +1,4 @@
-name: build
+name: build-linux
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
 
 jobs:
   test:
-    name: build
+    name: build-linux
     strategy:
       fail-fast: false
       matrix:

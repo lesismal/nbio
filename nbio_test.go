@@ -189,7 +189,7 @@ func TestHeapTimer(t *testing.T) {
 	g.Start()
 	defer g.Stop()
 
-	timeout := time.Second / 20
+	timeout := time.Second / 10
 
 	t1 := time.Now()
 	ch1 := make(chan int)
