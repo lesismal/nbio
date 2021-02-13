@@ -147,9 +147,7 @@ func Test10k(t *testing.T) {
 		}
 	}()
 
-	log.Println("== Test10k before done 111")
 	<-done
-	log.Println("== Test10k before done 222")
 }
 
 func TestTimeout(t *testing.T) {
@@ -356,7 +354,6 @@ func TestFuzz(t *testing.T) {
 		Addrs:   []string{"localhost:8889", "localhost:8889"},
 	})
 	gErr.Start()
-
 }
 
 func TestStop(t *testing.T) {
