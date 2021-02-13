@@ -1,0 +1,38 @@
+name: build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+env:
+  GO111MODULE: off
+
+jobs:
+  test:
+    name: build
+    strategy:
+      fail-fast: false
+      matrix:
+        go: [1.13.x]
+        os: [windows-latest]
+    runs-on: ${{ matrix.os}}
+    steps:
+      - name: install golang
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: go env
+        run: |
+          printf "$(go version)\n"
+          printf "\n\ngo environment:\n\n"
+          ulimit -n 30000
+          go env
+          echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
+      - name: go test
+        run: go test -timeout 30s -coverprofile="./coverage"

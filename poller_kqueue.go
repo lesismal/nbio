@@ -221,7 +221,6 @@ func (p *poller) start() {
 			}
 		}
 	} else {
-
 		for !p.shutdown {
 			p.mux.Lock()
 			changes = p.eventList

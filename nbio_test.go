@@ -115,7 +115,7 @@ func Test10k(t *testing.T) {
 	var clientNum int64 = 1024 * 10
 	var done = make(chan int)
 
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS != "linux" {
 		clientNum = 100
 	}
 
@@ -142,7 +142,6 @@ func Test10k(t *testing.T) {
 				one()
 			} else {
 				go one()
-				// 	time.Sleep(time.Second / 1000)
 			}
 		}
 	}()
@@ -194,12 +193,12 @@ func TestHeapTimer(t *testing.T) {
 
 	t1 := time.Now()
 	ch1 := make(chan int)
-	g.afterFunc(timeout, func() {
+	g.afterFunc(timeout*5, func() {
 		close(ch1)
 	})
 	<-ch1
 	to1 := time.Since(t1)
-	if to1 < timeout-timeout/5 || to1 > timeout+timeout/5 {
+	if to1 < timeout*4 || to1 > timeout*6 {
 		log.Fatalf("invalid to1: %v", to1)
 	}
 
@@ -220,7 +219,7 @@ func TestHeapTimer(t *testing.T) {
 		close(ch3)
 	})
 	it3.Stop()
-	<-time.After(timeout + timeout/4)
+	<-time.After(timeout * 2)
 	select {
 	case <-ch3:
 		log.Fatalf("stop failed")
