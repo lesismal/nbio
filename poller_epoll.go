@@ -9,6 +9,7 @@ import (
 	"net"
 	"sync/atomic"
 	"syscall"
+	"unsafe"
 )
 
 const stopFd int = 1
@@ -16,7 +17,8 @@ const stopFd int = 1
 type poller struct {
 	g *Gopher
 
-	epfd int
+	epfd  int
+	evtfd int
 
 	index int
 
@@ -122,8 +124,8 @@ func (p *poller) deleteConn(c *Conn) {
 func (p *poller) stop() {
 	log.Printf("poller[%v] stop...", p.index)
 	p.shutdown = true
-	p.addWrite(stopFd)
-	syscall.Close(p.epfd)
+	n := uint64(1)
+	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
 }
 
 func (p *poller) start() {
@@ -131,6 +133,10 @@ func (p *poller) start() {
 
 	log.Printf("%v[%v] start", p.pollType, p.index)
 	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
+	defer func() {
+		syscall.Close(p.epfd)
+		syscall.Close(p.evtfd)
+	}()
 	p.shutdown = false
 
 	// twout := 0
@@ -154,7 +160,7 @@ func (p *poller) start() {
 			for i := 0; i < n; i++ {
 				fd = int(events[i].Fd)
 				switch fd {
-				case stopFd:
+				case p.evtfd:
 				default:
 					err = p.accept(fd)
 					if err != nil && err != syscall.EAGAIN {
@@ -178,7 +184,12 @@ func (p *poller) start() {
 			msec = 20
 
 			for i := 0; i < n; i++ {
-				p.readWrite(&events[i])
+				fd = int(events[i].Fd)
+				switch fd {
+				case p.evtfd:
+				default:
+					p.readWrite(&events[i])
+				}
 			}
 
 			// now := time.Now()
@@ -241,6 +252,24 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		return nil, err
 	}
 
+	// EFD_NONBLOCK = 0x800
+	r0, _, e0 := syscall.Syscall(syscall.SYS_EVENTFD2, 0, 0x800, 0)
+	if e0 != 0 {
+		syscall.Close(fd)
+		return nil, err
+	}
+
+	err = syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, int(r0),
+		&syscall.EpollEvent{Fd: int32(r0),
+			Events: syscall.EPOLLIN,
+		},
+	)
+	if err != nil {
+		syscall.Close(fd)
+		syscall.Close(int(r0))
+		return nil, err
+	}
+
 	if isListener {
 		if len(g.lfds) > 0 {
 			for _, lfd := range g.lfds {
@@ -258,6 +287,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	p := &poller{
 		g:          g,
 		epfd:       fd,
+		evtfd:      int(r0),
 		index:      index,
 		isListener: isListener,
 	}
