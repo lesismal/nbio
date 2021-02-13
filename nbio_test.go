@@ -198,7 +198,7 @@ func TestHeapTimer(t *testing.T) {
 	})
 	<-ch1
 	to1 := time.Since(t1)
-	if to1 < timeout*4 || to1 > timeout*6 {
+	if to1 < timeout*4 || to1 > timeout*10 {
 		log.Fatalf("invalid to1: %v", to1)
 	}
 
@@ -210,7 +210,7 @@ func TestHeapTimer(t *testing.T) {
 	it2.Reset(timeout * 5)
 	<-ch2
 	to2 := time.Since(t2)
-	if to2 < timeout*4 || to2 > timeout*6 {
+	if to2 < timeout*4 || to2 > timeout*10 {
 		log.Fatalf("invalid to2: %v", to2)
 	}
 

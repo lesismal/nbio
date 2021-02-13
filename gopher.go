@@ -3,6 +3,8 @@ package nbio
 import (
 	"container/heap"
 	"fmt"
+	"log"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -246,6 +248,47 @@ func (g *Gopher) resetTimer(it *htimer) {
 		heap.Fix(&g.timers, index)
 		if index == 0 || it.index == 0 {
 			g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+		}
+	}
+}
+
+func (g *Gopher) timerLoop() {
+	defer g.Done()
+	log.Printf("gopher timer start")
+	defer log.Printf("gopher timer stopped")
+	for {
+		select {
+		case <-g.trigger.C:
+			for {
+				g.tmux.Lock()
+				if g.timers.Len() == 0 {
+					g.tmux.Unlock()
+					break
+				}
+				now := time.Now()
+				it := g.timers[0]
+				if now.After(it.expire) {
+					heap.Pop(&g.timers)
+					g.tmux.Unlock()
+					func() {
+						defer func() {
+							err := recover()
+							if err != nil {
+								log.Printf("timer exec failed: %v", err)
+								debug.PrintStack()
+							}
+						}()
+						it.f()
+					}()
+
+				} else {
+					g.trigger.Reset(it.expire.Sub(now))
+					g.tmux.Unlock()
+					break
+				}
+			}
+		case <-g.chTimer:
+			return
 		}
 	}
 }
