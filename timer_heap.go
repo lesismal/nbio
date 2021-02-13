@@ -9,10 +9,6 @@ const (
 	timeForever = time.Duration(math.MaxInt64)
 )
 
-// var (
-// 	DefaultTimer = New("default")
-// )
-
 // heap timer item
 type htimer struct {
 	index  int

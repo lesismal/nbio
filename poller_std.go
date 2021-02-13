@@ -3,11 +3,12 @@
 package nbio
 
 import (
-	"log"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lesismal/nbio/log"
 )
 
 type poller struct {
@@ -109,7 +110,7 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) stop() {
-	log.Printf("poller[%v] stop...", p.index)
+	log.Info("poller[%v] stop...", p.index)
 	p.shutdown = true
 	if p.isListener {
 		p.listener.Close()
@@ -120,8 +121,8 @@ func (p *poller) stop() {
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Printf("%v[%v] start", p.pollType, p.index)
-	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
+	log.Info("%v[%v] start", p.pollType, p.index)
+	defer log.Info("%v[%v] stopped", p.pollType, p.index)
 
 	if p.isListener {
 		var err error
@@ -130,10 +131,10 @@ func (p *poller) start() {
 			err = p.accept()
 			if err != nil {
 				if ne, ok := err.(net.Error); ok && ne.Temporary() {
-					log.Printf("Accept error: %v; retrying...", err)
+					log.Error("Accept error: %v; retrying...", err)
 					time.Sleep(time.Second / 20)
 				} else {
-					log.Printf("Accept error: %v", err)
+					log.Error("Accept error: %v", err)
 					break
 				}
 			}

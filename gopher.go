@@ -3,11 +3,12 @@ package nbio
 import (
 	"container/heap"
 	"fmt"
-	"log"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/lesismal/nbio/log"
 )
 
 const (
@@ -254,8 +255,8 @@ func (g *Gopher) resetTimer(it *htimer) {
 
 func (g *Gopher) timerLoop() {
 	defer g.Done()
-	log.Printf("gopher timer start")
-	defer log.Printf("gopher timer stopped")
+	log.Info("gopher timer start")
+	defer log.Info("gopher timer stopped")
 	for {
 		select {
 		case <-g.trigger.C:
@@ -274,7 +275,7 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								log.Printf("timer exec failed: %v", err)
+								log.Error("timer exec failed: %v", err)
 								debug.PrintStack()
 							}
 						}()

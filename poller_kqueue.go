@@ -3,10 +3,11 @@
 package nbio
 
 import (
-	"log"
 	"sync"
 	"sync/atomic"
 	"syscall"
+
+	"github.com/lesismal/nbio/log"
 )
 
 type poller struct {
@@ -185,7 +186,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 }
 
 func (p *poller) stop() {
-	log.Printf("poller[%v] stop...", p.index)
+	log.Info("poller[%v] stop...", p.index)
 	p.shutdown = true
 	p.trigger()
 }
@@ -193,8 +194,8 @@ func (p *poller) stop() {
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Printf("%v[%v] start", p.pollType, p.index)
-	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
+	log.Info("%v[%v] start", p.pollType, p.index)
+	defer log.Info("%v[%v] stopped", p.pollType, p.index)
 	defer syscall.Close(p.kfd)
 	p.shutdown = false
 

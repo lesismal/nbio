@@ -3,10 +3,11 @@
 package nbio
 
 import (
-	"log"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/lesismal/nbio/log"
 )
 
 // Start init and start pollers
@@ -53,9 +54,9 @@ func (g *Gopher) Start() error {
 	go g.timerLoop()
 
 	if len(g.addrs) == 0 {
-		log.Printf("gopher start")
+		log.Info("gopher start")
 	} else {
-		log.Printf("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
+		log.Info("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
 	}
 	return nil
 }

@@ -4,10 +4,11 @@ package nbio
 
 import (
 	"io"
-	"log"
 	"sync/atomic"
 	"syscall"
 	"unsafe"
+
+	"github.com/lesismal/nbio/log"
 )
 
 const stopFd int = 1
@@ -117,7 +118,7 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) stop() {
-	log.Printf("poller[%v] stop...", p.index)
+	log.Info("poller[%v] stop...", p.index)
 	p.shutdown = true
 	n := uint64(1)
 	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
@@ -126,8 +127,8 @@ func (p *poller) stop() {
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Printf("%v[%v] start", p.pollType, p.index)
-	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
+	log.Info("%v[%v] start", p.pollType, p.index)
+	defer log.Info("%v[%v] stopped", p.pollType, p.index)
 	defer func() {
 		syscall.Close(p.epfd)
 		syscall.Close(p.evtfd)
