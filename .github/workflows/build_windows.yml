@@ -31,7 +31,6 @@ jobs:
         run: |
           printf "$(go version)\n"
           printf "\n\ngo environment:\n\n"
-          ulimit -n 30000
           go env
           echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
       - name: go test
