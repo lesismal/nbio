@@ -109,20 +109,11 @@ func (p *poller) deleteConn(c *Conn) {
 	p.g.onClose(c, c.closeErr)
 }
 
-func (p *poller) stop() {
-	log.Info("poller[%v] stop...", p.index)
-	p.shutdown = true
-	if p.isListener {
-		p.listener.Close()
-	}
-	close(p.chStop)
-}
-
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Info("%v[%v] start", p.pollType, p.index)
-	defer log.Info("%v[%v] stopped", p.pollType, p.index)
+	log.Info("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer log.Info("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 
 	if p.isListener {
 		var err error
@@ -131,18 +122,26 @@ func (p *poller) start() {
 			err = p.accept()
 			if err != nil {
 				if ne, ok := err.(net.Error); ok && ne.Temporary() {
-					log.Error("Accept error: %v; retrying...", err)
+					log.Error("poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 					time.Sleep(time.Second / 20)
 				} else {
-					log.Error("Accept error: %v", err)
+					log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 					break
 				}
 			}
 
 		}
-	} else {
-		<-p.chStop
 	}
+	<-p.chStop
+}
+
+func (p *poller) stop() {
+	log.Info("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	p.shutdown = true
+	if p.isListener {
+		p.listener.Close()
+	}
+	close(p.chStop)
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
@@ -160,9 +159,9 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		if err != nil {
 			return nil, err
 		}
-		p.pollType = "listener"
+		p.pollType = "LISTENER"
 	} else {
-		p.pollType = "poller"
+		p.pollType = "POLLER"
 	}
 
 	return p, nil

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/lesismal/nbio/log"
 )
@@ -185,17 +186,11 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	}
 }
 
-func (p *poller) stop() {
-	log.Info("poller[%v] stop...", p.index)
-	p.shutdown = true
-	p.trigger()
-}
-
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Info("%v[%v] start", p.pollType, p.index)
-	defer log.Info("%v[%v] stopped", p.pollType, p.index)
+	log.Info("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer log.Info("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer syscall.Close(p.kfd)
 	p.shutdown = false
 
@@ -215,8 +210,14 @@ func (p *poller) start() {
 				case p.evtfd:
 				default:
 					err = p.accept(fd)
-					if err != nil && err != syscall.EAGAIN {
-						return
+					if err != nil {
+						if err == syscall.EAGAIN {
+							log.Error("poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+							time.Sleep(time.Second / 20)
+						} else {
+							log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+							break
+						}
 					}
 				}
 			}
@@ -242,6 +243,12 @@ func (p *poller) start() {
 			}
 		}
 	}
+}
+
+func (p *poller) stop() {
+	log.Info("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	p.shutdown = true
+	p.trigger()
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
@@ -284,9 +291,9 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	}
 
 	if isListener {
-		p.pollType = "listener"
+		p.pollType = "LISTENER"
 	} else {
-		p.pollType = "poller"
+		p.pollType = "POLLER"
 	}
 
 	return p, nil

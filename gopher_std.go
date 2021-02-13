@@ -54,9 +54,9 @@ func (g *Gopher) Start() error {
 	go g.timerLoop()
 
 	if len(g.addrs) == 0 {
-		log.Info("gopher start")
+		log.Info("gopher[%v] start", g.Name)
 	} else {
-		log.Info("gopher start listen on: [\"%v\"]", strings.Join(g.addrs, `", "`))
+		log.Info("gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
 }
@@ -64,6 +64,9 @@ func (g *Gopher) Start() error {
 // NewGopher is a factory impl
 func NewGopher(conf Config) *Gopher {
 	cpuNum := uint32(runtime.NumCPU())
+	if conf.Name == "" {
+		conf.Name = "NB"
+	}
 	if conf.MaxLoad == 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -78,6 +81,7 @@ func NewGopher(conf Config) *Gopher {
 	}
 
 	g := &Gopher{
+		Name:               conf.Name,
 		network:            conf.Network,
 		addrs:              conf.Addrs,
 		maxLoad:            int64(conf.MaxLoad),

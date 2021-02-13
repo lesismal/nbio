@@ -24,6 +24,9 @@ const (
 
 // Config Of Gopher
 type Config struct {
+	// Name .
+	Name string
+
 	// Network .
 	Network string
 
@@ -69,6 +72,8 @@ type Gopher struct {
 	sync.WaitGroup
 	mux  sync.Mutex
 	tmux sync.Mutex
+
+	Name string
 
 	network            string
 	addrs              []string
@@ -255,8 +260,8 @@ func (g *Gopher) resetTimer(it *htimer) {
 
 func (g *Gopher) timerLoop() {
 	defer g.Done()
-	log.Info("gopher timer start")
-	defer log.Info("gopher timer stopped")
+	log.Info("gopher[%v] timer start", g.Name)
+	defer log.Info("gopher[%v] timer stopped", g.Name)
 	for {
 		select {
 		case <-g.trigger.C:
@@ -275,7 +280,7 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								log.Error("timer exec failed: %v", err)
+								log.Error("gopher[%v] exec timer failed: %v", g.Name, err)
 								debug.PrintStack()
 							}
 						}()

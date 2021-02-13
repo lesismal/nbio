@@ -6,6 +6,7 @@ import (
 	"io"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/lesismal/nbio/log"
@@ -117,27 +118,19 @@ func (p *poller) deleteConn(c *Conn) {
 	p.g.onClose(c, c.closeErr)
 }
 
-func (p *poller) stop() {
-	log.Info("poller[%v] stop...", p.index)
-	p.shutdown = true
-	n := uint64(1)
-	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
-}
-
 func (p *poller) start() {
 	defer p.g.Done()
 
-	log.Info("%v[%v] start", p.pollType, p.index)
-	defer log.Info("%v[%v] stopped", p.pollType, p.index)
+	log.Info("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer log.Info("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer func() {
 		syscall.Close(p.epfd)
 		syscall.Close(p.evtfd)
 	}()
 	p.shutdown = false
 
-	// twout := 0
 	fd := 0
-	msec := -1 //int(interval.Milliseconds())
+	msec := -1
 	events := make([]syscall.EpollEvent, 1024)
 	if p.isListener {
 		for !p.shutdown {
@@ -159,8 +152,14 @@ func (p *poller) start() {
 				case p.evtfd:
 				default:
 					err = p.accept(fd)
-					if err != nil && err != syscall.EAGAIN {
-						return
+					if err != nil {
+						if err == syscall.EAGAIN {
+							log.Error("poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+							time.Sleep(time.Second / 20)
+						} else {
+							log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+							break
+						}
 					}
 				}
 			}
@@ -189,6 +188,13 @@ func (p *poller) start() {
 			}
 		}
 	}
+}
+
+func (p *poller) stop() {
+	log.Info("poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	p.shutdown = true
+	n := uint64(1)
+	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
 }
 
 func (p *poller) addRead(fd int) error {
@@ -282,9 +288,9 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	}
 
 	if isListener {
-		p.pollType = "listener"
+		p.pollType = "LISTENER"
 	} else {
-		p.pollType = "poller"
+		p.pollType = "POLLER"
 	}
 
 	return p, nil
