@@ -3,16 +3,18 @@
 package nbio
 
 import (
-	"io"
 	"log"
+	"sync"
 	"sync/atomic"
 	"syscall"
 )
 
 type poller struct {
+	mux sync.Mutex
+
 	g *Gopher
 
-	epfd  int
+	kfd   int
 	evtfd int
 
 	index int
@@ -26,6 +28,8 @@ type poller struct {
 	readBuffer []byte
 
 	pollType string
+
+	eventList []syscall.Kevent_t
 }
 
 func (p *poller) online() int64 {
@@ -87,19 +91,15 @@ func (p *poller) acceptable(fd int) bool {
 	return true
 }
 
-func (p *poller) addConn(c *Conn) error {
+func (p *poller) addConn(c *Conn) {
 	c.g = p.g
 
 	p.g.onOpen(c)
 
 	fd := c.fd
-	err := p.addRead(fd)
-	if err == nil {
-		p.g.connsLinux[fd] = c
-		p.increase()
-	}
-
-	return err
+	p.addRead(fd)
+	p.g.connsLinux[fd] = c
+	p.increase()
 }
 
 func (p *poller) getConn(fd int) *Conn {
@@ -114,53 +114,57 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) trigger() {
-	syscall.Kevent(p.fd, []syscall.Kevent_t{{
-		Ident:  0,
-		Filter: syscall.EVFILT_USER,
-		Fflags: syscall.NOTE_TRIGGER,
-	}}, nil, nil)
+	syscall.Kevent(p.kfd, []syscall.Kevent_t{{Ident: 0, Filter: syscall.EVFILT_USER, Fflags: syscall.NOTE_TRIGGER}}, nil, nil)
 }
 
-func (p *poller) addRead(fd int) error {
-	_, err := syscall.Kevent(p.fd, []syscall.Kevent_t{
-		{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
-	}, nil, nil)
-	return err
+func (p *poller) addRead(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
+	p.mux.Unlock()
+	p.trigger()
+	// _, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{
+	// 	{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
+	// }, nil, nil)
+	// return err
 }
 
 // no need
 // func (p *poller) addWrite(fd int) error {
-// 	_, err := syscall  .Kevent(p.fd, []syscall  .Kevent_t{
+// 	_, err := syscall  .Kevent(p.kfd, []syscall  .Kevent_t{
 // 		{Ident: uint64(fd), Flags: syscall  .EV_ADD, Filter: syscall  .EVFILT_WRITE},
 // 	}, nil, nil)
 // 	return os.NewSyscallError("kevent add", err)
 // }
 
-func (p *poller) modWrite(fd int) error {
-	_, err := syscall.Kevent(p.fd, []syscall.Kevent_t{
-		{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE},
-	}, nil, nil)
-	return err
+func (p *poller) modWrite(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+
+	// _, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{
+	// 	{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE},
+	// }, nil, nil)
+	// return err
 }
 
-func (p *poller) deleteWrite(fd int) error {
-	_, err := syscall.Kevent(p.fd, []syscall.Kevent_t{
-		{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE},
-	}, nil, nil)
-	return err
+func (p *poller) deleteWrite(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+
+	// _, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{
+	// 	{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE},
+	// }, nil, nil)
+	// return err
 }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
-	fd := int(ev.Fd)
+	fd := int(ev.Ident)
 	c := p.getConn(fd)
 	if c != nil {
-		// EVFilterSock = -0xd
-		if ev.Events&(-0xd) != 0 {
-			c.closeWithError(io.EOF)
-			return
-		}
-
-		if ev.Events&syscall.EVFILT_READ != 0 {
+		if ev.Filter&syscall.EVFILT_READ != 0 {
 			buffer := p.g.borrow(c)
 			n, err := c.Read(buffer)
 			if err == nil {
@@ -174,7 +178,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			p.g.payback(c, buffer)
 		}
 
-		if ev.Events&syscall.EVFILT_WRITE != 0 {
+		if ev.Filter&syscall.EVFILT_WRITE != 0 {
 			c.flush()
 		}
 	}
@@ -191,33 +195,21 @@ func (p *poller) start() {
 
 	log.Printf("%v[%v] start", p.pollType, p.index)
 	defer log.Printf("%v[%v] stopped", p.pollType, p.index)
-	defer func() {
-		syscall.Close(p.epfd)
-		syscall.Close(p.evtfd)
-	}()
+	defer syscall.Close(p.kfd)
 	p.shutdown = false
 
-	// twout := 0
-	fd := 0
-	msec := -1 //int(interval.Milliseconds())
-	events := make([]syscall.Kevent_t, 1024)
-	changes := []syscall.Kevent_t{}
+	var fd = 0
+	var events = make([]syscall.Kevent_t, 1024)
+	var changes []syscall.Kevent_t = nil
 	if p.isListener {
 		for !p.shutdown {
-			n, err := syscall.Kevent(p.fd, changes, events, nil)
+			n, err := syscall.Kevent(p.kfd, changes, events, nil)
 			if err != nil && err != syscall.EINTR {
 				return
 			}
 
-			if n <= 0 {
-				msec = -1
-				// runtime.Gosched()
-				continue
-			}
-			msec = 20
-
 			for i := 0; i < n; i++ {
-				fd = int(events[i].Fd)
+				fd = int(events[i].Ident)
 				switch fd {
 				case p.evtfd:
 				default:
@@ -229,21 +221,19 @@ func (p *poller) start() {
 			}
 		}
 	} else {
+
 		for !p.shutdown {
-			n, err := syscall.Kevent(p.fd, changes, events, nil)
+			p.mux.Lock()
+			changes = p.eventList
+			p.eventList = nil
+			p.mux.Unlock()
+			n, err := syscall.Kevent(p.kfd, changes, events, nil)
 			if err != nil && err != syscall.EINTR {
 				return
 			}
 
-			if n <= 0 {
-				msec = -1
-				// runtime.Gosched()
-				continue
-			}
-			msec = 20
-
 			for i := 0; i < n; i++ {
-				fd = int(events[i].Fd)
+				fd = int(events[i].Ident)
 				switch fd {
 				case p.evtfd:
 				default:
@@ -268,7 +258,6 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 
 	if err != nil {
 		syscall.Close(fd)
-		syscall.Close(int(r0))
 		return nil, err
 	}
 
@@ -279,7 +268,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 					{Ident: uint64(lfd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
 				}, nil, nil)
 				if err != nil {
-					return err
+					return nil, err
 				}
 			}
 		} else {
@@ -289,8 +278,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 
 	p := &poller{
 		g:          g,
-		epfd:       fd,
-		evtfd:      int(r0),
+		kfd:        fd,
 		index:      index,
 		isListener: isListener,
 	}

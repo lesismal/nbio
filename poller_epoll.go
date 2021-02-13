@@ -10,6 +10,8 @@ import (
 	"unsafe"
 )
 
+const stopFd int = 1
+
 type poller struct {
 	g *Gopher
 
@@ -154,8 +156,6 @@ func (p *poller) start() {
 				fd = int(events[i].Fd)
 				switch fd {
 				case p.evtfd:
-					p.shutdown = true
-					syscall.Read(p.evtfd, make([]byte, 8))
 				default:
 					err = p.accept(fd)
 					if err != nil && err != syscall.EAGAIN {
@@ -182,8 +182,6 @@ func (p *poller) start() {
 				fd = int(events[i].Fd)
 				switch fd {
 				case p.evtfd:
-					p.shutdown = true
-					syscall.Read(p.evtfd, make([]byte, 8))
 				default:
 					p.readWrite(&events[i])
 				}
@@ -196,21 +194,16 @@ func (p *poller) addRead(fd int) error {
 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLIN})
 }
 
-// no need
-// func (p *poller) addWrite(fd int) error {
-// 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLOUT})
-// }
+func (p *poller) addWrite(fd int) error {
+	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLOUT})
+}
 
 func (p *poller) modWrite(fd int) error {
 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLIN | syscall.EPOLLOUT})
 }
 
 func (p *poller) deleteWrite(fd int) error {
-	err := syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
-	if err != nil {
-		return err
-	}
-	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLIN})
+	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
 }
 
 func (p *poller) readWrite(ev *syscall.EpollEvent) {
@@ -221,7 +214,6 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 			c.closeWithError(io.EOF)
 			return
 		}
-
 		if ev.Events&syscall.EPOLLIN != 0 {
 			buffer := p.g.borrow(c)
 			n, err := c.Read(buffer)
@@ -255,7 +247,11 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		return nil, err
 	}
 
-	err = syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, int(r0), &syscall.EpollEvent{Fd: int32(r0), Events: syscall.EPOLLIN})
+	err = syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, int(r0),
+		&syscall.EpollEvent{Fd: int32(r0),
+			Events: syscall.EPOLLIN,
+		},
+	)
 	if err != nil {
 		syscall.Close(fd)
 		syscall.Close(int(r0))
