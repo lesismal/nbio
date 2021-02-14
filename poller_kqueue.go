@@ -180,8 +180,8 @@ func (p *poller) start() {
 
 func (p *poller) acceptorLoop() {
 	var (
-		fd      int = 0
-		events      = make([]syscall.Kevent_t, 1024)
+		fd      = int(0)
+		events  = make([]syscall.Kevent_t, 1024)
 		changes []syscall.Kevent_t
 	)
 
@@ -214,8 +214,8 @@ func (p *poller) acceptorLoop() {
 
 func (p *poller) readWriteLoop() {
 	var (
-		fd      int = 0
-		events      = make([]syscall.Kevent_t, 1024)
+		fd      = int(0)
+		events  = make([]syscall.Kevent_t, 1024)
 		changes []syscall.Kevent_t
 	)
 
