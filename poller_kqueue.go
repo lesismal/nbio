@@ -124,30 +124,13 @@ func (p *poller) addRead(fd int) {
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
 	p.mux.Unlock()
 	p.trigger()
-	// _, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{
-	// 	{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
-	// }, nil, nil)
-	// return err
 }
-
-// no need
-// func (p *poller) addWrite(fd int) error {
-// 	_, err := syscall  .Kevent(p.kfd, []syscall  .Kevent_t{
-// 		{Ident: uint64(fd), Flags: syscall  .EV_ADD, Filter: syscall  .EVFILT_WRITE},
-// 	}, nil, nil)
-// 	return os.NewSyscallError("kevent add", err)
-// }
 
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
-
-	// _, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{
-	// 	{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE},
-	// }, nil, nil)
-	// return err
 }
 
 func (p *poller) deleteWrite(fd int) {
@@ -155,11 +138,6 @@ func (p *poller) deleteWrite(fd int) {
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
-
-	// _, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{
-	// 	{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE},
-	// }, nil, nil)
-	// return err
 }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
@@ -201,12 +179,13 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	fd := 0
-	events := make([]syscall.Kevent_t, 1024)
-	changes := []syscall.Kevent_t(nil)
+	var (
+		fd      int = 0
+		events      = make([]syscall.Kevent_t, 1024)
+		changes []syscall.Kevent_t
+	)
 
 	p.shutdown = false
-
 	for !p.shutdown {
 		n, err := syscall.Kevent(p.kfd, changes, events, nil)
 		if err != nil && err != syscall.EINTR {
@@ -234,12 +213,13 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
-	fd := 0
-	events := make([]syscall.Kevent_t, 1024)
-	changes := []syscall.Kevent_t(nil)
+	var (
+		fd      int = 0
+		events      = make([]syscall.Kevent_t, 1024)
+		changes []syscall.Kevent_t
+	)
 
 	p.shutdown = false
-
 	for !p.shutdown {
 		p.mux.Lock()
 		changes = p.eventList
