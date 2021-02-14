@@ -179,11 +179,8 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	var (
-		fd      = int(0)
-		events  = make([]syscall.Kevent_t, 1024)
-		changes []syscall.Kevent_t
-	)
+	var events = make([]syscall.Kevent_t, 1024)
+	var changes []syscall.Kevent_t
 
 	p.shutdown = false
 	for !p.shutdown {
@@ -192,6 +189,7 @@ func (p *poller) acceptorLoop() {
 			return
 		}
 
+		fd := 0
 		for i := 0; i < n; i++ {
 			fd = int(events[i].Ident)
 			switch fd {
@@ -213,11 +211,8 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
-	var (
-		fd      = int(0)
-		events  = make([]syscall.Kevent_t, 1024)
-		changes []syscall.Kevent_t
-	)
+	var events = make([]syscall.Kevent_t, 1024)
+	var changes []syscall.Kevent_t
 
 	p.shutdown = false
 	for !p.shutdown {
@@ -231,8 +226,7 @@ func (p *poller) readWriteLoop() {
 		}
 
 		for i := 0; i < n; i++ {
-			fd = int(events[i].Ident)
-			switch fd {
+			switch int(events[i].Ident) {
 			case p.evtfd:
 			default:
 				p.readWrite(&events[i])
