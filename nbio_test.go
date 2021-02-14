@@ -191,6 +191,13 @@ func TestHeapTimer(t *testing.T) {
 
 	timeout := time.Second / 10
 
+	testHeapTimerNormal(g, t, timeout)
+	testHeapTimerExecPanic(g, t, timeout)
+	testHeapTimerNormalExecMany(g, t, timeout)
+	testHeapTimerExecManyRandtime(g, t, timeout)
+}
+
+func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
 	g.afterFunc(timeout*5, func() {
@@ -225,7 +232,15 @@ func TestHeapTimer(t *testing.T) {
 		log.Fatalf("stop failed")
 	default:
 	}
+}
 
+func testHeapTimerExecPanic(g *Gopher, t *testing.T, timeout time.Duration) {
+	g.afterFunc(timeout, func() {
+		panic("test")
+	})
+}
+
+func testHeapTimerNormalExecMany(g *Gopher, t *testing.T, timeout time.Duration) {
 	ch4 := make(chan int, 5)
 	for i := 0; i < 5; i++ {
 		n := i + 1
@@ -240,17 +255,15 @@ func TestHeapTimer(t *testing.T) {
 		})
 	}
 
-	g.afterFunc(timeout, func() {
-		panic("test")
-	})
-
 	for i := 0; i < 5; i++ {
 		n := <-ch4
 		if n != i+1 {
 			log.Fatalf("invalid n: %v, %v", i, n)
 		}
 	}
+}
 
+func testHeapTimerExecManyRandtime(g *Gopher, t *testing.T, timeout time.Duration) {
 	its := make([]*htimer, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {

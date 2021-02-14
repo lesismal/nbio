@@ -192,54 +192,70 @@ func (p *poller) start() {
 	log.Debug("poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
 	defer log.Debug("poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer syscall.Close(p.kfd)
+
+	if p.isListener {
+		p.acceptorLoop()
+	} else {
+		p.readWriteLoop()
+	}
+}
+
+func (p *poller) acceptorLoop() {
+	fd := 0
+	events := make([]syscall.Kevent_t, 1024)
+	changes := []syscall.Kevent_t(nil)
+
 	p.shutdown = false
 
-	var fd = 0
-	var events = make([]syscall.Kevent_t, 1024)
-	var changes []syscall.Kevent_t = nil
-	if p.isListener {
-		for !p.shutdown {
-			n, err := syscall.Kevent(p.kfd, changes, events, nil)
-			if err != nil && err != syscall.EINTR {
-				return
-			}
+	for !p.shutdown {
+		n, err := syscall.Kevent(p.kfd, changes, events, nil)
+		if err != nil && err != syscall.EINTR {
+			return
+		}
 
-			for i := 0; i < n; i++ {
-				fd = int(events[i].Ident)
-				switch fd {
-				case p.evtfd:
-				default:
-					err = p.accept(fd)
-					if err != nil {
-						if err == syscall.EAGAIN {
-							log.Error("poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
-							time.Sleep(time.Second / 20)
-						} else {
-							log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
-							break
-						}
+		for i := 0; i < n; i++ {
+			fd = int(events[i].Ident)
+			switch fd {
+			case p.evtfd:
+			default:
+				err = p.accept(fd)
+				if err != nil {
+					if err == syscall.EAGAIN {
+						log.Error("poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+						time.Sleep(time.Second / 20)
+					} else {
+						log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+						break
 					}
 				}
 			}
 		}
-	} else {
-		for !p.shutdown {
-			p.mux.Lock()
-			changes = p.eventList
-			p.eventList = nil
-			p.mux.Unlock()
-			n, err := syscall.Kevent(p.kfd, changes, events, nil)
-			if err != nil && err != syscall.EINTR {
-				return
-			}
+	}
+}
 
-			for i := 0; i < n; i++ {
-				fd = int(events[i].Ident)
-				switch fd {
-				case p.evtfd:
-				default:
-					p.readWrite(&events[i])
-				}
+func (p *poller) readWriteLoop() {
+	fd := 0
+	events := make([]syscall.Kevent_t, 1024)
+	changes := []syscall.Kevent_t(nil)
+
+	p.shutdown = false
+
+	for !p.shutdown {
+		p.mux.Lock()
+		changes = p.eventList
+		p.eventList = nil
+		p.mux.Unlock()
+		n, err := syscall.Kevent(p.kfd, changes, events, nil)
+		if err != nil && err != syscall.EINTR {
+			return
+		}
+
+		for i := 0; i < n; i++ {
+			fd = int(events[i].Ident)
+			switch fd {
+			case p.evtfd:
+			default:
+				p.readWrite(&events[i])
 			}
 		}
 	}

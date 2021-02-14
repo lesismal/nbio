@@ -127,64 +127,80 @@ func (p *poller) start() {
 		syscall.Close(p.epfd)
 		syscall.Close(p.evtfd)
 	}()
-	p.shutdown = false
 
+	if p.isListener {
+		p.acceptorLoop()
+	} else {
+		p.readWriteLoop()
+	}
+}
+
+func (p *poller) acceptorLoop() {
 	fd := 0
 	msec := -1
 	events := make([]syscall.EpollEvent, 1024)
-	if p.isListener {
-		for !p.shutdown {
-			n, err := syscall.EpollWait(p.epfd, events, msec)
-			if err != nil && err != syscall.EINTR {
-				return
-			}
 
-			if n <= 0 {
-				msec = -1
-				// runtime.Gosched()
-				continue
-			}
-			msec = 20
+	p.shutdown = false
 
-			for i := 0; i < n; i++ {
-				fd = int(events[i].Fd)
-				switch fd {
-				case p.evtfd:
-				default:
-					err = p.accept(fd)
-					if err != nil {
-						if err == syscall.EAGAIN {
-							log.Error("poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
-							time.Sleep(time.Second / 20)
-						} else {
-							log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
-							break
-						}
+	for !p.shutdown {
+		n, err := syscall.EpollWait(p.epfd, events, msec)
+		if err != nil && err != syscall.EINTR {
+			return
+		}
+
+		if n <= 0 {
+			msec = -1
+			// runtime.Gosched()
+			continue
+		}
+		msec = 20
+
+		for i := 0; i < n; i++ {
+			fd = int(events[i].Fd)
+			switch fd {
+			case p.evtfd:
+			default:
+				err = p.accept(fd)
+				if err != nil {
+					if err == syscall.EAGAIN {
+						log.Error("poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+						time.Sleep(time.Second / 20)
+					} else {
+						log.Error("poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+						break
 					}
 				}
 			}
 		}
-	} else {
-		for !p.shutdown {
-			n, err := syscall.EpollWait(p.epfd, events, msec)
-			if err != nil && err != syscall.EINTR {
-				return
-			}
+	}
+}
 
-			if n <= 0 {
-				msec = -1
-				// runtime.Gosched()
-				continue
-			}
-			msec = 20
+func (p *poller) readWriteLoop() {
+	fd := 0
+	msec := -1
+	events := make([]syscall.EpollEvent, 1024)
 
-			for i := 0; i < n; i++ {
-				fd = int(events[i].Fd)
-				switch fd {
-				case p.evtfd:
-				default:
-					p.readWrite(&events[i])
-				}
+	p.shutdown = false
+
+	for !p.shutdown {
+		n, err := syscall.EpollWait(p.epfd, events, msec)
+		if err != nil && err != syscall.EINTR {
+			return
+		}
+
+		if n <= 0 {
+			msec = -1
+			// runtime.Gosched()
+			continue
+		}
+		msec = 20
+
+		for i := 0; i < n; i++ {
+			fd = int(events[i].Fd)
+			switch fd {
+			case p.evtfd:
+			default:
+				p.readWrite(&events[i])
 			}
 		}
 	}

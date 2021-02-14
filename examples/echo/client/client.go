@@ -11,8 +11,6 @@ import (
 	"github.com/lesismal/nbio/log"
 )
 
-var ()
-
 func main() {
 	var (
 		ret         []byte
