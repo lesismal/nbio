@@ -51,6 +51,8 @@ type Config struct {
 
 // State of Gopher
 type State struct {
+	// Name .
+	Name string
 	// Online .
 	Online int
 	// Pollers .
@@ -60,9 +62,9 @@ type State struct {
 // String returns Gopher's State Info
 func (state *State) String() string {
 	// str := fmt.Sprintf("****************************************\n[%v]:\n", time.Now().Format("2006.01.02 15:04:05"))
-	str := fmt.Sprintf("online: %v\n", state.Online)
+	str := fmt.Sprintf("Gopher[%v] Total Online: %v\n", state.Name, state.Online)
 	for i := 0; i < len(state.Pollers); i++ {
-		str += fmt.Sprintf("  poller[%v] online: %v\n", i, state.Pollers[i].Online)
+		str += fmt.Sprintf("  Poller[%v] Online: %v\n", i, state.Pollers[i].Online)
 	}
 	return str
 }
@@ -189,6 +191,7 @@ func (g *Gopher) OnMemFree(h func(c *Conn, b []byte)) {
 // State returns Gopher's state info
 func (g *Gopher) State() *State {
 	state := &State{
+		Name:    g.Name,
 		Online:  int(g.Online()),
 		Pollers: make([]struct{ Online int }, len(g.pollers)),
 	}
@@ -260,8 +263,8 @@ func (g *Gopher) resetTimer(it *htimer) {
 
 func (g *Gopher) timerLoop() {
 	defer g.Done()
-	log.Debug("gopher[%v] timer start", g.Name)
-	defer log.Debug("gopher[%v] timer stopped", g.Name)
+	log.Debug("Gopher[%v] timer start", g.Name)
+	defer log.Debug("Gopher[%v] timer stopped", g.Name)
 	for {
 		select {
 		case <-g.trigger.C:
@@ -280,7 +283,7 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								log.Error("gopher[%v] exec timer failed: %v", g.Name, err)
+								log.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
 								debug.PrintStack()
 							}
 						}()
