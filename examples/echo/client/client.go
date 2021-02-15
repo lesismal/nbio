@@ -13,21 +13,24 @@ import (
 
 func main() {
 	var (
-		ret         []byte
-		buf         = make([]byte, 1024)
-		addr        = "localhost:8888"
-		ctx, cancel = context.WithCancel(context.Background())
+		ret    []byte
+		buf    = make([]byte, 1024)
+		addr   = "localhost:8888"
+		ctx, _ = context.WithTimeout(context.Background(), time.Second)
 	)
 
 	log.SetLevel(log.LevelInfo)
+
 	rand.Read(buf)
 
 	g := nbio.NewGopher(nbio.Config{})
+
+	done := make(chan int)
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		ret = append(ret, data...)
 		if len(ret) == len(buf) {
 			if bytes.Equal(buf, ret) {
-				cancel()
+				close(done)
 			}
 		}
 	})
@@ -47,8 +50,8 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		log.Info("success")
-	case <-time.After(time.Second * 2):
 		log.Error("timeout")
+	case <-done:
+		log.Info("success")
 	}
 }
