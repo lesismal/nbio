@@ -203,6 +203,7 @@ func (g *Gopher) State() *State {
 	return state
 }
 
+// After used as time.After
 func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
 	c := make(chan time.Time, 1)
 	g.afterFunc(timeout, func() {
@@ -211,6 +212,7 @@ func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
 	return c
 }
 
+// AfterFunc used as time.AfterFunc
 func (g *Gopher) AfterFunc(timeout time.Duration, f func()) *Timer {
 	ht := g.afterFunc(timeout, f)
 	return &Timer{htimer: ht}
