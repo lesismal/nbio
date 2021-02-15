@@ -203,6 +203,19 @@ func (g *Gopher) State() *State {
 	return state
 }
 
+func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
+	c := make(chan time.Time, 1)
+	g.afterFunc(timeout, func() {
+		c <- time.Now()
+	})
+	return c
+}
+
+func (g *Gopher) AfterFunc(timeout time.Duration, f func()) *Timer {
+	ht := g.afterFunc(timeout, f)
+	return &Timer{htimer: ht}
+}
+
 func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
 	g.tmux.Lock()
 	defer g.tmux.Unlock()
