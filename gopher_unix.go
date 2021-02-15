@@ -66,9 +66,9 @@ func (g *Gopher) Start() error {
 	go g.timerLoop()
 
 	if len(g.addrs) == 0 {
-		log.Info("gopher[%v] start", g.Name)
+		log.Info("Gopher[%v] start", g.Name)
 	} else {
-		log.Info("gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
+		log.Info("Gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
 }
