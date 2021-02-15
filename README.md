@@ -1,4 +1,4 @@
-# NBIO - NON BLOCKING IO / NIUBILITY IO
+# NBIO - NON-BLOCKING IO / NIUBILITY IO
 
 [![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
 
@@ -16,7 +16,7 @@
 
 ## Contents
 
-- [NBIO - NON BLOCKING IO / NIUBILITY IO](#nbio---non-blocking-io--niubility-io)
+- [NBIO - NON-BLOCKING IO / NIUBILITY IO](#nbio---non-blocking-io--niubility-io)
   - [Contents](#contents)
   - [Features](#features)
   - [Installation](#installation)
