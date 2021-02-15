@@ -74,7 +74,6 @@ if err != nil {
 ```go
 import "github.com/lesismal/nbio"
 
-
 g := nbio.NewGopher(nbio.Config{})
 
 g.OnData(func(c *nbio.Conn, data []byte) {
