@@ -16,7 +16,7 @@ func main() {
 		ret         []byte
 		buf         = make([]byte, 1024)
 		addr        = "localhost:8888"
-		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
+		ctx, cancel = context.WithCancel(context.Background())
 	)
 
 	log.SetLevel(log.LevelInfo)
