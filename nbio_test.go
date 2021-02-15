@@ -200,7 +200,7 @@ func TestHeapTimer(t *testing.T) {
 func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
-	g.afterFunc(timeout*5, func() {
+	g.AfterFunc(timeout*5, func() {
 		close(ch1)
 	})
 	<-ch1
@@ -226,7 +226,7 @@ func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 		close(ch3)
 	})
 	it3.Stop()
-	<-time.After(timeout * 2)
+	<-g.After(timeout * 2)
 	select {
 	case <-ch3:
 		log.Fatalf("stop failed")
