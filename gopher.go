@@ -139,6 +139,9 @@ func (g *Gopher) Stop() {
 
 // AddConn adds conn to a poller
 func (g *Gopher) AddConn(c *Conn) {
+	if c == nil {
+		return
+	}
 	g.increase()
 	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
 }
