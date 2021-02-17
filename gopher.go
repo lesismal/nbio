@@ -47,6 +47,9 @@ type Config struct {
 
 	// MaxWriteBufferSize .
 	MaxWriteBufferSize uint32
+
+	// LockThread .
+	LockThread bool
 }
 
 // State of Gopher
@@ -83,6 +86,7 @@ type Gopher struct {
 	pollerNum          uint32
 	readBufferSize     uint32
 	maxWriteBufferSize uint32
+	lockThread         bool
 
 	lfds     []int
 	currLoad int64
