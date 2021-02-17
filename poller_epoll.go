@@ -4,6 +4,7 @@ package nbio
 
 import (
 	"io"
+	"runtime"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -119,6 +120,10 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) start() {
+	if p.g.lockThread {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
 	defer p.g.Done()
 
 	log.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
