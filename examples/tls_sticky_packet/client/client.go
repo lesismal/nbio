@@ -11,7 +11,7 @@ import (
 func main() {
 	wg := sync.WaitGroup{}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -27,7 +27,7 @@ func main() {
 			defer conn.Close()
 
 			wbuf := []byte("hello")
-			for j := 0; j < 10; j++ {
+			for j := 0; j < 100; j++ {
 				n1, err := conn.Write(wbuf)
 				if err != nil || n1 != len(wbuf) {
 					log.Fatalf("conn.Write failed: %v, %v", n1, err)

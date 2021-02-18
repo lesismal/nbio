@@ -1,6 +1,6 @@
 # NBIO - NON-BLOCKING IO / NIUBILITY IO
 
-[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][9]][10]
+[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Go Version][9]][10] [![Coverage Statusd][11]][12]
 
 [1]: https://godoc.org/github.com/lesismal/nbio?status.svg
 [2]: https://godoc.org/github.com/lesismal/nbio
@@ -10,9 +10,10 @@
 [6]: https://github.com/lesismal/nbio/actions?query=workflow%3build-linux
 [7]: https://goreportcard.com/badge/github.com/lesismal/nbio
 [8]: https://goreportcard.com/report/github.com/lesismal/nbio
-[9]: https://codecov.io/gh/lesismal/nbio/branch/master/graph/badge.svg
-[10]: https://codecov.io/gh/lesismal/nbio
-
+[9]: https://img.shields.io/badge/go-%3E%3D1.16-30dff3?style=flat-square&logo=go
+[10]: https://github.com/lesismal/nbio
+[11]: https://codecov.io/gh/lesismal/nbio/branch/master/graph/badge.svg
+[12]: https://codecov.io/gh/lesismal/nbio
 
 ## Contents
 
@@ -22,6 +23,7 @@
   - [Installation](#installation)
   - [Quick Start](#quick-start)
   - [Echo Examples](#echo-examples)
+  - [TLS Examples](#tls-examples)
   - [Performance](#performance)
 
 ## Features
@@ -29,6 +31,7 @@
 - [x] macos(bsd): kqueue
 - [x] windows: golang std net
 - [x] nbio.Conn implements a non-blocking net.Conn(except windows)
+- [x] tls supported
 
 ## Installation
 
@@ -101,6 +104,11 @@ c.Write(buf)
 
 - [echo-server](https://github.com/lesismal/nbio/blob/master/examples/echo/server/server.go)
 - [echo-client](https://github.com/lesismal/nbio/blob/master/examples/echo/client/client.go)
+
+## TLS Examples
+
+- [tls-server](https://github.com/lesismal/nbio/blob/master/examples/tls/server/server.go)
+- [tls-client](https://github.com/lesismal/nbio/blob/master/examples/tls/client/client.go)
 
 ## Performance
 

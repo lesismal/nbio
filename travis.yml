@@ -2,7 +2,7 @@ language: go
 os:
     - linux
 go:
-    - 1.13.x
+    - 1.16.x
 
 before_script:
     - ulimit -n 30000

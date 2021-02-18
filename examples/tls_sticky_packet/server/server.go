@@ -1,7 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"math/rand"
+	"net"
+	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
@@ -20,7 +24,7 @@ func main() {
 
 	g := nbio.NewGopher(nbio.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Addrs:   []string{"localhost:9999"},
 	})
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -51,7 +55,106 @@ func main() {
 	}
 	defer g.Stop()
 
+	go runProxy("localhost:8888", "localhost:9999")
+
 	g.Wait()
+}
+
+func fuzzTunnel(clientConn *net.TCPConn, serverAddr string) {
+	serverConn, dailErr := net.Dial("tcp", serverAddr)
+	log.Printf("+ fuzzTunnel: [%v -> %v]\n", clientConn.LocalAddr().String(), serverAddr)
+	if dailErr == nil {
+		c2sCor := func() {
+			defer func() {
+				recover()
+			}()
+
+			var buf = make([]byte, 4096)
+			for {
+				nread, err := clientConn.Read(buf)
+				if err != nil {
+					clientConn.Close()
+					serverConn.Close()
+					break
+				}
+				tmp := buf[:nread]
+				for len(tmp) > 0 {
+					nSend := int(rand.Intn(len(tmp)) + 1)
+					sendBuf := tmp[:nSend]
+					_, err = serverConn.Write(sendBuf)
+					tmp = tmp[nSend:]
+					if err != nil {
+						clientConn.Close()
+						serverConn.Close()
+						return
+					}
+					time.Sleep(time.Second / 1000 * time.Duration(rand.Intn(100)+1))
+				}
+			}
+		}
+
+		s2cCor := func() {
+			defer func() {
+				recover()
+			}()
+
+			var buf = make([]byte, 4096)
+			for {
+				nread, err := serverConn.Read(buf)
+				if err != nil {
+					clientConn.Close()
+					serverConn.Close()
+					break
+				}
+
+				tmp := buf[:nread]
+				for len(tmp) > 0 {
+					nSend := int(rand.Intn(len(tmp)) + 1)
+					sendBuf := tmp[:nSend]
+					_, err = clientConn.Write(sendBuf)
+					tmp = tmp[nSend:]
+					if err != nil {
+						clientConn.Close()
+						serverConn.Close()
+						return
+					}
+					time.Sleep(time.Second / 1000 * time.Duration(rand.Intn(100)+1))
+				}
+			}
+		}
+
+		go c2sCor()
+		go s2cCor()
+	} else {
+		clientConn.Close()
+	}
+}
+
+func runProxy(agentAddr string, serverAddr string) {
+	tcpAddr, err := net.ResolveTCPAddr("tcp4", agentAddr)
+	if err != nil {
+		fmt.Println("ResolveTCPAddr Error: ", err)
+		return
+	}
+
+	listener, err2 := net.ListenTCP("tcp", tcpAddr)
+	if err2 != nil {
+		fmt.Println("ListenTCP Error: ", err2)
+		return
+	}
+
+	defer listener.Close()
+
+	fmt.Println(fmt.Sprintf("proxy running on: [%s -> %s]", agentAddr, serverAddr))
+	for {
+		conn, err := listener.AcceptTCP()
+
+		if err != nil {
+			fmt.Println("AcceptTCP Error: ", err2)
+		} else {
+			go fuzzTunnel(conn, serverAddr)
+		}
+	}
 }
 
 var rsaCertPEM = []byte(`-----BEGIN CERTIFICATE-----
