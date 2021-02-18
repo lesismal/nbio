@@ -44,6 +44,7 @@ func (c *Conn) Hash() int {
 
 // Read implements Read
 func (c *Conn) Read(b []byte) (int, error) {
+	// use lock to prevent multiple conn data confusion when fd is reused on unix
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -57,6 +58,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write implements Write
 func (c *Conn) Write(b []byte) (int, error) {
+	// use lock to prevent multiple conn data confusion when fd is reused on unix
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -93,7 +95,6 @@ func (c *Conn) Write(b []byte) (int, error) {
 // Writev implements Writev
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	c.mux.Lock()
-
 	if c.closed {
 		c.mux.Unlock()
 		return 0, errClosed

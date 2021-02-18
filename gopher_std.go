@@ -95,6 +95,13 @@ func NewGopher(conf Config) *Gopher {
 		// connsUnix:         make([]*Conn, conf.MaxLoad+64),
 		onOpen:  func(c *Conn) {},
 		onClose: func(c *Conn, err error) {},
+		onRead: func(c *Conn, b []byte) ([]byte, error) {
+			n, err := c.Read(b)
+			if err != nil {
+				return nil, err
+			}
+			return b[:n], err
+		},
 		onData:  func(c *Conn, data []byte) {},
 		trigger: time.NewTimer(timeForever),
 		chTimer: make(chan struct{}),

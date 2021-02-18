@@ -64,13 +64,10 @@ func (p *poller) accept() error {
 func (p *poller) readConn(c *Conn) {
 	for {
 		buffer := p.g.borrow(c)
-		n, err := c.Read(buffer)
+		b, err := p.g.onRead(c, buffer)
 		if err == nil {
-			p.g.onData(c, buffer[:n])
+			p.g.onData(c, b)
 		} else {
-			if c.closeErr == nil {
-				c.closeErr = err
-			}
 			c.Close()
 		}
 		p.g.payback(c, buffer)

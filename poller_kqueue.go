@@ -147,9 +147,9 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if c != nil {
 		if ev.Filter&syscall.EVFILT_READ != 0 {
 			buffer := p.g.borrow(c)
-			n, err := c.Read(buffer)
+			b, err := p.g.onRead(c, buffer)
 			if err == nil {
-				p.g.onData(c, buffer[:n])
+				p.g.onData(c, b)
 			} else {
 				if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 					c.closeWithError(err)

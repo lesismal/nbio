@@ -33,6 +33,9 @@ func (c *Conn) Hash() int {
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
 	nread, err := c.conn.Read(b)
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
 	return nread, err
 }
 
