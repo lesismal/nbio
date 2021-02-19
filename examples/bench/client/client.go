@@ -23,7 +23,7 @@ func main() {
 		totalWrite int64
 	)
 
-	g := nbio.NewGopher(nbio.Config{NPoller: 1})
+	g := nbio.NewGopher(nbio.Config{})
 	defer g.Stop()
 
 	g.OnData(func(c *nbio.Conn, data []byte) {
