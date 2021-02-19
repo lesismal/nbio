@@ -103,10 +103,9 @@ func NewGopher(conf Config) *Gopher {
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
-		// connsStd:           map[*Conn][]byte{},
-		connsUnix: make([]*Conn, conf.MaxLoad+64),
-		onOpen:    func(c *Conn) {},
-		onClose:   func(c *Conn, err error) {},
+		connsUnix:          make([]*Conn, conf.MaxLoad+64),
+		onOpen:             func(c *Conn) {},
+		onClose:            func(c *Conn, err error) {},
 		onRead: func(c *Conn, b []byte) ([]byte, error) {
 			n, err := c.Read(b)
 			if err != nil {
@@ -119,6 +118,13 @@ func NewGopher(conf Config) *Gopher {
 		trigger: time.NewTimer(timeForever),
 		chTimer: make(chan struct{}),
 	}
+
+	g.OnMemAlloc(func(c *Conn) []byte {
+		if c.readBuffer == nil {
+			c.readBuffer = make([]byte, g.readBufferSize)
+		}
+		return c.readBuffer
+	})
 
 	return g
 }

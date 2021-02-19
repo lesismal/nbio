@@ -91,10 +91,9 @@ func NewGopher(conf Config) *Gopher {
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
-		connsStd:           map[*Conn][]byte{},
-		// connsUnix:         make([]*Conn, conf.MaxLoad+64),
-		onOpen:  func(c *Conn) {},
-		onClose: func(c *Conn, err error) {},
+		connsStd:           map[*Conn]struct{}{},
+		onOpen:             func(c *Conn) {},
+		onClose:            func(c *Conn, err error) {},
 		onRead: func(c *Conn, b []byte) ([]byte, error) {
 			n, err := c.Read(b)
 			if err != nil {
@@ -107,16 +106,12 @@ func NewGopher(conf Config) *Gopher {
 		chTimer: make(chan struct{}),
 	}
 
-	g.onMemAlloc = func(c *Conn) []byte {
-		g.mux.Lock()
-		buf, ok := g.connsStd[c]
-		if !ok {
-			buf = make([]byte, g.readBufferSize)
-			g.connsStd[c] = buf
+	g.OnMemAlloc(func(c *Conn) []byte {
+		if c.readBuffer == nil {
+			c.readBuffer = make([]byte, g.readBufferSize)
 		}
-		g.mux.Unlock()
-		return buf
-	}
+		return c.readBuffer
+	})
 
 	return g
 }

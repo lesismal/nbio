@@ -92,7 +92,7 @@ type Gopher struct {
 	currLoad int64
 	maxLoad  int64
 
-	connsStd  map[*Conn][]byte
+	connsStd  map[*Conn]struct{}
 	connsUnix []*Conn
 
 	listeners []*poller
@@ -123,7 +123,7 @@ func (g *Gopher) Stop() {
 	}
 	g.mux.Lock()
 	conns := g.connsStd
-	g.connsStd = map[*Conn][]byte{}
+	g.connsStd = map[*Conn]struct{}{}
 	connsUnix := g.connsUnix
 	g.connsUnix = make([]*Conn, len(connsUnix))
 	g.mux.Unlock()
@@ -334,11 +334,19 @@ func (g *Gopher) timerLoop() {
 	}
 }
 
+// PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd
+func (g *Gopher) PollerBuffer(c *Conn) []byte {
+	return g.pollers[uint32(c.Hash())%g.pollerNum].readBuffer
+}
+
 func (g *Gopher) borrow(c *Conn) []byte {
 	if g.onMemAlloc != nil {
 		return g.onMemAlloc(c)
 	}
-	return g.pollers[uint32(c.Hash())%g.pollerNum].readBuffer
+	if c.readBuffer == nil {
+		c.readBuffer = make([]byte, g.readBufferSize)
+	}
+	return c.readBuffer
 }
 
 func (g *Gopher) payback(c *Conn, buffer []byte) {

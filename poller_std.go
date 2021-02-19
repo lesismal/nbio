@@ -89,7 +89,7 @@ func (p *poller) acceptable() bool {
 func (p *poller) addConn(c *Conn) error {
 	c.g = p.g
 	p.g.mux.Lock()
-	p.g.connsStd[c] = make([]byte, p.g.readBufferSize)
+	p.g.connsStd[c] = struct{}{}
 	p.g.mux.Unlock()
 	p.increase()
 	p.g.onOpen(c)

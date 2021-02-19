@@ -34,6 +34,8 @@ type Conn struct {
 	lAddr net.Addr
 	rAddr net.Addr
 
+	readBuffer []byte
+
 	session interface{}
 }
 
