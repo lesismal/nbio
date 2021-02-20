@@ -3,13 +3,19 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
+	// "math/rand"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 )
+
+func init() {
+	go http.ListenAndServe("localhost:6060", nil)
+}
 
 func main() {
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
@@ -31,21 +37,21 @@ func main() {
 		tlsConn := tls.NewConn(c, tlsConfig, false, true, 0)
 		c.SetSession(tlsConn)
 	})
-	g.OnRead(func(c *nbio.Conn, b []byte) ([]byte, error) {
-		tlsConn := c.Session().(*tls.Conn)
-		n, err := tlsConn.Read(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], err
-	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		if len(data) <= 0 {
-			return
-		}
-		// echo data
 		tlsConn := c.Session().(*tls.Conn)
-		tlsConn.Write(data)
+		tlsConn.Append(data)
+		buf := make([]byte, 4096)
+		for {
+			n, err := tlsConn.Read(buf)
+			if err != nil {
+				c.Close()
+				return
+			}
+			if n <= 0 {
+				return
+			}
+			tlsConn.Write(buf[:n])
+		}
 	})
 
 	err = g.Start()
@@ -70,7 +76,7 @@ func fuzzTunnel(clientConn *net.TCPConn, serverAddr string) {
 			}()
 
 			var buf = make([]byte, 4096)
-			for {
+			for i := 0; true; i++ {
 				nread, err := clientConn.Read(buf)
 				if err != nil {
 					clientConn.Close()
@@ -78,17 +84,26 @@ func fuzzTunnel(clientConn *net.TCPConn, serverAddr string) {
 					break
 				}
 				tmp := buf[:nread]
-				for len(tmp) > 0 {
-					nSend := int(rand.Intn(len(tmp)) + 1)
-					sendBuf := tmp[:nSend]
-					_, err = serverConn.Write(sendBuf)
-					tmp = tmp[nSend:]
+				// for len(tmp) > 0 {
+				// 	nSend := int(rand.Intn(len(tmp)) + 1)
+				// 	sendBuf := tmp[:nSend]
+				// 	_, err = serverConn.Write(sendBuf)
+				// 	tmp = tmp[nSend:]
+				// 	if err != nil {
+				// 		clientConn.Close()
+				// 		serverConn.Close()
+				// 		return
+				// 	}
+				// 	time.Sleep(time.Second / 1000)
+				// }
+				for j := 0; j < len(tmp); j++ {
+					_, err := serverConn.Write([]byte{tmp[j]})
 					if err != nil {
 						clientConn.Close()
 						serverConn.Close()
 						return
 					}
-					time.Sleep(time.Second / 1000 * time.Duration(rand.Intn(100)+1))
+					time.Sleep(time.Second / 1000)
 				}
 			}
 		}
@@ -99,7 +114,8 @@ func fuzzTunnel(clientConn *net.TCPConn, serverAddr string) {
 			}()
 
 			var buf = make([]byte, 4096)
-			for {
+
+			for i := 0; true; i++ {
 				nread, err := serverConn.Read(buf)
 				if err != nil {
 					clientConn.Close()
@@ -108,17 +124,26 @@ func fuzzTunnel(clientConn *net.TCPConn, serverAddr string) {
 				}
 
 				tmp := buf[:nread]
-				for len(tmp) > 0 {
-					nSend := int(rand.Intn(len(tmp)) + 1)
-					sendBuf := tmp[:nSend]
-					_, err = clientConn.Write(sendBuf)
-					tmp = tmp[nSend:]
+				// for len(tmp) > 0 {
+				// 	nSend := int(rand.Intn(len(tmp)) + 1)
+				// 	sendBuf := tmp[:nSend]
+				// 	_, err = clientConn.Write(sendBuf)
+				// 	tmp = tmp[nSend:]
+				// 	if err != nil {
+				// 		clientConn.Close()
+				// 		serverConn.Close()
+				// 		return
+				// 	}
+				// 	time.Sleep(time.Second / 1000)
+				// }
+				for j := 0; j < len(tmp); j++ {
+					_, err := clientConn.Write([]byte{tmp[j]})
 					if err != nil {
 						clientConn.Close()
 						serverConn.Close()
 						return
 					}
-					time.Sleep(time.Second / 1000 * time.Duration(rand.Intn(100)+1))
+					time.Sleep(time.Second / 1000)
 				}
 			}
 		}

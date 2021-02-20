@@ -27,21 +27,21 @@ func main() {
 		tlsConn := tls.NewConn(c, tlsConfig, false, true, 0)
 		c.SetSession(tlsConn)
 	})
-	g.OnRead(func(c *nbio.Conn, b []byte) ([]byte, error) {
-		tlsConn := c.Session().(*tls.Conn)
-		n, err := tlsConn.Read(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], err
-	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		if len(data) <= 0 {
-			return
-		}
-		// echo data
 		tlsConn := c.Session().(*tls.Conn)
-		tlsConn.Write(data)
+		tlsConn.Append(data)
+		buf := make([]byte, 4096)
+		for {
+			n, err := tlsConn.Read(buf)
+			if err != nil {
+				c.Close()
+				return
+			}
+			if n <= 0 {
+				return
+			}
+			tlsConn.Write(buf[:n])
+		}
 	})
 
 	err = g.Start()

@@ -1,17 +1,24 @@
 package main
 
 import (
+	"crypto/rand"
 	"crypto/tls"
+	"encoding/hex"
 	"io"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 func main() {
 	wg := sync.WaitGroup{}
 
-	for i := 0; i < 100; i++ {
+	count := int64(0)
+	total := count
+	connNum := 10
+	loopTimes := 10
+	for i := 0; i < connNum; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -26,8 +33,11 @@ func main() {
 			}
 			defer conn.Close()
 
-			wbuf := []byte("hello")
-			for j := 0; j < 100; j++ {
+			randBuf := make([]byte, 64)
+			rand.Read(randBuf)
+			wbuf := []byte(hex.EncodeToString(randBuf))
+			// log.Println("wbuf:", string(wbuf))
+			for j := 0; j < loopTimes; j++ {
 				n1, err := conn.Write(wbuf)
 				if err != nil || n1 != len(wbuf) {
 					log.Fatalf("conn.Write failed: %v, %v", n1, err)
@@ -40,12 +50,23 @@ func main() {
 				}
 				if n2 != n1 || string(rbuf) != string(wbuf) {
 					log.Fatalf("conn.Read failed: %v, %v", n2, string(wbuf))
+				} else {
+					atomic.AddInt64(&count, 1)
+					// log.Println("response:", string(rbuf))
 				}
-				log.Println("response:", string(rbuf))
 				time.Sleep(time.Second / 10)
 			}
 		}()
 	}
 
-	wg.Wait()
+	ticker := time.NewTicker(time.Second)
+	for {
+		<-ticker.C
+		curr := atomic.SwapInt64(&count, 0)
+		total += curr
+		log.Println("request count:", curr, "total:", total)
+		if total >= int64(connNum*loopTimes) {
+			break
+		}
+	}
 }
