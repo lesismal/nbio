@@ -23,6 +23,7 @@
   - [Installation](#installation)
   - [Quick Start](#quick-start)
   - [Echo Examples](#echo-examples)
+  - [TLS Examples](#tls-examples)
   - [Performance](#performance)
 
 ## Features
@@ -30,6 +31,7 @@
 - [x] macos(bsd): kqueue
 - [x] windows: golang std net
 - [x] nbio.Conn implements a non-blocking net.Conn(except windows)
+- [x] tls supported
 
 ## Installation
 
@@ -103,11 +105,15 @@ c.Write(buf)
 - [echo-server](https://github.com/lesismal/nbio/blob/master/examples/echo/server/server.go)
 - [echo-client](https://github.com/lesismal/nbio/blob/master/examples/echo/client/client.go)
 
+## TLS Examples
+
+- [tls-server](https://github.com/lesismal/nbio/blob/master/examples/tls/server/server.go)
+- [tls-client](https://github.com/lesismal/nbio/blob/master/examples/tls/client/client.go)
+
 ## Performance
 
 **refer to this test, or write your own test cases:**
 
 - [bench-server](https://github.com/lesismal/nbio/blob/master/examples/bench/server/server.go)
 - [bench-client](https://github.com/lesismal/nbio/blob/master/examples/bench/client/client.go)
-
-
+- 
