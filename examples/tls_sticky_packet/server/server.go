@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+
 	// "math/rand"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	ntls "github.com/lesismal/nbio/extension/tls"
 )
 
 func init() {
@@ -33,26 +35,16 @@ func main() {
 		Addrs:   []string{"localhost:9999"},
 	})
 
-	g.OnOpen(func(c *nbio.Conn) {
-		tlsConn := tls.NewConn(c, tlsConfig, false, true, 0)
-		c.SetSession(tlsConn)
-	})
-	g.OnData(func(c *nbio.Conn, data []byte) {
-		tlsConn := c.Session().(*tls.Conn)
-		tlsConn.Append(data)
-		buf := make([]byte, 4096)
-		for {
-			n, err := tlsConn.Read(buf)
-			if err != nil {
-				c.Close()
-				return
-			}
-			if n <= 0 {
-				return
-			}
-			tlsConn.Write(buf[:n])
-		}
-	})
+	g.OnOpen(ntls.WrapOpen(tlsConfig, false, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+		log.Println("OnOpen:", c.RemoteAddr().String())
+	}))
+	g.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {
+		log.Println("OnClose:", c.RemoteAddr().String())
+	}))
+	g.OnData(ntls.WrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
+		log.Printf("OnData: %v, data length: %v\n", c.RemoteAddr().String(), len(data))
+		tlsConn.Write(data)
+	}))
 
 	err = g.Start()
 	if err != nil {
