@@ -24,31 +24,36 @@ const (
 
 // Config Of Gopher
 type Config struct {
-	// Name .
+	// Name describes your gopher name for logging, it's set to "NB" by default.
 	Name string
 
-	// Network .
+	// Network is the listening protocol, used with Addrs toghter.
+	// tcp* supported only by now, there's no plan for other protocol such as udp,
+	// because it's too easy to write udp server/client.
 	Network string
 
-	// Addrs .
+	// Addrs is the listening addr list for a nbio server.
+	// if it is empty, no listener created, then the Gopher is used for client by default.
 	Addrs []string
 
-	// MaxLoad .
+	// MaxLoad decides the max online num, it's set to 10k by default.
 	MaxLoad uint32
 
-	// NListener .
+	// NListener decides the listener goroutine num on *nix, it's set to 1 by default.
 	NListener uint32
 
-	// NPoller .
+	// NPoller decides poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller uint32
 
-	// ReadBufferSize .
+	// ReadBufferSize decides buffer size for reading, it's set to 16k by default.
 	ReadBufferSize uint32
 
-	// MaxWriteBufferSize .
+	// MaxWriteBufferSize decides max write buffer size for Conn, it's set to 1m by default.
+	// if the connection's Send-Q is full and the data cached by nbio is
+	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize uint32
 
-	// LockThread .
+	// LockThread decides poller's goroutine to lock thread or not, it's set to false by default.
 	LockThread bool
 }
 
