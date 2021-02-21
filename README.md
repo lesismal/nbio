@@ -27,11 +27,14 @@
     - [New Gopher For Server-Side](#new-gopher-for-server-side)
     - [New Gopher For Client-Side](#new-gopher-for-client-side)
     - [Start Gopher](#start-gopher)
-    - [Custom Other Config](#custom-other-config)
+    - [Custom Other Config For Gopher](#custom-other-config-for-gopher)
+    - [SetDeadline/SetReadDeadline/SetWriteDeadline](#setdeadlinesetreaddeadlinesetwritedeadline)
+    - [Bind User Session With Conn](#bind-user-session-with-conn)
+    - [Writev / Batch Write](#writev--batch-write)
     - [Handle New Connection](#handle-new-connection)
     - [Handle Disconnected](#handle-disconnected)
     - [Handle Data](#handle-data)
-    - [Handle Memory Allocation/Free For Read](#handle-memory-allocationfree-for-read)
+    - [Handle Memory Allocation/Free For Reading](#handle-memory-allocationfree-for-reading)
     - [Handle Conn Before Read](#handle-conn-before-read)
     - [Handle Conn After Read](#handle-conn-after-read)
     - [Handle Conn Before Write](#handle-conn-before-write)
@@ -140,7 +143,7 @@ if err != nil {
 defer g.Stop()
 ```
 
-### Custom Other Config
+### Custom Other Config For Gopher
 ```golang
 conf := nbio.Config struct {
     // Name describes your gopher name for logging, it's set to "NB" by default
@@ -168,6 +171,33 @@ conf := nbio.Config struct {
 }
 ```
 
+### SetDeadline/SetReadDeadline/SetWriteDeadline
+```golang
+var c *nbio.Conn = ...
+c.SetDeadline(time.Now().Add(time.Second * 10))
+c.SetReadDeadline(time.Now().Add(time.Second * 10))
+c.SetWriteDeadline(time.Now().Add(time.Second * 10))
+```
+
+### Bind User Session With Conn
+```golang
+var c *nbio.Conn = ...
+var session *YourSessionType = ... 
+c.SetSession(session)
+```
+
+```golang
+var c *nbio.Conn = ...
+session := c.Session().(*YourSessionType)
+```
+
+### Writev / Batch Write
+```golang
+var c *nbio.Conn = ...
+var data [][]byte = ...
+c.Writev(data)
+```
+
 ### Handle New Connection
 ```golang
 g.OnOpen(func(c *Conn) {
@@ -191,7 +221,7 @@ g.OnData(func(c *Conn, data []byte) {
 })
 ```
 
-### Handle Memory Allocation/Free For Read
+### Handle Memory Allocation/Free For Reading
 ```golang
 import "sync"
 
