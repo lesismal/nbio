@@ -284,4 +284,4 @@ g.OnData(func(c *Conn, data []byte) {
 
 **nbio** depends on std lib only.
 
-extension for TLS depends on [lesismal/llib/std/crypto/tls](), which is copied from of go1.6 and rewrited, if tls is used like the [example](#tls-examples), go1.6+ is needed.
+extension for TLS depends on [lesismal/llib/std/crypto/tls](), which is copied from go1.6 and rewrited, if tls is used like the [example](#tls-examples), go1.6+ is needed.
