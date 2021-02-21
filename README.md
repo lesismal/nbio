@@ -99,18 +99,18 @@ import "github.com/lesismal/nbio"
 g := nbio.NewGopher(nbio.Config{})
 
 g.OnData(func(c *nbio.Conn, data []byte) {
-	// ...
+    // ...
 })
 
 err := g.Start()
 if err != nil {
-	fmt.Printf("Start failed: %v\n", err)
+    fmt.Printf("Start failed: %v\n", err)
 }
 defer g.Stop()
 
 c, err := nbio.Dial("tcp", addr)
 if err != nil {
-	fmt.Printf("Dial failed: %v\n", err)
+    fmt.Printf("Dial failed: %v\n", err)
 }
 g.AddConn(c)
 
@@ -138,7 +138,7 @@ g := nbio.NewGopher(nbio.Config{})
 ```golang
 err := g.Start()
 if err != nil {
-	fmt.Printf("Start failed: %v\n", err)
+    fmt.Printf("Start failed: %v\n", err)
 }
 defer g.Stop()
 ```
@@ -147,27 +147,27 @@ defer g.Stop()
 ```golang
 conf := nbio.Config struct {
     // Name describes your gopher name for logging, it's set to "NB" by default
-	Name: "NB",
+    Name: "NB",
 
     // MaxLoad decides the max online num, it's set to 10k by default
-	MaxLoad: 1024 * 10, 
+    MaxLoad: 1024 * 10, 
 
-	// NListener decides the listener goroutine num on *nix, it's set to 1 by default
-	NListener: 1,
+    // NListener decides the listener goroutine num on *nix, it's set to 1 by default
+    NListener: 1,
 
-	// NPoller decides poller goroutine num, it's set to runtime.NumCPU() by default
-	NPoller: runtime.NumCPU(),
+    // NPoller decides poller goroutine num, it's set to runtime.NumCPU() by default
+    NPoller: runtime.NumCPU(),
 
-	// ReadBufferSize decides buffer size for reading, it's set to 16k by default
-	ReadBufferSize: 1024 * 16,
+    // ReadBufferSize decides buffer size for reading, it's set to 16k by default
+    ReadBufferSize: 1024 * 16,
 
-	// MaxWriteBufferSize decides max write buffer size for Conn, it's set to 1m by default.
+    // MaxWriteBufferSize decides max write buffer size for Conn, it's set to 1m by default.
     // if the connection's Send-Q is full and the data cached by nbio is 
     // more than MaxWriteBufferSize, the connection would be closed by nbio.
-	MaxWriteBufferSize uint32
+    MaxWriteBufferSize uint32
 
-	// LockThread decides poller's goroutine to lock thread or not.
-	LockThread bool
+    // LockThread decides poller's goroutine to lock thread or not.
+    LockThread bool
 }
 ```
 
@@ -226,9 +226,9 @@ g.OnData(func(c *Conn, data []byte) {
 import "sync"
 
 var memPool = sync.Pool{
-	New: func() interface{} {
-		return make([]byte, yourSize)
-	},
+    New: func() interface{} {
+        return make([]byte, yourSize)
+    },
 }
 
 g.OnMemAlloc(func(c *Conn) []byte {
