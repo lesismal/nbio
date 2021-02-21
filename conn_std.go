@@ -21,7 +21,7 @@ type Conn struct {
 	closed   bool
 	closeErr error
 
-	readBuffer []byte
+	ReadBuffer []byte
 
 	// user session
 	session interface{}
@@ -34,6 +34,7 @@ func (c *Conn) Hash() int {
 
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
+	c.g.beforeRead(c)
 	nread, err := c.conn.Read(b)
 	if c.closeErr == nil {
 		c.closeErr = err
@@ -43,6 +44,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write wraps net.Conn.Write
 func (c *Conn) Write(b []byte) (int, error) {
+	c.g.beforeWrite(c)
+
 	nwrite, err := c.conn.Write(b)
 	if err != nil {
 		if c.closeErr == nil {

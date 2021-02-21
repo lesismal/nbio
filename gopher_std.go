@@ -92,25 +92,17 @@ func NewGopher(conf Config) *Gopher {
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
 		connsStd:           map[*Conn]struct{}{},
-		onOpen:             func(c *Conn) {},
-		onClose:            func(c *Conn, err error) {},
-		onRead: func(c *Conn, b []byte) ([]byte, error) {
-			n, err := c.Read(b)
-			if err != nil {
-				return nil, err
-			}
-			return b[:n], err
-		},
-		onData:  func(c *Conn, data []byte) {},
-		trigger: time.NewTimer(timeForever),
-		chTimer: make(chan struct{}),
+		trigger:            time.NewTimer(timeForever),
+		chTimer:            make(chan struct{}),
 	}
 
+	g.initHandlers()
+
 	g.OnMemAlloc(func(c *Conn) []byte {
-		if c.readBuffer == nil {
-			c.readBuffer = make([]byte, g.readBufferSize)
+		if c.ReadBuffer == nil {
+			c.ReadBuffer = make([]byte, int(g.readBufferSize))
 		}
-		return c.readBuffer
+		return c.ReadBuffer
 	})
 
 	return g

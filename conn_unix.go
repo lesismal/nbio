@@ -34,7 +34,7 @@ type Conn struct {
 	lAddr net.Addr
 	rAddr net.Addr
 
-	readBuffer []byte
+	ReadBuffer []byte
 
 	session interface{}
 }
@@ -55,6 +55,10 @@ func (c *Conn) Read(b []byte) (int, error) {
 	c.mux.Unlock()
 
 	n, err := syscall.Read(int(c.fd), b)
+	if err == nil {
+		c.g.afterRead(c)
+	}
+
 	return n, err
 }
 
@@ -66,6 +70,8 @@ func (c *Conn) Write(b []byte) (int, error) {
 		c.mux.Unlock()
 		return -1, errClosed
 	}
+
+	c.g.beforeWrite(c)
 
 	n, err := c.write(b)
 	if err != nil && err != syscall.EAGAIN {
@@ -101,6 +107,8 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		c.mux.Unlock()
 		return 0, errClosed
 	}
+
+	c.g.beforeWrite(c)
 
 	n, err := c.writev(in)
 	if err != nil && err != syscall.EAGAIN {

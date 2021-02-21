@@ -21,7 +21,7 @@ type poller struct {
 
 	currLoad int64
 
-	readBuffer []byte
+	ReadBuffer []byte
 
 	pollType   string
 	isListener bool
