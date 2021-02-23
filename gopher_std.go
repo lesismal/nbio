@@ -70,7 +70,7 @@ func (g *Gopher) Conn(conn net.Conn) (*Conn, error) {
 	}
 	c, ok := conn.(*Conn)
 	if !ok {
-		c = newConn(conn)
+		c = newConn(conn, true)
 	}
 	return c, nil
 }

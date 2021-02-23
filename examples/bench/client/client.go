@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	addrs = "localhost:8888"
+	addr = "localhost:8888"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 		atomic.AddInt64(&qps, 1)
 		atomic.AddInt64(&totalRead, int64(len(data)))
 		atomic.AddInt64(&totalWrite, int64(len(data)))
-		c.Write(append([]byte(nil), data...))
+		c.Write(append([]byte{}, data...))
 	})
 
 	err := g.Start()
@@ -40,9 +40,9 @@ func main() {
 
 	for i := 0; i < clientNum; i++ {
 		wg.Add(1)
-		data := make([]byte, bufsize)
 		go func() {
-			c, err := nbio.Dial("tcp", addrs)
+			data := make([]byte, bufsize)
+			c, err := nbio.Dial("tcp", addr)
 			if err != nil {
 				fmt.Printf("Dial failed: %v\n", err)
 			}

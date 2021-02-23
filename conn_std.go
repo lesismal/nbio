@@ -185,12 +185,15 @@ func (c *Conn) SetSession(session interface{}) bool {
 	return false
 }
 
-func newConn(conn net.Conn) *Conn {
+func newConn(conn net.Conn, fromClient ...interface{}) *Conn {
 	c := &Conn{
-		conn: conn.(*net.TCPConn),
+		conn: conn,
 	}
 
 	addr := conn.RemoteAddr().String()
+	if len(fromClient) > 0 {
+		addr = conn.LocalAddr().String()
+	}
 	for _, ch := range addr {
 		c.hash = 31*c.hash + int(ch)
 	}
