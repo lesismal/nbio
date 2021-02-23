@@ -64,13 +64,10 @@ func WrapData(h func(c *nbio.Conn, tlsConn *Conn, data []byte)) func(c *nbio.Con
 						c.Close()
 						return
 					}
-					if n <= 0 {
-						return
-					}
-					if h != nil {
+					if h != nil && n > 0 {
 						h(c, tlsConn, tlsConn.ReadBuffer[:n])
 					}
-					if n <= len(tlsConn.ReadBuffer) {
+					if n < len(tlsConn.ReadBuffer) {
 						return
 					}
 				}
