@@ -38,6 +38,7 @@
     - [Handle Conn Before Read](#handle-conn-before-read)
     - [Handle Conn After Read](#handle-conn-after-read)
     - [Handle Conn Before Write](#handle-conn-before-write)
+  - [Std Net Examples](#std-net-examples)
   - [Echo Examples](#echo-examples)
   - [TLS Examples](#tls-examples)
   - [Bench Examples](#bench-examples)
@@ -262,6 +263,12 @@ g.OnData(func(c *Conn, data []byte) {
     c.SetWriteDeadline(time.Now().Add(time.Second*5))
 })
 ```
+
+## Std Net Examples
+
+- [std-net-echo-server](https://github.com/lesismal/nbio/blob/master/examples/netstd/server/server.go)
+- [std-net-echo-client](https://github.com/lesismal/nbio/blob/master/examples/netstd/client/client.go)
+
 
 ## Echo Examples
 
