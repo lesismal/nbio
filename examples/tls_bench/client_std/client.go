@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -66,13 +68,14 @@ func main() {
 			defer conn.Close()
 
 			for {
+				rand.Read(wbuf)
 				n1, err := conn.Write(wbuf)
 				if err != nil || n1 != len(wbuf) {
 					log.Fatalf("conn.Write failed: %v, %v", n1, err)
 				}
 
 				n2, err := io.ReadFull(conn, rbuf)
-				if err != nil || n2 != n1 {
+				if err != nil || n2 != n1 || !bytes.Equal(wbuf, rbuf) {
 					log.Fatalf("conn.Read failed: %v", err)
 				}
 				atomic.AddInt64(&qps, 1)
