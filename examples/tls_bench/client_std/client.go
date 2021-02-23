@@ -31,24 +31,24 @@ func main() {
 	)
 
 	tlsConfigs := []*tls.Config{
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS10,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS11,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS12,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS13,
 		},
 		// SSL is not supported
-		// &tls.Config{
+		// &{
 		// 	InsecureSkipVerify: true,
 		// 	MaxVersion:         tls.VersionSSL30,
 		// },

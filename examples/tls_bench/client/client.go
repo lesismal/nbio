@@ -16,26 +16,26 @@ import (
 var (
 	addr = "localhost:8888"
 
-	tlsConfigs = []*tls.Config{
+	configs = []*tls.Config{
 		// sth wrong with TLS 1.0
-		// &tls.Config{
+		// {
 		// 	InsecureSkipVerify: true,
 		// 	MaxVersion:         ltls.VersionTLS10,
 		// },
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         ltls.VersionTLS11,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         ltls.VersionTLS12,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         ltls.VersionTLS13,
 		},
 		// SSL is not supported
-		// &tls.Config{
+		// {
 		// 	InsecureSkipVerify: true,
 		// 	MaxVersion:         ltls.VersionSSL30,
 		// },
@@ -48,8 +48,8 @@ type Session struct {
 	Buffer *bytes.Buffer
 }
 
-// WrapData .
-func WrapData(h func(c *nbio.Conn, tlsConn *tls.Conn, data []byte)) func(c *nbio.Conn, data []byte) {
+// wrapData .
+func wrapData(h func(c *nbio.Conn, tlsConn *tls.Conn, data []byte)) func(c *nbio.Conn, data []byte) {
 	return func(c *nbio.Conn, data []byte) {
 
 		if isession := c.Session(); isession != nil {
@@ -84,7 +84,7 @@ func main() {
 	)
 
 	g := nbio.NewGopher(nbio.Config{})
-	g.OnData(WrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
+	g.OnData(wrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
 		session := c.Session().(*Session)
 		session.Buffer.Push(data)
 		for session.Buffer.Len() >= bufsize {
@@ -105,7 +105,7 @@ func main() {
 	for i := 0; i < clientNum; i++ {
 		wg.Add(1)
 
-		tlsConfig := tlsConfigs[i%len(tlsConfigs)]
+		tlsConfig := configs[i%len(configs)]
 		go func() {
 			data := make([]byte, bufsize)
 

@@ -19,31 +19,31 @@ func main() {
 	connNum := 10
 	loopTimes := 10
 
-	tlsConfigs := []*tls.Config{
-		&tls.Config{
+	configs := []*tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS10,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS11,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS12,
 		},
-		&tls.Config{
+		{
 			InsecureSkipVerify: true,
 			MaxVersion:         tls.VersionTLS13,
 		},
 		// SSL is not supported
-		// &tls.Config{
+		// {
 		// 	InsecureSkipVerify: true,
 		// 	MaxVersion:         tls.VersionSSL30,
 		// },
 	}
 	for i := 0; i < connNum; i++ {
-		tlsConfig := tlsConfigs[i%len(tlsConfigs)]
+		tlsConfig := configs[i%len(configs)]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
