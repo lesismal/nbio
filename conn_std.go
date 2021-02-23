@@ -16,7 +16,7 @@ type Conn struct {
 
 	mux sync.Mutex
 
-	conn *net.TCPConn
+	conn net.Conn
 
 	closed   bool
 	closeErr error
@@ -113,32 +113,56 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 
 // SetNoDelay wraps net.Conn.SetNoDelay
 func (c *Conn) SetNoDelay(nodelay bool) error {
-	return c.conn.SetNoDelay(nodelay)
+	conn, ok := c.conn.(*net.TCPConn)
+	if ok {
+		return conn.SetNoDelay(nodelay)
+	}
+	return nil
 }
 
 // SetReadBuffer wraps net.Conn.SetReadBuffer
 func (c *Conn) SetReadBuffer(bytes int) error {
-	return c.conn.SetReadBuffer(bytes)
+	conn, ok := c.conn.(*net.TCPConn)
+	if ok {
+		return conn.SetReadBuffer(bytes)
+	}
+	return nil
 }
 
 // SetWriteBuffer wraps net.Conn.SetWriteBuffer
 func (c *Conn) SetWriteBuffer(bytes int) error {
-	return c.conn.SetWriteBuffer(bytes)
+	conn, ok := c.conn.(*net.TCPConn)
+	if ok {
+		return conn.SetWriteBuffer(bytes)
+	}
+	return nil
 }
 
 // SetKeepAlive wraps net.Conn.SetKeepAlive
 func (c *Conn) SetKeepAlive(keepalive bool) error {
-	return c.conn.SetKeepAlive(keepalive)
+	conn, ok := c.conn.(*net.TCPConn)
+	if ok {
+		return conn.SetKeepAlive(keepalive)
+	}
+	return nil
 }
 
 // SetKeepAlivePeriod wraps net.Conn.SetKeepAlivePeriod
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
-	return c.conn.SetKeepAlivePeriod(d)
+	conn, ok := c.conn.(*net.TCPConn)
+	if ok {
+		return conn.SetKeepAlivePeriod(d)
+	}
+	return nil
 }
 
 // SetLinger wraps net.Conn.SetLinger
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
-	return c.conn.SetLinger(int(linger))
+	conn, ok := c.conn.(*net.TCPConn)
+	if ok {
+		return conn.SetLinger(int(linger))
+	}
+	return nil
 }
 
 // Session returns user session
@@ -185,7 +209,7 @@ func Dial(network string, address string) (*Conn, error) {
 	}
 
 	c := &Conn{
-		conn: conn.(*net.TCPConn),
+		conn: conn,
 	}
 
 	addr := conn.LocalAddr().String()

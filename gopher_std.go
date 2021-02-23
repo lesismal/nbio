@@ -3,6 +3,8 @@
 package nbio
 
 import (
+	"errors"
+	"net"
 	"runtime"
 	"strings"
 	"time"
@@ -58,6 +60,20 @@ func (g *Gopher) Start() error {
 	} else {
 		log.Info("Gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
+	return nil
+}
+
+// AddConn adds conn to a poller
+func (g *Gopher) AddConn(conn net.Conn) error {
+	if conn == nil {
+		return errors.New("invalid conn: nil")
+	}
+	c, ok := conn.(*Conn)
+	if !ok {
+		c = newConn(conn)
+	}
+	g.increase()
+	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
 	return nil
 }
 

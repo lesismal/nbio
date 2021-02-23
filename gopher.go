@@ -150,15 +150,6 @@ func (g *Gopher) Stop() {
 	g.Wait()
 }
 
-// AddConn adds conn to a poller
-func (g *Gopher) AddConn(c *Conn) {
-	if c == nil {
-		return
-	}
-	g.increase()
-	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
-}
-
 // Online returns Gopher's total online
 func (g *Gopher) Online() int64 {
 	return atomic.LoadInt64(&g.currLoad)
