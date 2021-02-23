@@ -482,7 +482,6 @@ func (c *Conn) closeWithError(err error) error {
 
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	fd := c.fd
-	c.session = nil
 	c.closeErr = err
 	if c.g != nil {
 		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)

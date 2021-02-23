@@ -24,16 +24,16 @@ func Dial(network, addr string, config *Config) (*tls.Conn, error) {
 // WrapOpen returns an opening handler of nbio.Gopher
 func WrapOpen(tlsConfig *Config, isClient bool, readBufferSize int, h func(c *nbio.Conn, tlsConn *Conn)) func(c *nbio.Conn) {
 	return func(c *nbio.Conn) {
-		if !isClient {
+		var tlsConn *tls.Conn
+		sesseion := c.Session()
+		if sesseion != nil {
+			tlsConn = sesseion.(*tls.Conn)
+		}
+		if tlsConn == nil && !isClient {
 			tlsConn := tls.NewConn(c, tlsConfig, isClient, true, readBufferSize)
 			c.SetSession((*Conn)(tlsConn))
 		}
 		if h != nil {
-			var tlsConn *tls.Conn
-			sesseion := c.Session()
-			if sesseion != nil {
-				tlsConn = sesseion.(*tls.Conn)
-			}
 			h(c, tlsConn)
 		}
 	}
