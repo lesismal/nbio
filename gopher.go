@@ -3,6 +3,7 @@ package nbio
 import (
 	"container/heap"
 	"fmt"
+	"net"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -148,6 +149,17 @@ func (g *Gopher) Stop() {
 	}
 
 	g.Wait()
+}
+
+// AddConn adds conn to a poller
+func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
+	c, err := g.Conn(conn)
+	if err != nil {
+		return nil, err
+	}
+	g.increase()
+	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
+	return c, nil
 }
 
 // Online returns Gopher's total online

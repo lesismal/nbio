@@ -1,35 +1,77 @@
 package main
 
 import (
-	"crypto/tls"
-	"io"
+	"bytes"
+	"context"
+	"fmt"
 	"log"
+	"time"
+
+	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/extension/tls"
+)
+
+var (
+	tlsConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
 )
 
 func main() {
-	tlsConfig := &tls.Config{
-		InsecureSkipVerify: true,
-	}
+	var (
+		rbuf   []byte
+		wbuf   = []byte("hello")
+		addr   = "localhost:8888"
+		ctx, _ = context.WithTimeout(context.Background(), time.Second)
+	)
 
-	conn, err := tls.Dial("tcp", "localhost:8888", tlsConfig)
+	g := nbio.NewGopher(nbio.Config{})
+
+	done := make(chan int)
+	isClient := true
+	g.OnOpen(tls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+		log.Println("OnOpen:", c.RemoteAddr().String())
+		// tlsConn.Write(wbuf)
+	}))
+	g.OnClose(tls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {
+		log.Println("OnClose:", c.RemoteAddr().String())
+	}))
+	g.OnData(tls.WrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
+		rbuf = append(rbuf, data...)
+		if bytes.Equal(wbuf, rbuf) {
+			close(done)
+		}
+	}))
+
+	err := g.Start()
 	if err != nil {
-		panic(err)
+		fmt.Printf("Start failed: %v\n", err)
 	}
-	defer conn.Close()
+	defer g.Stop()
 
-	wbuf := []byte("hello")
-	n1, err := conn.Write(wbuf)
-	if err != nil || n1 != len(wbuf) {
-		log.Fatalf("conn.Write failed: %v, %v", n1, err)
-	}
-
-	rbuf := make([]byte, len(wbuf))
-	n2, err := io.ReadFull(conn, rbuf)
+	// step 1: make a tls.Conn by tls.Dial
+	tlsConn, err := tls.Dial("tcp", addr, tlsConfig)
 	if err != nil {
-		log.Fatalf("conn.Read failed: %v", err)
+		log.Fatalf("Dial failed: %v\n", err)
 	}
-	if n2 != n1 || string(rbuf) != string(wbuf) {
-		log.Fatalf("conn.Read failed: %v, %v", n2, string(wbuf))
+	// step 2:
+	// add tls.Conn.conn to gopher, and get the nbio.Conn. the new nbio.Conn is non-blocking
+	nbConn, err := g.Conn(tlsConn.Conn())
+	if err != nil {
+		log.Fatalf("AddConn failed: %v\n", err)
 	}
-	log.Println("response:", string(rbuf))
+	// step 3: set tls.Conn and nbio.Conn to each other, and add nbio.Conn to the gopher
+	nbConn.SetSession(tlsConn)
+	tlsConn.ResetConn(nbConn, 8192)
+	g.AddConn(nbConn)
+
+	// step 4: write data here or in the OnOpen handler or anywhere
+	tlsConn.Write(wbuf)
+
+	select {
+	case <-ctx.Done():
+		log.Fatal("timeout")
+	case <-done:
+		log.Println("success")
+	}
 }

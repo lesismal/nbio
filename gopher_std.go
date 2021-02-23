@@ -63,18 +63,16 @@ func (g *Gopher) Start() error {
 	return nil
 }
 
-// AddConn adds conn to a poller
-func (g *Gopher) AddConn(conn net.Conn) error {
+// Conn converts net.Conn to *Conn
+func (g *Gopher) Conn(conn net.Conn) (*Conn, error) {
 	if conn == nil {
-		return errors.New("invalid conn: nil")
+		return nil, errors.New("invalid conn: nil")
 	}
 	c, ok := conn.(*Conn)
 	if !ok {
 		c = newConn(conn)
 	}
-	g.increase()
-	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
-	return nil
+	return c, nil
 }
 
 // NewGopher is a factory impl
