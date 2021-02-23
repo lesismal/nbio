@@ -209,7 +209,7 @@ g.OnOpen(func(c *Conn) {
 
 ### Handle Disconnected
 ```golang
-g.OnOpen(func(c *Conn) {
+g.OnClose(func(c *Conn) {
     // clear sessions from user layer
 })
 ```
