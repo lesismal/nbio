@@ -62,7 +62,9 @@ func main() {
 	}
 	// step 3: set tls.Conn and nbio.Conn to each other, and add nbio.Conn to the gopher
 	nbConn.SetSession(tlsConn)
-	tlsConn.ResetConn(nbConn, 8192)
+	nonBlock := true
+	readBufferSize := 8192
+	tlsConn.ResetConn(nbConn, nonBlock, readBufferSize)
 	g.AddConn(nbConn)
 
 	// step 4: write data here or in the OnOpen handler or anywhere
