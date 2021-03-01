@@ -270,7 +270,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	}
 
 	// EFD_NONBLOCK = 0x800
-	r0, _, e0 := syscall.Syscall(syscall.SYS_EVENTFD2, 0, 0x800, 0)
+	r0, _, e0 := syscall.Syscall(syscall.SYS_EVENTFD2, 0, syscall.O_NONBLOCK, 0)
 	if e0 != 0 {
 		syscall.Close(fd)
 		return nil, err
