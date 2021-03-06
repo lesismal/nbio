@@ -347,7 +347,7 @@ func (g *Gopher) timerLoop() {
 				now := time.Now()
 				it := g.timers[0]
 				if now.After(it.expire) {
-					heap.Pop(&g.timers)
+					heap.Remove(&g.timers, it.index)
 					g.tmux.Unlock()
 					func() {
 						defer func() {
