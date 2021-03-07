@@ -10,6 +10,7 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"unsafe"
 
 	"github.com/lesismal/nbio/mempool"
 )
@@ -57,11 +58,14 @@ func (p *Parser) Read(data []byte) error {
 	var start = 0
 	var offset = len(p.cache)
 	if offset > 0 {
-		data = append(p.cache, data...)
+		p.cache = mempool.Realloc(p.cache, offset+len(data))
+		copy(p.cache[offset:], data)
+		mempool.Free(data)
+		data = p.cache
+		p.cache = nil
 	}
-	bodyRetained := false
 	defer func() {
-		if !bodyRetained {
+		if p.cache != nil && unsafe.Pointer(&data[0]) != unsafe.Pointer(&p.cache[0]) {
 			mempool.Free(data)
 		}
 	}()
@@ -333,21 +337,27 @@ func (p *Parser) Read(data []byte) error {
 			return ErrLFExpected
 		case stateBodyContentLength:
 			cl := p.contentLength
-			if len(data)-start < cl {
-				p.cache = data[start:]
+			left := len(data) - start
+			if left < cl {
+				if left < 2048 {
+					p.cache = mempool.Malloc(2048)[:left]
+				} else {
+					p.cache = mempool.Malloc(left)
+				}
+				copy(p.cache, data[start:])
 				return nil
 			}
-			if start+cl == len(data) {
-				bodyRetained = true
-				p.Processor.OnBody(data, start)
-			} else {
-				body := mempool.Malloc(cl)
-				copy(body, data[start:start+cl])
-				p.Processor.OnBody(body, 0)
-			}
 
-			i = start + cl - 1
-			start = cl
+			left = cl
+			if left < 2048 {
+				left = 2048
+			}
+			body := mempool.Malloc(left)[:cl]
+			copy(body, data[start:start+cl])
+			p.Processor.OnBody(body)
+
+			start += cl
+			i = start - 1
 
 			p.handleMessage()
 		case stateBodyChunkSizeBefore:
@@ -403,21 +413,29 @@ func (p *Parser) Read(data []byte) error {
 			}
 			return ErrLFExpected
 		case stateBodyChunkData:
-			if len(data)-start < p.chunkSize {
-				p.cache = data[start:]
+			cl := p.chunkSize
+			left := len(data) - start
+			if left < cl {
+				if left < 2048 {
+					p.cache = mempool.Malloc(2048)[:left]
+				} else {
+					p.cache = mempool.Malloc(left)
+				}
+				copy(p.cache, data[start:])
 				return nil
 			}
-			if start+p.chunkSize == len(data) {
-				bodyRetained = true
-				p.Processor.OnBody(data, start)
-			} else {
-				body := mempool.Malloc(p.chunkSize)
-				copy(body, data[start:start+p.chunkSize])
-				p.Processor.OnBody(body, 0)
-			}
 
-			start += p.chunkSize
+			left = cl
+			if left < 2048 {
+				left = 2048
+			}
+			body := mempool.Malloc(left)[:cl]
+			copy(body, data[start:start+cl])
+			p.Processor.OnBody(body)
+
+			start += cl
 			i = start - 1
+
 			p.nextState(stateBodyChunkDataCR)
 		case stateBodyChunkDataCR:
 			if c == '\r' {
@@ -529,7 +547,20 @@ func (p *Parser) Read(data []byte) error {
 		default:
 		}
 	}
-	p.cache = data[start:]
+
+	if start > 0 {
+		left := len(data) - start
+		if left > 0 {
+			if left < 2048 {
+				p.cache = mempool.Malloc(2048)[:left]
+			} else {
+				p.cache = mempool.Malloc(left)
+			}
+			copy(p.cache, data[start:])
+		}
+	} else {
+		p.cache = data
+	}
 	return nil
 }
 

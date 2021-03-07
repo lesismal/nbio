@@ -67,12 +67,12 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	}
 
 	for i := 0; i < len(data)-1; i++ {
-		err := parser.Read(data[i : i+1])
+		err := parser.Read(append([]byte{}, data[i:i+1]...))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	err = parser.Read(data[len(data)-1:])
+	err = parser.Read(append([]byte{}, data[len(data)-1:]...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 		reads := [][]byte{}
 		for len(tmp) > 0 {
 			nRead := int(rand.Intn(len(tmp)) + 1)
-			readBuf := tmp[:nRead]
+			readBuf := append([]byte{}, tmp[:nRead]...)
 			reads = append(reads, readBuf)
 			tmp = tmp[nRead:]
 			err = parser.Read(readBuf)
