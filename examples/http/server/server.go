@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"time"
 
 	"github.com/lesismal/nbio/nbhttp"
@@ -23,8 +24,13 @@ func main() {
 	mux.HandleFunc("/echo", onEcho)
 
 	g := nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Network:      "tcp",
+		Addrs:        []string{"localhost:8000", "localhost:8001", "localhost:8002"},
+		NPoller:      runtime.NumCPU() * 2,
+		NParser:      runtime.NumCPU() * 4,
+		TaskPoolSize: runtime.NumCPU() * 512,
+		TaskIdleTime: time.Second * 120,
+		LockThread:   true,
 	}, mux, nil)
 
 	err := g.Start()
@@ -34,5 +40,10 @@ func main() {
 	}
 	defer g.Stop()
 
-	g.Wait()
+	ticker := time.NewTicker(time.Second)
+	for i := 1; true; i++ {
+		<-ticker.C
+		fmt.Printf("running for %v seconds, NumGoroutine: %v\n", i, runtime.NumGoroutine())
+		fmt.Println(g.State().String())
+	}
 }

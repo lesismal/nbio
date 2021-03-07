@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"time"
 )
 
@@ -15,8 +17,24 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func main() {
+func serve(addr string) {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/echo", onEcho)
-	http.ListenAndServe("localhost:9999", mux)
+	server := http.Server{
+		Addr:    addr,
+		Handler: mux,
+	}
+	server.ListenAndServe()
+}
+
+func main() {
+	go serve("localhost:9000")
+	go serve("localhost:9001")
+	go serve("localhost:9002")
+
+	ticker := time.NewTicker(time.Second)
+	for i := 1; true; i++ {
+		<-ticker.C
+		fmt.Printf("running for %v seconds, NumGoroutine: %v\n", i, runtime.NumGoroutine())
+	}
 }

@@ -84,10 +84,16 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 	if conf.ReadBufferSize == 0 {
 		conf.ReadBufferSize = DefaultHTTPReadBufferSize
 	}
+	if conf.NPoller <= 0 {
+		conf.NPoller = runtime.NumCPU()
+	}
+	if conf.NParser <= 0 {
+		conf.NParser = conf.NPoller * 4
+	}
 
 	if executor == nil {
 		if conf.TaskPoolSize <= 0 {
-			conf.TaskPoolSize = DefaultExecutorTaskPoolSize
+			conf.TaskPoolSize = conf.NParser * 128
 		}
 		if conf.TaskIdleTime <= 0 {
 			conf.TaskIdleTime = DefaultExecutorTaskIdleTime
@@ -98,13 +104,7 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 	if conf.MaxReadSize <= 0 {
 		conf.MaxReadSize = DefaultHTTPMaxReadSize
 	}
-	if conf.NPoller <= 0 {
-		conf.NPoller = runtime.NumCPU()
-	}
-	if conf.NParser <= 0 {
-		conf.NParser = conf.NPoller
-	}
-	fixedPool := taskpool.NewFixedPool(conf.NParser, 1024)
+	fixedPool := taskpool.NewFixedPool(conf.NParser, 128)
 	gopherConf := nbio.Config{
 		Name:               conf.Name,
 		Network:            conf.Network,

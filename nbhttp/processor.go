@@ -195,7 +195,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 			}
 		} else {
 			if p.Conn != nil {
-				p.Conn.SetReadDeadline(time.Now().Add(time.Second * 300))
+				p.Conn.SetReadDeadline(time.Now().Add(time.Second * 120))
 			}
 		}
 	})
