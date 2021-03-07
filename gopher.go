@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lesismal/nbio/log"
+	"github.com/lesismal/nbio/loging"
 )
 
 const (
@@ -188,7 +188,6 @@ func (g *Gopher) OnRead(h func(c *Conn, b []byte) ([]byte, error)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	// log.Info("---- set OnRead: %v", h)
 	g.onRead = h
 }
 
@@ -333,8 +332,8 @@ func (g *Gopher) resetTimer(it *htimer) {
 
 func (g *Gopher) timerLoop() {
 	defer g.Done()
-	log.Debug("Gopher[%v] timer start", g.Name)
-	defer log.Debug("Gopher[%v] timer stopped", g.Name)
+	loging.Debug("Gopher[%v] timer start", g.Name)
+	defer loging.Debug("Gopher[%v] timer stopped", g.Name)
 	for {
 		select {
 		case <-g.trigger.C:
@@ -353,7 +352,7 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								log.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
+								loging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
 								debug.PrintStack()
 							}
 						}()

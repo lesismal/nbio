@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lesismal/nbio/log"
+	"github.com/lesismal/nbio/loging"
 )
 
 type poller struct {
@@ -173,8 +173,8 @@ func (p *poller) start() {
 	}
 	defer p.g.Done()
 
-	log.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer log.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	loging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer loging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer syscall.Close(p.kfd)
 
 	if p.isListener {
@@ -204,10 +204,10 @@ func (p *poller) acceptorLoop() {
 				err = p.accept(fd)
 				if err != nil {
 					if err == syscall.EAGAIN {
-						log.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+						loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
 						time.Sleep(time.Second / 20)
 					} else {
-						log.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+						loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 						break
 					}
 				}
@@ -242,7 +242,7 @@ func (p *poller) readWriteLoop() {
 }
 
 func (p *poller) stop() {
-	log.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	loging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	p.trigger()
 }

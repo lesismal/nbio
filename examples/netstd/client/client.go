@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/log"
+	"github.com/lesismal/nbio/loging"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 		ctx, _ = context.WithTimeout(context.Background(), time.Second)
 	)
 
-	log.SetLevel(log.LevelInfo)
+	loging.SetLevel(loging.LevelInfo)
 
 	rand.Read(buf)
 
@@ -51,8 +51,8 @@ func main() {
 
 	select {
 	case <-ctx.Done():
-		log.Error("timeout")
+		loging.Error("timeout")
 	case <-done:
-		log.Info("success")
+		loging.Info("success")
 	}
 }

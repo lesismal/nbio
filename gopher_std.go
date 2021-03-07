@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lesismal/nbio/log"
+	"github.com/lesismal/nbio/loging"
 )
 
 // Start init and start pollers
@@ -56,9 +56,9 @@ func (g *Gopher) Start() error {
 	go g.timerLoop()
 
 	if len(g.addrs) == 0 {
-		log.Info("Gopher[%v] start", g.Name)
+		loging.Info("Gopher[%v] start", g.Name)
 	} else {
-		log.Info("Gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
+		loging.Info("Gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
 }

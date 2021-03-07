@@ -3,6 +3,7 @@ package nbio
 import (
 	"log"
 	"math/rand"
+	"net"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -10,7 +11,7 @@ import (
 	"time"
 )
 
-var addr = ":8888"
+var addr = "localhost:8888"
 var gopher *Gopher
 
 func init() {
@@ -80,15 +81,24 @@ func TestEcho(t *testing.T) {
 	})
 
 	one := func(n int) {
-		c, err := Dial("tcp", addr)
-		if err != nil {
-			log.Fatalf("Dial failed: %v", err)
+		var c net.Conn
+		var err error
+		if n%2 == 0 {
+			c, err = Dial("tcp", addr)
+			if err != nil {
+				log.Fatalf("Dial failed: %v", err)
+			}
+		} else {
+			c, err = net.Dial("tcp", addr)
+			if err != nil {
+				log.Fatalf("Dial failed: %v", err)
+			}
 		}
 		g.AddConn(c)
 		if n%2 == 0 {
-			c.Write(make([]byte, msgSize))
+			c.(*Conn).Writev([][]byte{make([]byte, msgSize)})
 		} else {
-			c.Writev([][]byte{make([]byte, msgSize)})
+			c.Write(make([]byte, msgSize))
 		}
 	}
 

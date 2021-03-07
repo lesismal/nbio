@@ -10,7 +10,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/lesismal/nbio/log"
+	"github.com/lesismal/nbio/loging"
 )
 
 const stopFd int = 1
@@ -127,8 +127,8 @@ func (p *poller) start() {
 	}
 	defer p.g.Done()
 
-	log.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer log.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	loging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer loging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer func() {
 		syscall.Close(p.epfd)
 		syscall.Close(p.evtfd)
@@ -169,10 +169,10 @@ func (p *poller) acceptorLoop() {
 				err = p.accept(fd)
 				if err != nil {
 					if err == syscall.EAGAIN {
-						log.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+						loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
 						time.Sleep(time.Second / 20)
 					} else {
-						log.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+						loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 						break
 					}
 				}
@@ -213,7 +213,7 @@ func (p *poller) readWriteLoop() {
 }
 
 func (p *poller) stop() {
-	log.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	loging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	n := uint64(1)
 	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
@@ -269,7 +269,6 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		return nil, err
 	}
 
-	// EFD_NONBLOCK = 0x800
 	r0, _, e0 := syscall.Syscall(syscall.SYS_EVENTFD2, 0, syscall.O_NONBLOCK, 0)
 	if e0 != 0 {
 		syscall.Close(fd)
