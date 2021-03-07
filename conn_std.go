@@ -102,16 +102,25 @@ func (c *Conn) RemoteAddr() net.Addr {
 
 // SetDeadline wraps net.Conn.SetDeadline
 func (c *Conn) SetDeadline(t time.Time) error {
+	if t.IsZero() {
+		t = time.Now().Add(timeForever)
+	}
 	return c.conn.SetDeadline(t)
 }
 
 // SetReadDeadline wraps net.Conn.SetReadDeadline
 func (c *Conn) SetReadDeadline(t time.Time) error {
+	if t.IsZero() {
+		t = time.Now().Add(timeForever)
+	}
 	return c.conn.SetReadDeadline(t)
 }
 
 // SetWriteDeadline wraps net.Conn.SetWriteDeadline
 func (c *Conn) SetWriteDeadline(t time.Time) error {
+	if t.IsZero() {
+		t = time.Now().Add(timeForever)
+	}
 	return c.conn.SetWriteDeadline(t)
 }
 

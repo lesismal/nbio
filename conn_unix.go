@@ -173,16 +173,25 @@ func (c *Conn) SetDeadline(t time.Time) error {
 		// if tw != nil {
 		// 	tw.reset(c, &c.wIndex, t)
 		// }
-		now := time.Now()
-		if c.rTimer == nil {
-			c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+		if !t.IsZero() {
+			now := time.Now()
+			if c.rTimer == nil {
+				c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+			} else {
+				c.rTimer.Reset(t.Sub(now))
+			}
+			if c.wTimer == nil {
+				c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+			} else {
+				c.wTimer.Reset(t.Sub(now))
+			}
 		} else {
-			c.rTimer.Reset(t.Sub(now))
-		}
-		if c.wTimer == nil {
-			c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
-		} else {
-			c.wTimer.Reset(t.Sub(now))
+			if c.rTimer != nil {
+				c.rTimer.Stop()
+			}
+			if c.wTimer != nil {
+				c.wTimer.Stop()
+			}
 		}
 	}
 	c.mux.Unlock()
@@ -197,11 +206,15 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 		// if tw != nil {
 		// 	tw.reset(c, &c.rIndex, t)
 		// }
-		now := time.Now()
-		if c.rTimer == nil {
-			c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
-		} else {
-			c.rTimer.Reset(t.Sub(now))
+		if !t.IsZero() {
+			now := time.Now()
+			if c.rTimer == nil {
+				c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+			} else {
+				c.rTimer.Reset(t.Sub(now))
+			}
+		} else if c.rTimer != nil {
+			c.rTimer.Stop()
 		}
 	}
 	c.mux.Unlock()
@@ -216,11 +229,15 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 		// if tw != nil {
 		// 	tw.reset(c, &c.wIndex, t)
 		// }
-		now := time.Now()
-		if c.wTimer == nil {
-			c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
-		} else {
-			c.wTimer.Reset(t.Sub(now))
+		if !t.IsZero() {
+			now := time.Now()
+			if c.wTimer == nil {
+				c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+			} else {
+				c.wTimer.Reset(t.Sub(now))
+			}
+		} else if c.wTimer != nil {
+			c.wTimer.Stop()
 		}
 	}
 	c.mux.Unlock()
