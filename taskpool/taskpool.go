@@ -1,4 +1,8 @@
-package nbhttp
+// Copyright 2020 lesismal. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
+package taskpool
 
 import (
 	"errors"
@@ -98,8 +102,8 @@ func (tp *TaskPool) Stop() {
 	}
 }
 
-// NewTaskPool .
-func NewTaskPool(size int, maxIdleTime time.Duration) *TaskPool {
+// New .
+func New(size int, maxIdleTime time.Duration) *TaskPool {
 	tp := &TaskPool{
 		wg:          &sync.WaitGroup{},
 		running:     true,

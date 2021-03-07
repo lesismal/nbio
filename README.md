@@ -150,24 +150,24 @@ conf := nbio.Config struct {
     // Name describes your gopher name for logging, it's set to "NB" by default
     Name: "NB",
 
-    // MaxLoad decides the max online num, it's set to 10k by default
+    // MaxLoad represents the max online num, it's set to 10k by default
     MaxLoad: 1024 * 10, 
 
-    // NListener decides the listener goroutine num on *nix, it's set to 1 by default
+    // NListener represents the listener goroutine num on *nix, it's set to 1 by default
     NListener: 1,
 
-    // NPoller decides poller goroutine num, it's set to runtime.NumCPU() by default
+    // NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default
     NPoller: runtime.NumCPU(),
 
-    // ReadBufferSize decides buffer size for reading, it's set to 16k by default
+    // ReadBufferSize represents buffer size for reading, it's set to 16k by default
     ReadBufferSize: 1024 * 16,
 
-    // MaxWriteBufferSize decides max write buffer size for Conn, it's set to 1m by default.
+    // MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
     // if the connection's Send-Q is full and the data cached by nbio is 
     // more than MaxWriteBufferSize, the connection would be closed by nbio.
     MaxWriteBufferSize uint32
 
-    // LockThread decides poller's goroutine to lock thread or not.
+    // LockThread represents poller's goroutine to lock thread or not.
     LockThread bool
 }
 ```

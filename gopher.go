@@ -1,3 +1,7 @@
+// Copyright 2020 lesismal. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 package nbio
 
 import (
@@ -14,13 +18,13 @@ import (
 
 const (
 	// DefaultMaxLoad .
-	DefaultMaxLoad uint32 = 1024 * 100
+	DefaultMaxLoad = 1024 * 100
 
 	// DefaultReadBufferSize .
-	DefaultReadBufferSize uint32 = 1024 * 16
+	DefaultReadBufferSize = 1024 * 16
 
 	// DefaultMaxWriteBufferSize .
-	DefaultMaxWriteBufferSize uint32 = 1024 * 1024
+	DefaultMaxWriteBufferSize = 1024 * 1024
 )
 
 var (
@@ -42,24 +46,24 @@ type Config struct {
 	// if it is empty, no listener created, then the Gopher is used for client by default.
 	Addrs []string
 
-	// MaxLoad decides the max online num, it's set to 10k by default.
-	MaxLoad uint32
+	// MaxLoad represents the max online num, it's set to 10k by default.
+	MaxLoad int
 
-	// NListener decides the listener goroutine num on *nix, it's set to 1 by default.
-	NListener uint32
+	// NListener represents the listener goroutine num on *nix, it's set to 1 by default.
+	NListener int
 
-	// NPoller decides poller goroutine num, it's set to runtime.NumCPU() by default.
-	NPoller uint32
+	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
+	NPoller int
 
-	// ReadBufferSize decides buffer size for reading, it's set to 16k by default.
-	ReadBufferSize uint32
+	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
+	ReadBufferSize int
 
-	// MaxWriteBufferSize decides max write buffer size for Conn, it's set to 1m by default.
+	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
 	// if the connection's Send-Q is full and the data cached by nbio is
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
-	MaxWriteBufferSize uint32
+	MaxWriteBufferSize int
 
-	// LockThread decides poller's goroutine to lock thread or not, it's set to false by default.
+	// LockThread represents poller's goroutine to lock thread or not, it's set to false by default.
 	LockThread bool
 }
 
@@ -93,10 +97,10 @@ type Gopher struct {
 
 	network            string
 	addrs              []string
-	listenerNum        uint32
-	pollerNum          uint32
-	readBufferSize     uint32
-	maxWriteBufferSize uint32
+	listenerNum        int
+	pollerNum          int
+	readBufferSize     int
+	maxWriteBufferSize int
 	lockThread         bool
 
 	lfds     []int
@@ -129,10 +133,10 @@ func (g *Gopher) Stop() {
 	g.trigger.Stop()
 	close(g.chTimer)
 
-	for i := uint32(0); i < g.listenerNum; i++ {
+	for i := 0; i < g.listenerNum; i++ {
 		g.listeners[i].stop()
 	}
-	for i := uint32(0); i < g.pollerNum; i++ {
+	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i].stop()
 	}
 	g.mux.Lock()
@@ -163,7 +167,7 @@ func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
 		return nil, err
 	}
 	g.increase()
-	g.pollers[uint32(c.Hash())%g.pollerNum].addConn(c)
+	g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
 	return c, nil
 }
 
@@ -378,7 +382,7 @@ func (g *Gopher) timerLoop() {
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd
 func (g *Gopher) PollerBuffer(c *Conn) []byte {
-	return g.pollers[uint32(c.Hash())%g.pollerNum].ReadBuffer
+	return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
 }
 
 func (g *Gopher) initHandlers() {

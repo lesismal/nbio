@@ -1,4 +1,4 @@
-// Copyright 2021 lesismal. All rights reserved.
+// Copyright 2020 lesismal. All rights reserved.
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
@@ -82,6 +82,21 @@ func (pool *MemPool) Free(buf []byte) error {
 	}
 	pool.buffers[bits].Put(buf)
 	return nil
+}
+
+// Malloc exports default package method
+func Malloc(size int) []byte {
+	return defaultMemPool.Malloc(size)
+}
+
+// Realloc exports default package method
+func Realloc(buf []byte, size int) []byte {
+	return defaultMemPool.Realloc(buf, size)
+}
+
+// Free exports default package method
+func Free(buf []byte) error {
+	return defaultMemPool.Free(buf)
 }
 
 // New factory

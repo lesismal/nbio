@@ -1,3 +1,7 @@
+// Copyright 2020 lesismal. All rights reserved.
+// Use of this source code is governed by an MIT-style
+// license that can be found in the LICENSE file.
+
 // +build linux darwin netbsd freebsd openbsd dragonfly
 
 package nbio
@@ -28,7 +32,7 @@ func (g *Gopher) Start() error {
 		g.lfds = append(g.lfds, fd)
 	}
 
-	for i := uint32(0); i < g.listenerNum; i++ {
+	for i := 0; i < g.listenerNum; i++ {
 		g.listeners[i], err = newPoller(g, true, int(i))
 		if err != nil {
 			for j := 0; j < int(i); j++ {
@@ -39,7 +43,7 @@ func (g *Gopher) Start() error {
 		}
 	}
 
-	for i := uint32(0); i < g.pollerNum; i++ {
+	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i], err = newPoller(g, false, int(i))
 		if err != nil {
 			for j := 0; j < int(len(g.lfds)); j++ {
@@ -54,7 +58,7 @@ func (g *Gopher) Start() error {
 		}
 	}
 
-	for i := uint32(0); i < g.pollerNum; i++ {
+	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
 		g.Add(1)
 		go g.pollers[i].start()
@@ -93,20 +97,20 @@ func (g *Gopher) Conn(conn net.Conn) (*Conn, error) {
 
 // NewGopher is a factory impl
 func NewGopher(conf Config) *Gopher {
-	cpuNum := uint32(runtime.NumCPU())
+	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
 		conf.Name = "NB"
 	}
-	if conf.MaxLoad == 0 {
+	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
-	if len(conf.Addrs) > 0 && conf.NListener == 0 {
+	if len(conf.Addrs) > 0 && conf.NListener <= 0 {
 		conf.NListener = 1
 	}
-	if conf.NPoller == 0 {
+	if conf.NPoller <= 0 {
 		conf.NPoller = cpuNum
 	}
-	if conf.ReadBufferSize == 0 {
+	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
 	}
 
