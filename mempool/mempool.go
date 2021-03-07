@@ -68,8 +68,10 @@ func (pool *MemPool) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
 	}
+	newBuf := pool.Malloc(size)
+	copy(newBuf, buf)
 	pool.Free(buf)
-	return pool.Malloc(size)
+	return newBuf
 }
 
 // Free payback []byte to pool
