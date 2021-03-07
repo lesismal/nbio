@@ -1,0 +1,114 @@
+package nbhttp
+
+import (
+	"errors"
+	"runtime/debug"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lesismal/nbio/loging"
+)
+
+var (
+	// ErrStopped .
+	ErrStopped = errors.New("stopped")
+)
+
+// runner .
+type runner struct {
+	parent *TaskPool
+}
+
+func (r *runner) call(f func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			loging.Error("taskpool runner call failed: %v", err)
+			debug.PrintStack()
+		}
+	}()
+	f()
+}
+
+func (r *runner) taskLoop(maxIdleTime time.Duration, chTask <-chan func(), chClose <-chan struct{}, f func()) {
+	defer func() {
+		r.parent.wg.Done()
+		<-r.parent.chRunner
+	}()
+
+	r.call(f)
+
+	timer := time.NewTimer(maxIdleTime)
+	defer timer.Stop()
+	for r.parent.running {
+		select {
+		case f := <-chTask:
+			r.call(f)
+			timer.Reset(maxIdleTime)
+		case <-timer.C:
+			return
+		case <-chClose:
+			return
+		}
+	}
+}
+
+// TaskPool .
+type TaskPool struct {
+	wg      *sync.WaitGroup
+	mux     sync.Mutex
+	running bool
+	stopped int32
+
+	chTask   chan func()
+	chRunner chan struct{}
+	chClose  chan struct{}
+
+	maxIdleTime time.Duration
+}
+
+func (tp *TaskPool) push(f func()) error {
+	select {
+	case tp.chTask <- f:
+	case tp.chRunner <- struct{}{}:
+		r := &runner{parent: tp}
+		tp.wg.Add(1)
+		go r.taskLoop(tp.maxIdleTime, tp.chTask, tp.chClose, f)
+	case <-tp.chClose:
+		return ErrStopped
+	}
+	return nil
+}
+
+// Go .
+func (tp *TaskPool) Go(f func()) {
+	// if atomic.LoadInt32(&tp.stopped) == 1 {
+	// 	return
+	// }
+	tp.push(f)
+}
+
+// Stop .
+func (tp *TaskPool) Stop() {
+	if atomic.CompareAndSwapInt32(&tp.stopped, 0, 1) {
+		tp.running = false
+		close(tp.chClose)
+		tp.wg.Done()
+		tp.wg.Wait()
+	}
+}
+
+// NewTaskPool .
+func NewTaskPool(size int, maxIdleTime time.Duration) *TaskPool {
+	tp := &TaskPool{
+		wg:          &sync.WaitGroup{},
+		running:     true,
+		chTask:      make(chan func()),
+		chRunner:    make(chan struct{}, size),
+		chClose:     make(chan struct{}),
+		maxIdleTime: maxIdleTime,
+	}
+	tp.wg.Add(1)
+
+	return tp
+}
