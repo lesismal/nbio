@@ -55,6 +55,9 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
+	// NParser represents parser goroutine num, it's set to NPoller by default.
+	NParser int
+
 	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
 	ReadBufferSize int
 
@@ -95,7 +98,13 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 	if conf.MaxReadSize <= 0 {
 		conf.MaxReadSize = DefaultHTTPMaxReadSize
 	}
-
+	if conf.NPoller <= 0 {
+		conf.NPoller = runtime.NumCPU()
+	}
+	if conf.NParser <= 0 {
+		conf.NParser = conf.NPoller
+	}
+	fixedPool := taskpool.NewFixedPool(conf.NParser, 1024)
 	gopherConf := nbio.Config{
 		Name:               conf.Name,
 		Network:            conf.Network,
@@ -114,7 +123,7 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 		processor.HandleExecute(executor)
 		parser := NewParser(processor, false, conf.MaxReadSize)
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(time.Second * 5))
+		c.SetReadDeadline(time.Now().Add(time.Second * 120))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
@@ -129,11 +138,13 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 			c.Close()
 			return
 		}
-		err := parser.Read(data)
-		if err != nil {
-			loging.Error("parser.Read failed: %v", err)
-			c.Close()
-		}
+		fixedPool.GoByIndex(c.Hash(), func() {
+			err := parser.Read(data)
+			if err != nil {
+				loging.Error("parser.Read failed: %v", err)
+				c.Close()
+			}
+		})
 	})
 
 	g.OnMemAlloc(func(c *nbio.Conn) []byte {
