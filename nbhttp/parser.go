@@ -32,6 +32,7 @@ type Parser struct {
 	chunkSize     int
 	header        http.Header
 	chunked       bool
+	headerExists  bool
 	contentLength int
 	trailer       http.Header
 	// todo
@@ -226,6 +227,10 @@ func (p *Parser) Read(data []byte) error {
 			return ErrLFExpected
 		case stateHeaderKeyBefore:
 			switch c {
+			case ' ':
+				if !p.headerExists {
+					return ErrInvalidCharInHeader
+				}
 			case '\r':
 				err := p.parseTransferEncoding()
 				if err != nil {
@@ -246,6 +251,7 @@ func (p *Parser) Read(data []byte) error {
 				if isAlpha(c) {
 					start = i
 					p.nextState(stateHeaderKey)
+					p.headerExists = true
 					continue
 				}
 				return ErrInvalidCharInHeader
@@ -321,6 +327,7 @@ func (p *Parser) Read(data []byte) error {
 			}
 		case stateHeaderOverLF:
 			if c == '\n' {
+				p.headerExists = false
 				if p.chunked {
 					start = i + 1
 					p.nextState(stateBodyChunkSizeBefore)
@@ -370,6 +377,15 @@ func (p *Parser) Read(data []byte) error {
 			return ErrInvalidChunkSize
 		case stateBodyChunkSize:
 			switch c {
+			case ' ':
+				if p.chunkSize < 0 {
+					cs := string(data[start:i])
+					chunkSize, err := strconv.ParseInt(cs, 16, 63)
+					if err != nil || chunkSize < 0 {
+						return fmt.Errorf("invalid chunk size %v", cs)
+					}
+					p.chunkSize = int(chunkSize)
+				}
 			case '\r':
 				if p.chunkSize < 0 {
 					cs := string(data[start:i])
@@ -512,6 +528,10 @@ func (p *Parser) Read(data []byte) error {
 			}
 		case stateBodyTrailerHeaderValue:
 			switch c {
+			case ' ':
+				if p.headerValue == "" {
+					p.headerValue = string(data[start:i])
+				}
 			case '\r':
 				if p.headerValue == "" {
 					p.headerValue = string(data[start:i])

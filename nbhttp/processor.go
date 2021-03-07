@@ -96,7 +96,8 @@ func (p *ServerProcessor) OnHeader(key, value string) {
 	i, j := 0, 0
 	for i < len(value) && j < len(value) {
 		for i < len(value) {
-			if value[i] != ' ' {
+			c := value[i]
+			if c != ' ' && c != ',' {
 				break
 			}
 			i++

@@ -10,52 +10,52 @@ import (
 )
 
 func TestServerParserContentLength(t *testing.T) {
-	data := []byte("POST /echo HTTP/1.1\r\nEmpty:\r\nEmpty2: \r\nHost: localhost:8080 \r\nConnection: close \r\nAccept-Encoding : gzip, deflate, br \r\n\r\n")
+	data := []byte("POST /echo HTTP/1.1\r\nEmpty:\r\n Empty2:\r\nHost : localhost:8080   \r\nConnection: close \r\n Accept-Encoding :  gzip , deflate ,br  \r\n\r\n")
 	testParser(t, false, data)
 
-	data = []byte("POST /echo HTTP/1.1\r\nHost: localhost:8080\r\nConnection: close \r\nContent-Length :  0\r\nAccept-Encoding : gzip \r\n\r\n")
+	data = []byte("POST /echo HTTP/1.1\r\nHost: localhost:8080\r\n Connection: close \r\nContent-Length :  0\r\nAccept-Encoding : gzip \r\n\r\n")
 	testParser(t, false, data)
 
-	data = []byte("POST /echo HTTP/1.1\r\nHost: localhost:8080\r\nConnection: close \r\nContent-Length :  5\r\nAccept-Encoding : gzip \r\n\r\nhello")
+	data = []byte("POST /echo HTTP/1.1\r\nHost: localhost:8080\r\n Connection: close \r\nContent-Length :  5\r\nAccept-Encoding : gzip \r\n\r\nhello")
 	testParser(t, false, data)
 }
 
 func TestServerParserChunks(t *testing.T) {
-	data := []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\n\r\n")
+	data := []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n4   \r\nbody\r\n0  \r\n\r\n")
 	testParser(t, false, data)
-	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n0\r\n\r\n")
+	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n0\r\n\r\n")
 	testParser(t, false, data)
 }
 
 func TestServerParserTrailer(t *testing.T) {
-	data := []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
+	data := []byte("POST / HTTP/1.1\r\nHost : localhost:1235\r\n User-Agent  : Go-http-client/1.1   \r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip  \r\n\r\n4\r\nbody\r\n0\r\n  Md5  : 841a2d689ad86bd1611447453c22c6fc \r\n Size  : 4  \r\n\r\n")
 	testParser(t, false, data)
-	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
+	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip  \r\n\r\n0\r\nMd5 : 841a2d689ad86bd1611447453c22c6fc \r\n Size: 4 \r\n\r\n")
 	testParser(t, false, data)
 }
 
 func TestClientParserContentLength(t *testing.T) {
-	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\nConnection: close \r\nAccept-Encoding : gzip \r\n\r\n")
+	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\n Connection: close \r\n Accept-Encoding : gzip  \r\n\r\n")
 	testParser(t, true, data)
 
-	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\nConnection: close \r\nContent-Length :  0\r\nAccept-Encoding : gzip \r\n\r\n")
+	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\n Connection: close \r\n Content-Length :  0\r\nAccept-Encoding : gzip \r\n\r\n")
 	testParser(t, true, data)
 
-	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\nConnection: close \r\nContent-Length :  5\r\nAccept-Encoding : gzip \r\n\r\nhello")
+	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\n Connection: close \r\n Content-Length :  5\r\nAccept-Encoding : gzip \r\n\r\nhello")
 	testParser(t, true, data)
 }
 
 func TestClientParserChunks(t *testing.T) {
-	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\n\r\n")
+	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\n Transfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\n\r\n")
 	testParser(t, true, data)
 	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n0\r\n\r\n")
 	testParser(t, true, data)
 }
 
 func TestClientParserTrailer(t *testing.T) {
-	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
+	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\n Transfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
 	testParser(t, true, data)
-	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
+	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding : chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
 	testParser(t, true, data)
 }
 
@@ -93,7 +93,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	}
 	parser = NewParser(processor, isClient, maxReadSize)
 	tBegin := time.Now()
-	loop := 100000
+	loop := 10000
 	for i := 0; i < loop; i++ {
 		tmp := data
 		reads := [][]byte{}
