@@ -1,12 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/lesismal/nbio/nbhttp"
 )
 
 func onEcho(w http.ResponseWriter, r *http.Request) {
@@ -21,18 +18,5 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/echo", onEcho)
-
-	g := nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
-	}, mux, nil)
-
-	err := g.Start()
-	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
-		return
-	}
-	defer g.Stop()
-
-	g.Wait()
+	http.ListenAndServe("localhost:9999", mux)
 }
