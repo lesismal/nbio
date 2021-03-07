@@ -121,7 +121,7 @@ func NewGopher(conf Config) *Gopher {
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
-		connsUnix:          make([]*Conn, conf.MaxLoad+64),
+		connsUnix:          make([]*Conn, MaxOpenFiles),
 
 		trigger: time.NewTimer(timeForever),
 		chTimer: make(chan struct{}),

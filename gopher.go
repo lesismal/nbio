@@ -23,6 +23,11 @@ const (
 	DefaultMaxWriteBufferSize uint32 = 1024 * 1024
 )
 
+var (
+	// MaxOpenFiles .
+	MaxOpenFiles = 1024*1024 + 4096
+)
+
 // Config Of Gopher
 type Config struct {
 	// Name describes your gopher name for logging, it's set to "NB" by default.

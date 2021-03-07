@@ -86,27 +86,24 @@ func (p *poller) acceptable(fd int) bool {
 		return false
 	}
 
+	if fd >= len(p.g.connsUnix) {
+		atomic.AddInt64(&p.g.currLoad, -1)
+		return false
+	}
+
 	return true
 }
 
-func (p *poller) addConn(c *Conn) error {
+func (p *poller) addConn(c *Conn) {
 	c.g = p.g
 
 	p.g.onOpen(c)
 
 	fd := c.fd
-	err := p.addRead(fd)
-	if err == nil {
-		if fd >= len(p.g.connsUnix) {
-			p.g.mux.Lock()
-			p.g.connsUnix = append(p.g.connsUnix, make([]*Conn, fd-len(p.g.connsUnix)+1024)...)
-			p.g.mux.Unlock()
-		}
-		p.g.connsUnix[fd] = c
-		p.increase()
-	}
+	p.g.connsUnix[fd] = c
+	p.addRead(fd)
 
-	return err
+	p.increase()
 }
 
 func (p *poller) getConn(fd int) *Conn {
