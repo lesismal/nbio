@@ -122,6 +122,7 @@ type Gopher struct {
 	beforeRead  func(c *Conn)
 	afterRead   func(c *Conn)
 	beforeWrite func(c *Conn)
+	onStop      func()
 
 	timers  timerHeap
 	trigger *time.Timer
@@ -130,6 +131,8 @@ type Gopher struct {
 
 // Stop pollers
 func (g *Gopher) Stop() {
+	g.onStop()
+
 	g.trigger.Stop()
 	close(g.chTimer)
 
@@ -249,6 +252,14 @@ func (g *Gopher) BeforeWrite(h func(c *Conn)) {
 		panic("invalid nil handler")
 	}
 	g.beforeWrite = h
+}
+
+// OnStop registers callback before Gopher is stopped.
+func (g *Gopher) OnStop(h func()) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
+	g.onStop = h
 }
 
 // State returns Gopher's state info
@@ -401,6 +412,7 @@ func (g *Gopher) initHandlers() {
 	g.BeforeRead(func(c *Conn) {})
 	g.AfterRead(func(c *Conn) {})
 	g.BeforeWrite(func(c *Conn) {})
+	g.OnStop(func() {})
 }
 
 func (g *Gopher) borrow(c *Conn) []byte {
