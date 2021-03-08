@@ -152,6 +152,9 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 		return mempool.Malloc(int(conf.ReadBufferSize))
 	})
 	// g.OnMemFree(func(c *nbio.Conn, buffer []byte) {})
+	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+		mempool.Free(buffer)
+	})
 
 	g.OnStop(func() {
 		parserPool.Stop()
