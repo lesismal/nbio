@@ -223,8 +223,7 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 				if res.sequence != (p.responsedSeq + 1) {
 					return
 				}
-				res.finish()
-				p.Conn.Write(res.body)
+				p.Conn.Write(res.encode())
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
 			}
