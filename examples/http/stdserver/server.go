@@ -25,8 +25,8 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 }
 
 func serve(addrs []string) {
-	for _, addr := range addrs {
-		go func() {
+	for _, v := range addrs {
+		go func(addr string) {
 			mux := &http.ServeMux{}
 			mux.HandleFunc("/echo", onEcho)
 			server := http.Server{
@@ -34,7 +34,7 @@ func serve(addrs []string) {
 				Handler: mux,
 			}
 			server.ListenAndServe()
-		}()
+		}(v)
 	}
 }
 
