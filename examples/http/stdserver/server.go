@@ -39,33 +39,7 @@ func serve(addrs []string) {
 }
 
 func main() {
-	addrs := []string{
-		"localhost:29000",
-		"localhost:29001",
-		"localhost:29002",
-		"localhost:29003",
-		"localhost:29004",
-		"localhost:29005",
-		"localhost:29006",
-		"localhost:29007",
-		"localhost:29008",
-		"localhost:29009",
-		"localhost:29010",
-		"localhost:29011",
-		"localhost:29012",
-		"localhost:29013",
-		"localhost:29014",
-		"localhost:29015",
-		"localhost:29016",
-		"localhost:29017",
-		"localhost:29018",
-		"localhost:29019",
-		"localhost:29020",
-		"localhost:29021",
-		"localhost:29022",
-		"localhost:29023",
-		"localhost:29024",
-	}
+	addrs := []string{"localhost:29000"}
 	serve(addrs)
 
 	ticker := time.NewTicker(time.Second)
