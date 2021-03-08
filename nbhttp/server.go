@@ -91,6 +91,7 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 		conf.NParser = conf.NPoller * 4
 	}
 
+	var execPool *taskpool.TaskPool
 	if executor == nil {
 		if conf.TaskPoolSize <= 0 {
 			conf.TaskPoolSize = conf.NParser * 128
@@ -98,13 +99,13 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 		if conf.TaskIdleTime <= 0 {
 			conf.TaskIdleTime = DefaultExecutorTaskIdleTime
 		}
-		tp := taskpool.New(conf.TaskPoolSize, conf.TaskIdleTime)
-		executor = tp.Go
+		execPool = taskpool.New(conf.TaskPoolSize, conf.TaskIdleTime)
+		executor = execPool.Go
 	}
 	if conf.MaxReadSize <= 0 {
 		conf.MaxReadSize = DefaultHTTPMaxReadSize
 	}
-	fixedPool := taskpool.NewFixedPool(conf.NParser, 128)
+	parserPool := taskpool.NewFixedPool(conf.NParser, 128)
 	gopherConf := nbio.Config{
 		Name:               conf.Name,
 		Network:            conf.Network,
@@ -138,7 +139,7 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 			c.Close()
 			return
 		}
-		fixedPool.GoByIndex(c.Hash(), func() {
+		parserPool.GoByIndex(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
 				loging.Error("parser.Read failed: %v", err)
@@ -152,5 +153,11 @@ func NewServer(conf Config, handler http.Handler, executor func(f func())) *nbio
 	})
 	// g.OnMemFree(func(c *nbio.Conn, buffer []byte) {})
 
+	g.OnStop(func() {
+		parserPool.Stop()
+		if execPool != nil {
+			execPool.Stop()
+		}
+	})
 	return g
 }
