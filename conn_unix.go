@@ -12,7 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
-	"unsafe"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 // Conn implements net.Conn
@@ -28,8 +29,8 @@ type Conn struct {
 	rTimer *htimer
 	wTimer *htimer
 
-	leftSize  int
-	sendQueue [][]byte
+	leftSize    int
+	writeBuffer []byte
 
 	closed   bool
 	isWAdded bool
@@ -78,24 +79,20 @@ func (c *Conn) Write(b []byte) (int, error) {
 	c.g.beforeWrite(c)
 
 	n, err := c.write(b)
-	if err != nil && err != syscall.EAGAIN {
+	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		// tw.delete(c, &c.wIndex)
 		c.closeWithErrorWithoutLock(errInvalidData)
 		return n, err
 	}
 
-	if c.leftSize == 0 {
+	if len(c.writeBuffer) == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		// tw.delete(c, &c.wIndex)
 	} else {
 		c.modWrite()
 	}
@@ -115,7 +112,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	c.g.beforeWrite(c)
 
 	n, err := c.writev(in)
-	if err != nil && err != syscall.EAGAIN {
+	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
 		if c.wTimer != nil {
@@ -126,7 +123,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
-	if c.leftSize == 0 {
+	if len(c.writeBuffer) == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -165,14 +162,6 @@ func (c *Conn) RemoteAddr() net.Addr {
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
-		// if tw != nil {
-		// 	tw.reset(c, &c.rIndex, t)
-		// }
-		// tw = c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		// if tw != nil {
-		// 	tw.reset(c, &c.wIndex, t)
-		// }
 		if !t.IsZero() {
 			now := time.Now()
 			if c.rTimer == nil {
@@ -202,10 +191,6 @@ func (c *Conn) SetDeadline(t time.Time) error {
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twRead
-		// if tw != nil {
-		// 	tw.reset(c, &c.rIndex, t)
-		// }
 		if !t.IsZero() {
 			now := time.Now()
 			if c.rTimer == nil {
@@ -225,10 +210,6 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		// if tw != nil {
-		// 	tw.reset(c, &c.wIndex, t)
-		// }
 		if !t.IsZero() {
 			now := time.Now()
 			if c.wTimer == nil {
@@ -330,36 +311,46 @@ func (c *Conn) write(b []byte) (int, error) {
 	}
 
 	if c.overflow(len(b)) {
+		c.g.onWBRelease(c, b)
 		return -1, syscall.EINVAL
 	}
-
-	c.leftSize += len(b)
 
 	var (
 		err    error
 		nwrite int
 	)
 
-	if len(c.sendQueue) == 0 {
+	if len(c.writeBuffer) == 0 {
 		for {
-			n, err := syscall.Write(int(c.fd), b)
+			n, err := syscall.Write(int(c.fd), b[nwrite:])
 			if n > 0 {
 				nwrite += n
-				c.leftSize -= n
-				if n < len(b) {
-					c.sendQueue = append(c.sendQueue, b[n:])
-					return n, err
+				size := len(b) - nwrite
+				if size > 0 {
+					if size < c.g.minConnCacheSize {
+						c.writeBuffer = mempool.Malloc(c.g.minConnCacheSize)[:size]
+					} else {
+						c.writeBuffer = mempool.Malloc(size)
+					}
+					copy(c.writeBuffer, b[nwrite:])
+					c.g.onWBRelease(c, b)
+					return nwrite, err
 				}
 			}
-			if err == syscall.EINTR {
+			if err == syscall.EINTR || err == syscall.EAGAIN {
 				continue
 			}
-
-			break
+			c.g.onWBRelease(c, b)
+			return nwrite, err
 		}
-	} else {
-		c.sendQueue = append(c.sendQueue, b)
 	}
+	if len(c.writeBuffer) < c.g.minConnCacheSize {
+		c.writeBuffer = mempool.Realloc(c.writeBuffer, c.g.minConnCacheSize)[:len(c.writeBuffer)]
+	} else {
+		c.writeBuffer = mempool.Realloc(c.writeBuffer, len(c.writeBuffer)+len(b))
+	}
+	copy(c.writeBuffer[len(c.writeBuffer)-len(b):], b)
+	c.g.onWBRelease(c, b)
 
 	return nwrite, err
 }
@@ -371,123 +362,71 @@ func (c *Conn) flush() error {
 		return errClosed
 	}
 
-	var err error
-	var sendQ = c.sendQueue
-	c.leftSize = 0
-	c.sendQueue = nil
-	if len(sendQ) == 1 {
-		_, err = c.write(sendQ[0])
-	} else {
-		_, err = c.writev(sendQ)
-	}
-	if err != nil && err != syscall.EAGAIN && err != syscall.EINTR {
+	buffer := c.writeBuffer
+	c.writeBuffer = nil
+	_, err := c.write(buffer)
+	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+		}
 		c.closeWithErrorWithoutLock(err)
 		return err
 	}
-	if c.leftSize == 0 {
+	if len(c.writeBuffer) == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
 		c.resetRead()
-		// p := c.g.pollers[c.fd%len(c.g.pollers)]
-		// p.twWrite.delete(c, &c.wIndex)
+	} else {
+		c.modWrite()
 	}
-	// else {
-	// c.modWrite()
-	// }
 
 	c.mux.Unlock()
 	return err
 }
 
 func (c *Conn) writev(in [][]byte) (int, error) {
-	if len(c.sendQueue) == 0 {
-		return c.writevToSocket(in)
+	size := 0
+	for _, v := range in {
+		size += len(v)
 	}
-	return c.writeToSendQueue(in)
-}
-
-func (c *Conn) writeToSendQueue(in [][]byte) (int, error) {
-	var ntotal int
-	for _, b := range in {
-		if len(b) == 0 {
-			return -1, errInvalidData
+	if c.overflow(size) {
+		for _, v := range in {
+			c.g.onWBRelease(c, v)
 		}
-		ntotal += len(b)
+		return -1, syscall.EINVAL
 	}
-
-	if ntotal == 0 {
+	left := len(c.writeBuffer)
+	if left > 0 {
+		c.writeBuffer = mempool.Realloc(c.writeBuffer, left+size)
+		copied := left
+		for _, v := range in {
+			copy(c.writeBuffer[copied:], v)
+			copied += len(v)
+			c.g.onWBRelease(c, v)
+		}
 		return 0, nil
 	}
 
-	if c.overflow(ntotal) {
-		return -1, syscall.EINVAL
+	var b []byte
+	if size < c.g.minConnCacheSize {
+		b = mempool.Malloc(c.g.minConnCacheSize)[:size]
+	} else {
+		b = mempool.Malloc(size)
 	}
-
-	c.leftSize += ntotal
-	c.sendQueue = append(c.sendQueue, in...)
-
-	return 0, nil
-}
-
-func (c *Conn) writevToSocket(in [][]byte) (int, error) {
-	var (
-		err    error
-		ntotal int
-		nwrite int
-		iovec  = make([]syscall.Iovec, len(in))
-	)
-
-	for i, slice := range in {
-		ntotal += len(slice)
-		iovec[i] = syscall.Iovec{Base: &slice[0], Len: uint64(len(slice))}
+	copied := 0
+	for _, v := range in {
+		copy(b[copied:], v)
+		copied += len(v)
+		c.g.onWBRelease(c, v)
 	}
-
-	if ntotal == 0 {
-		return 0, nil
-	}
-
-	if c.overflow(ntotal) {
-		return -1, syscall.EINVAL
-	}
-
-	c.leftSize += ntotal
-
-	nwRaw, _, errno := syscall.Syscall(syscall.SYS_WRITEV, uintptr(c.fd), uintptr(unsafe.Pointer(&iovec[0])), uintptr(len(iovec)))
-	if errno != 0 {
-		err = syscall.Errno(errno)
-	}
-	nwrite = int(nwRaw)
-	if nwrite > 0 {
-		c.leftSize -= nwrite
-		if nwrite < ntotal {
-			for i := 0; i < len(in); i++ {
-				if len(in[i]) < nwrite {
-					nwrite -= len(in[i])
-				} else if len(in[i]) == nwrite {
-					in = in[i+1:]
-					iovec = iovec[i+1:]
-					iovec[0] = syscall.Iovec{Base: &(in[0][0]), Len: uint64(len(in[0]))}
-					break
-				} else {
-					in[i] = in[i][nwrite:]
-					in = in[i:]
-					iovec = iovec[i:]
-					iovec[0] = syscall.Iovec{Base: &(in[0][0]), Len: uint64(len(in[0]))}
-					break
-				}
-			}
-			c.sendQueue = append(c.sendQueue, in...)
-		}
-	}
-
-	return int(nwRaw), err
+	return c.write(b)
 }
 
 func (c *Conn) overflow(n int) bool {
-	return c.g.maxWriteBufferSize > 0 && (c.leftSize+n > int(c.g.maxWriteBufferSize))
+	return c.g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > int(c.g.maxWriteBufferSize))
 }
 
 func (c *Conn) closeWithError(err error) error {
