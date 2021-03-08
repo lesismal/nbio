@@ -25,6 +25,9 @@ const (
 
 	// DefaultMaxWriteBufferSize .
 	DefaultMaxWriteBufferSize = 1024 * 1024
+
+	// DefaultMinConnCacheSize .
+	DefaultMinConnCacheSize = 1024 * 2
 )
 
 var (
@@ -58,6 +61,9 @@ type Config struct {
 	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
 	ReadBufferSize int
 
+	// MinConnCacheSize represents application layer's Conn write cache buffer size when the kernel sendQ is full
+	MinConnCacheSize int
+
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
 	// if the connection's Send-Q is full and the data cached by nbio is
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
@@ -79,7 +85,6 @@ type State struct {
 
 // String returns Gopher's State Info
 func (state *State) String() string {
-	// str := fmt.Sprintf("****************************************\n[%v]:\n", time.Now().Format("2006.01.02 15:04:05"))
 	str := fmt.Sprintf("Gopher[%v] Total Online: %v\n", state.Name, state.Online)
 	for i := 0; i < len(state.Pollers); i++ {
 		str += fmt.Sprintf("  Poller[%v] Online: %v\n", i, state.Pollers[i].Online)
@@ -101,6 +106,7 @@ type Gopher struct {
 	pollerNum          int
 	readBufferSize     int
 	maxWriteBufferSize int
+	minConnCacheSize   int
 	lockThread         bool
 
 	lfds     []int
@@ -119,6 +125,7 @@ type Gopher struct {
 	onData      func(c *Conn, data []byte)
 	onMemAlloc  func(c *Conn) []byte
 	onMemFree   func(c *Conn, buffer []byte)
+	onWBRelease func(c *Conn, buffer []byte)
 	beforeRead  func(c *Conn)
 	afterRead   func(c *Conn)
 	beforeWrite func(c *Conn)
@@ -225,6 +232,14 @@ func (g *Gopher) OnMemFree(h func(c *Conn, b []byte)) {
 		panic("invalid nil handler")
 	}
 	g.onMemFree = h
+}
+
+// OnWriteBufferRelease registers callback for write buffer memory release
+func (g *Gopher) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
+	g.onWBRelease = h
 }
 
 // BeforeRead registers callback before syscall.Read
@@ -409,6 +424,7 @@ func (g *Gopher) initHandlers() {
 	g.OnData(func(c *Conn, data []byte) {})
 	g.OnMemAlloc(g.PollerBuffer)
 	g.OnMemFree(func(c *Conn, buffer []byte) {})
+	g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
 	g.BeforeRead(func(c *Conn) {})
 	g.AfterRead(func(c *Conn) {})
 	g.BeforeWrite(func(c *Conn) {})
