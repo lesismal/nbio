@@ -97,6 +97,9 @@ func NewGopher(conf Config) *Gopher {
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
 	}
+	if conf.MinConnCacheSize == 0 {
+		conf.MinConnCacheSize = DefaultMinConnCacheSize
+	}
 
 	g := &Gopher{
 		Name:               conf.Name,
@@ -107,6 +110,7 @@ func NewGopher(conf Config) *Gopher {
 		pollerNum:          conf.NPoller,
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
+		minConnCacheSize:   conf.MinConnCacheSize,
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
 		connsStd:           map[*Conn]struct{}{},
