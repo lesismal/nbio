@@ -7,12 +7,12 @@ package nbhttp
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/lesismal/nbio/mempool"
 )
 
 // Response represents the server side of an HTTP response.
-// todo:
 type Response struct {
 	processor Processor
 
@@ -25,176 +25,181 @@ type Response struct {
 	header     http.Header
 	trailers   http.Header
 
-	head []byte
-	body []byte
+	bodySize int
+	bodyList [][]byte
 }
 
 // Header .
-func (response *Response) Header() http.Header {
-	return response.header
-}
-
-func (response *Response) reallocHead(size int) {
-	response.head = mempool.Realloc(response.head, size)
-}
-
-func (response *Response) reallocBody(size int) {
-	response.body = mempool.Realloc(response.body, size)
+func (res *Response) Header() http.Header {
+	return res.header
 }
 
 // WriteHeader .
-func (response *Response) WriteHeader(statusCode int) {
-	if response.statusCode == 0 {
+func (res *Response) WriteHeader(statusCode int) {
+	if res.statusCode == 0 {
 		status := http.StatusText(statusCode)
 		if status != "" {
-			response.status = status
-			response.statusCode = statusCode
+			res.status = status
+			res.statusCode = statusCode
 		}
 	}
 }
 
 // Write .
-func (response *Response) Write(data []byte) (int, error) {
-	response.WriteHeader(http.StatusOK)
+func (res *Response) Write(data []byte) (int, error) {
+	res.WriteHeader(http.StatusOK)
 	if len(data) > 0 {
-		response.Header().Set("Transfer-Encoding", "chunked")
-
-		l := len(response.body)
-		lenStr := strconv.FormatInt(int64(len(data)), 16)
-		size := l + len(lenStr) + 4
-		if size < 2048 {
-			size = 2048
-		}
-		response.reallocBody(size)
-		for i := 0; i < len(lenStr); i++ {
-			response.body[l] = lenStr[i]
-			l++
-		}
-		response.body[l] = '\r'
-		l++
-		response.body[l] = '\n'
-		l++
-		copy(response.body[l:], data)
-		l += len(data)
-		response.body[l] = '\r'
-		l++
-		response.body[l] = '\n'
-		l++
-		response.body = response.body[:l]
+		res.bodyList = append(res.bodyList, data)
+		res.bodySize += len(data)
 	}
 	return len(data), nil
 }
 
 // finish .
-func (response *Response) finish() {
-	response.WriteHeader(http.StatusOK)
-	statusCode := response.statusCode
-	status := response.status
+func (res *Response) encode() []byte {
+	res.WriteHeader(http.StatusOK)
+	statusCode := res.statusCode
+	status := res.status
 
-	response.head = mempool.Malloc(4096)
+	res.header.Add("PoweredBy", "[https://github.com/lesismal/nbio]")
 
+	chunked := false
+	encodingFound := false
+	if res.request.ProtoAtLeast(1, 1) {
+		for _, v := range res.header["Transfer-Encoding"] {
+			if v == "chunked" {
+				chunked = true
+				encodingFound = true
+			}
+		}
+		if !chunked {
+			if len(res.header["Trailer"]) > 0 {
+				chunked = true
+			}
+		}
+	}
+	if chunked {
+		if !encodingFound {
+			res.header.Add("Transfer-Encoding", "chunked")
+		}
+		res.header.Del("Content-Length")
+	} else if res.bodySize > 0 {
+		res.header.Add("Content-Length", strconv.Itoa(res.bodySize))
+	}
+
+	size := res.bodySize
+	switch size {
+	case 0:
+		size = 2048
+	default:
+		if size < 4096 {
+			size = 4096
+		}
+	}
+
+	data := mempool.Malloc(size)
+
+	proto := res.request.Proto
 	i := 0
-	proto := response.request.Proto
-	for i < len(proto) {
-		response.head[i] = proto[i]
-		i++
-	}
+	copy(data, proto)
+	i += len(proto)
 
-	response.head[i] = ' '
+	data[i] = ' '
 	i++
-
-	response.head[i] = '0' + byte(statusCode/100)
+	data[i] = '0' + byte(statusCode/100)
 	i++
-	response.head[i] = '0' + byte(statusCode%100)/10
+	data[i] = '0' + byte(statusCode%100)/10
 	i++
-	response.head[i] = '0' + byte(statusCode%10)
+	data[i] = '0' + byte(statusCode%10)
 	i++
-
-	response.head[i] = ' '
+	data[i] = ' '
 	i++
-
-	for j := 0; j < len(status); j++ {
-		response.head[i] = status[j]
-		i++
-	}
-
-	response.head[i] = '\r'
+	copy(data[i:], status)
+	i += len(status)
+	data[i] = '\r'
 	i++
-	response.head[i] = '\n'
+	data[i] = '\n'
 	i++
 
-	for k, vv := range response.header {
-		response.reallocHead(i + len(k) + 2)
-		for x := 0; x < len(k); x++ {
-			response.head[i] = k[x]
-			i++
-		}
-		response.head[i] = ':'
-		i++
-		response.head[i] = ' '
-		i++
-		first := true
-		for _, v := range vv {
-			if first {
-				first = false
-				response.reallocHead(i + len(v))
-			} else {
-				response.reallocHead(i + len(v) + 1)
-				response.head[i] = ','
-				i++
+	trailer := map[string]string{}
+	for k, vv := range res.header {
+		if strings.HasPrefix(k, "Trailer-") {
+			if len(vv) > 0 {
+				trailer[k] = vv[0]
 			}
-			for y := 0; y < len(v); y++ {
-				response.head[i] = v[y]
-				i++
-			}
+			continue
 		}
-		response.reallocHead(i + 2)
-		response.head[i] = '\r'
+
+		value := strings.Join(vv, ",")
+		data = mempool.Realloc(data, i+len(k)+len(value)+4+res.bodySize)
+		copy(data[i:], k)
+		i += len(k)
+		data[i] = ':'
 		i++
-		response.head[i] = '\n'
+		data[i] = ' '
+		i++
+		copy(data[i:], value)
+		i += len(value)
+		data[i] = '\r'
+		i++
+		data[i] = '\n'
 		i++
 	}
+	copy(data[i:], "\r\n")
+	i += 2
 
-	l := len(response.body)
-	if l == 0 {
-		response.reallocHead(i + 4)
-		response.head[i] = '\r'
-		response.head[i+1] = '\n'
-		response.head[i+2] = '\r'
-		response.head[i+3] = '\n'
-		return
+	if res.bodySize == 0 {
+		return data
 	}
 
-	response.reallocHead(i + 2)
-	response.head[i] = '\r'
-	response.head[i+1] = '\n'
-	// response.head = response.head[:i]
-
-	// append CRLF to body as tail
-
-	if l > 0 {
-		response.reallocBody(l + 5)
-		response.body[l] = '0'
-		response.body[l+1] = '\r'
-		response.body[l+2] = '\n'
-		response.body[l+3] = '\r'
-		response.body[l+4] = '\n'
+	if !chunked {
+		data = mempool.Realloc(data, i+res.bodySize)
+		for _, v := range res.bodyList {
+			copy(data[i:], v)
+			i += len(v)
+		}
 	} else {
-		response.reallocBody(2)
-		response.body[0] = '\r'
-		response.body[1] = '\n'
-	}
-	// fmt.Println("--------------------------------")
-	// fmt.Println("write:")
-	// fmt.Printf("head: [%s]\n", string(response.head))
-	// fmt.Printf("body: [%s]\n", string(response.body))
-	// fmt.Println("--------------------------------")
-}
+		for _, v := range res.bodyList {
+			lenStr := strconv.FormatInt(int64(len(v)), 16)
+			data = mempool.Realloc(data, i+len(lenStr)+len(v)+4)
+			copy(data[i:], lenStr)
+			i += len(lenStr)
+			copy(data[i:], "\r\n")
+			i += 2
+			copy(data[i:], v)
+			i += len(v)
+			copy(data[i:], "\r\n")
+			i += 2
+		}
+		data = mempool.Realloc(data, i+5)
+		if len(trailer) == 0 {
+			copy(data[i:], "0\r\n\r\n")
+		} else {
+			copy(data[i:], "0\r\n")
+			i += 3
 
-// Flush .
-// func (response *Response) Flush() {
-// 	response.processor.WriteResponse(response)
-// }
+			for k, v := range trailer {
+				data = mempool.Realloc(data, i+len(k)+len(v)+4)
+				copy(data[i:], k)
+				i += len(k)
+				data[i] = ':'
+				i++
+				data[i] = ' '
+				i++
+				copy(data[i:], v)
+				i += len(v)
+				data[i] = '\r'
+				i++
+				data[i] = '\n'
+				i++
+			}
+			data = mempool.Realloc(data, i+2)
+			copy(data[i:], "\r\n")
+		}
+	}
+
+	return data
+}
 
 // NewResponse .
 func NewResponse(processor Processor, request *http.Request, sequence uint64) http.ResponseWriter {
