@@ -224,10 +224,7 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 					return
 				}
 				res.finish()
-				p.Conn.Write(res.head)
-				if len(res.body) > 0 {
-					p.Conn.Write(res.body)
-				}
+				p.Conn.Write(res.body)
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
 			}
