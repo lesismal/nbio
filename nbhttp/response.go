@@ -61,7 +61,7 @@ func (res *Response) encode() []byte {
 	statusCode := res.statusCode
 	status := res.status
 
-	res.header.Add("PoweredBy", "[https://github.com/lesismal/nbio]")
+	// res.header.Add("Poweredby", "https://github.com/lesismal/nbio")
 
 	chunked := false
 	encodingFound := false
@@ -88,13 +88,9 @@ func (res *Response) encode() []byte {
 	}
 
 	size := res.bodySize
-	switch size {
-	case 0:
+
+	if size < 2048 {
 		size = 2048
-	default:
-		if size < 4096 {
-			size = 4096
-		}
 	}
 
 	data := mempool.Malloc(size)
