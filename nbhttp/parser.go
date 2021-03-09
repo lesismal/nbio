@@ -247,6 +247,8 @@ func (p *Parser) Read(data []byte) error {
 				}
 				start = i + 1
 				p.nextState(stateHeaderOverLF)
+			case '\n':
+				return ErrInvalidCharInHeader
 			default:
 				if isAlpha(c) {
 					start = i
@@ -268,6 +270,8 @@ func (p *Parser) Read(data []byte) error {
 				}
 				start = i + 1
 				p.nextState(stateHeaderValueBefore)
+			case '\r', '\n':
+				return ErrInvalidCharInHeader
 			default:
 				if !isToken(c) {
 					return ErrInvalidCharInHeader
@@ -295,6 +299,8 @@ func (p *Parser) Read(data []byte) error {
 
 				start = i + 1
 				p.nextState(stateHeaderValueLF)
+			case '\n':
+				return ErrInvalidCharInHeader
 			default:
 				// if !isToken(c) {
 				// 	return ErrInvalidCharInHeader
@@ -323,6 +329,8 @@ func (p *Parser) Read(data []byte) error {
 
 				start = i + 1
 				p.nextState(stateHeaderValueLF)
+			case '\n':
+				return ErrInvalidCharInHeader
 			default:
 			}
 		case stateHeaderOverLF:
