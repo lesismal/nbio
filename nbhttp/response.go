@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/lesismal/nbio/mempool"
 )
@@ -156,6 +157,38 @@ func (res *Response) encode() []byte {
 		data[i] = '\n'
 		i++
 	}
+
+	if len(res.header["Content-Type"]) == 0 {
+		const contentType = "Content-Type: text/plain; charset=utf-8\r\n"
+		data = mempool.Realloc(data, i+len(contentType))
+		copy(data[i:], contentType)
+		i += len(contentType)
+	}
+
+	if len(res.header["Date"]) == 0 {
+		const days = "SunMonTueWedThuFriSat"
+		const months = "JanFebMarAprMayJunJulAugSepOctNovDec"
+		data = mempool.Realloc(data, i+37)[:i]
+		t := time.Now().UTC()
+		yy, mm, dd := t.Date()
+		hh, mn, ss := t.Clock()
+		day := days[3*t.Weekday():]
+		mon := months[3*(mm-1):]
+		_ = append(data[i:],
+			'D', 'a', 't', 'e', ':', ' ',
+			day[0], day[1], day[2], ',', ' ',
+			byte('0'+dd/10), byte('0'+dd%10), ' ',
+			mon[0], mon[1], mon[2], ' ',
+			byte('0'+yy/1000), byte('0'+(yy/100)%10), byte('0'+(yy/10)%10), byte('0'+yy%10), ' ',
+			byte('0'+hh/10), byte('0'+hh%10), ':',
+			byte('0'+mn/10), byte('0'+mn%10), ':',
+			byte('0'+ss/10), byte('0'+ss%10), ' ',
+			'G', 'M', 'T',
+			'\r', '\n')
+		i += 37
+	}
+
+	data = mempool.Realloc(data, i+2)
 	copy(data[i:], "\r\n")
 	i += 2
 
