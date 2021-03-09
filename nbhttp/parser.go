@@ -626,6 +626,15 @@ func (p *Parser) parseContentLength() (err error) {
 		if p.chunked {
 			return ErrUnexpectedContentLength
 		}
+		end := len(cl) - 1
+		for i := end; i >= 0; i-- {
+			if cl[i] != ' ' {
+				if i != end {
+					cl = cl[:i+1]
+				}
+				break
+			}
+		}
 		l, err := strconv.ParseInt(cl, 10, 63)
 		if err != nil {
 			return fmt.Errorf("%s %q", "bad Content-Length", cl)
