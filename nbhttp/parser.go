@@ -10,18 +10,9 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
-	"sync"
 	"unsafe"
 
 	"github.com/lesismal/nbio/mempool"
-)
-
-var (
-	parserPool = sync.Pool{
-		New: func() interface{} {
-			return &Parser{}
-		},
-	}
 )
 
 // Parser .
@@ -51,7 +42,7 @@ type Parser struct {
 
 	Processor Processor
 
-	// session interface{}
+	session interface{}
 }
 
 func (p *Parser) nextState(state int8) {
@@ -594,37 +585,13 @@ func (p *Parser) Read(data []byte) error {
 }
 
 // Session returns user session
-// func (p *Parser) Session() interface{} {
-// 	return p.session
-// }
+func (p *Parser) Session() interface{} {
+	return p.session
+}
 
 // SetSession sets user session
-// func (p *Parser) SetSession(session interface{}) {
-// 	p.session = session
-// }
-
-// Clear .
-func (p *Parser) Clear() {
-	p.state = 0
-	p.proto = ""
-	p.statusCode = 0
-	p.status = ""
-	p.headerKey = ""
-	p.headerValue = ""
-	p.chunkSize = 0
-	p.header = nil
-	p.chunked = false
-	p.headerExists = false
-	p.contentLength = 0
-	p.trailer = nil
-	p.readLimit = 0
-	p.maxReadSize = 0
-	p.isClient = false
-	p.Processor.Clear()
-	p.Processor = nil
-	if len(p.cache) > 0 {
-		mempool.Free(p.cache)
-	}
+func (p *Parser) SetSession(session interface{}) {
+	p.session = session
 }
 
 func (p *Parser) parseTransferEncoding() error {
@@ -732,15 +699,10 @@ func NewParser(processor Processor, isClient bool, maxReadSize int) *Parser {
 	if isClient {
 		state = stateClientProtoBefore
 	}
-	parser := parserPool.Get().(*Parser)
-	parser.state = state
-	parser.maxReadSize = maxReadSize
-	parser.isClient = isClient
-	parser.Processor = processor
-	return parser
-}
-
-// ReleaseParser .
-func ReleaseParser(parser *Parser) {
-	parserPool.Put(parser)
+	return &Parser{
+		state:       state,
+		maxReadSize: maxReadSize,
+		isClient:    isClient,
+		Processor:   processor,
+	}
 }
