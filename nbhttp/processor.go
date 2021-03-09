@@ -21,6 +21,25 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
+var (
+	emptyRequest  = http.Request{}
+	emptyResponse = Response{}
+)
+
+func releaseRequest(req *http.Request) {
+	if req != nil {
+		*req = emptyRequest
+		requestPool.Put(req)
+	}
+}
+
+func resetResponse(res *Response) {
+	if res != nil {
+		*res = emptyResponse
+		responsePool.Put(res)
+	}
+}
+
 // Processor .
 type Processor interface {
 	OnMethod(method string)
@@ -53,10 +72,9 @@ type ServerProcessor struct {
 // OnMethod .
 func (p *ServerProcessor) OnMethod(method string) {
 	if p.request == nil {
-		p.request = &http.Request{
-			Method: method,
-			Header: http.Header{},
-		}
+		p.request = requestPool.Get().(*http.Request)
+		p.request.Method = method
+		p.request.Header = http.Header{}
 	} else {
 		p.request.Method = method
 	}
@@ -186,19 +204,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	p.executor(func() {
 		p.handler.ServeHTTP(response, request)
 		p.WriteResponse(response)
-		if request.Body != nil {
-			request.Body.Close()
-		}
-		if request.Close {
-			// the data may still in the send queue
-			if p.Conn != nil {
-				p.Conn.Close()
-			}
-		} else {
-			if p.Conn != nil {
-				p.Conn.SetReadDeadline(time.Now().Add(time.Second * 120))
-			}
-		}
+
 	})
 
 }
@@ -216,16 +222,39 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 		res, ok := w.(*Response)
 		if ok {
 			p.mux.Lock()
-			defer p.mux.Unlock()
 			heap.Push(&p.resQueue, res)
+			clear := false
 			for len(p.resQueue) > 0 {
 				res = p.resQueue[0]
 				if res.sequence != (p.responsedSeq + 1) {
 					return
 				}
+				req := res.request
 				p.Conn.Write(res.encode())
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
+				resetResponse(res)
+				if req.Body != nil {
+					req.Body.Close()
+				}
+				if req.Close {
+					// the data may still in the send queue
+					if p.Conn != nil {
+						p.Conn.Close()
+						clear = true
+						releaseRequest(req)
+						break
+					}
+				} else {
+					if p.Conn != nil {
+						p.Conn.SetReadDeadline(time.Now().Add(time.Second * 120))
+					}
+				}
+				releaseRequest(req)
+			}
+			p.mux.Unlock()
+			if clear {
+				p.Clear()
 			}
 		}
 	}
@@ -233,7 +262,12 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 
 // Clear .
 func (p *ServerProcessor) Clear() {
-
+	p.mux.Lock()
+	defer p.mux.Unlock()
+	for _, res := range p.resQueue {
+		resetResponse(res)
+	}
+	p.resQueue = nil
 }
 
 // HandleMessage .
