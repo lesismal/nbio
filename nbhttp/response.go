@@ -8,8 +8,23 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/lesismal/nbio/mempool"
+)
+
+var (
+	requestPool = sync.Pool{
+		New: func() interface{} {
+			return &http.Request{}
+		},
+	}
+
+	responsePool = sync.Pool{
+		New: func() interface{} {
+			return &Response{}
+		},
+	}
 )
 
 // Response represents the server side of an HTTP response.
@@ -199,12 +214,11 @@ func (res *Response) encode() []byte {
 
 // NewResponse .
 func NewResponse(processor Processor, request *http.Request, sequence uint64) http.ResponseWriter {
-	response := &Response{
-		processor: processor,
-		request:   request,
-		sequence:  sequence,
-		header:    http.Header{},
-	}
+	response := responsePool.Get().(*Response)
+	response.processor = processor
+	response.request = request
+	response.sequence = sequence
+	response.header = http.Header{}
 	return response
 }
 
