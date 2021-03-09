@@ -79,29 +79,62 @@ type Config struct {
 	TaskIdleTime time.Duration
 }
 
+// Server .
+type Server struct {
+	*nbio.Gopher
+
+	_onOpen  func(c *nbio.Conn)
+	_onClose func(c *nbio.Conn, err error)
+	_onStop  func()
+}
+
+// OnOpen registers callback for new connection
+func (s *Server) OnOpen(h func(c *nbio.Conn)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
+	s._onOpen = h
+}
+
+// OnClose registers callback for disconnected
+func (s *Server) OnClose(h func(c *nbio.Conn, err error)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
+	s._onClose = h
+}
+
+// OnStop registers callback before Gopher is stopped.
+func (s *Server) OnStop(h func()) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
+	s._onStop = h
+}
+
 // NewServer .
-func NewServer(conf Config, handler http.Handler, parserExecutor func(index int, f func()), taskExecutor func(f func())) *nbio.Gopher {
+func NewServer(conf Config, handler http.Handler, parserExecutor func(index int, f func()), taskExecutor func(f func())) *Server {
 	if conf.ReadBufferSize == 0 {
 		conf.ReadBufferSize = DefaultHTTPReadBufferSize
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = runtime.NumCPU()
+		conf.NPoller = runtime.NumCPU() * 2
 	}
 	if conf.NParser <= 0 {
-		conf.NParser = conf.NPoller * 4
+		conf.NParser = conf.NPoller * 2
 	}
 
 	var taskExecutePool *taskpool.TaskPool
 	var parserExecutePool *taskpool.FixedPool
 	if parserExecutor == nil {
-		parserExecutePool = taskpool.NewFixedPool(conf.NParser, 128)
+		parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
 		parserExecutor = func(index int, f func()) {
 			parserExecutePool.GoByIndex(index, f)
 		}
 	}
 	if taskExecutor == nil {
 		if conf.TaskPoolSize <= 0 {
-			conf.TaskPoolSize = conf.NParser * 128
+			conf.TaskPoolSize = conf.NParser * 32
 		}
 		if conf.TaskIdleTime <= 0 {
 			conf.TaskIdleTime = DefaultExecutorTaskIdleTime
@@ -126,18 +159,26 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 	}
 	g := nbio.NewGopher(gopherConf)
 
+	svr := &Server{
+		Gopher:   g,
+		_onOpen:  func(c *nbio.Conn) { c.SetReadDeadline(time.Now().Add(time.Second * 120)) },
+		_onClose: func(c *nbio.Conn, err error) {},
+		_onStop:  func() {},
+	}
+
 	g.OnOpen(func(c *nbio.Conn) {
+		svr._onOpen(c)
 		processor := NewServerProcessor(c, handler)
 		processor.HandleExecute(taskExecutor)
 		parser := NewParser(processor, false, conf.MaxReadSize)
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(time.Second * 120))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			loging.Error("nil parser")
 		}
+		svr._onClose(c, err)
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
@@ -164,6 +205,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 	})
 
 	g.OnStop(func() {
+		svr._onStop()
 		taskExecutor = func(f func()) {}
 		parserExecutor = func(index int, f func()) {}
 		if parserExecutePool != nil {
@@ -173,5 +215,5 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 			taskExecutePool.Stop()
 		}
 	})
-	return g
+	return svr
 }
