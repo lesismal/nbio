@@ -28,6 +28,9 @@ var (
 
 func releaseRequest(req *http.Request) {
 	if req != nil {
+		if req.Body != nil {
+			req.Body.Close()
+		}
 		*req = emptyRequest
 		requestPool.Put(req)
 	}
