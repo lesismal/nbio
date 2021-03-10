@@ -61,6 +61,9 @@ var (
 
 	// ErrTrailerExpected .
 	ErrTrailerExpected = errors.New("trailer expected")
+
+	// ErrTooLong .
+	ErrTooLong = errors.New("invalid http message: too long")
 )
 
 var (
