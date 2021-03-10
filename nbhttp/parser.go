@@ -35,8 +35,9 @@ type Parser struct {
 	contentLength int
 	trailer       http.Header
 	// todo
-	readLimit int
-	isClient  bool
+	readLimit     int
+	minBufferSize int
+	isClient      bool
 
 	Processor Processor
 
@@ -365,8 +366,8 @@ func (p *Parser) Read(data []byte) error {
 				return nil
 			} else if left > cl {
 				left = cl
-				if left < 2048 {
-					left = 2048
+				if left < p.minBufferSize {
+					left = p.minBufferSize
 				}
 				body := mempool.Malloc(left)[:cl]
 				copy(body, data[start:start+cl])
@@ -450,8 +451,8 @@ func (p *Parser) Read(data []byte) error {
 			left := len(data) - start
 			if left > cl {
 				left = cl
-				if cl < 2048 {
-					left = 2048
+				if cl < p.minBufferSize {
+					left = p.minBufferSize
 				}
 				body := mempool.Malloc(left)[:cl]
 				copy(body, data[start:start+cl])
@@ -473,8 +474,8 @@ func (p *Parser) Read(data []byte) error {
 					p.cache = data
 					return nil
 				}
-				if left < 2048 {
-					p.cache = mempool.Malloc(2048)[:left]
+				if left < p.minBufferSize {
+					p.cache = mempool.Malloc(p.minBufferSize)[:left]
 				} else {
 					p.cache = mempool.Malloc(left)
 				}
@@ -600,8 +601,8 @@ func (p *Parser) Read(data []byte) error {
 	if start > 0 {
 		left := len(data) - start
 		if left > 0 {
-			if left < 2048 {
-				p.cache = mempool.Malloc(2048)[:left]
+			if left < p.minBufferSize {
+				p.cache = mempool.Malloc(p.minBufferSize)[:left]
 			} else {
 				p.cache = mempool.Malloc(left)
 			}
@@ -729,7 +730,7 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser .
-func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
+func NewParser(processor Processor, isClient bool, readLimit int, minBufferSize int) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
 	}
@@ -737,10 +738,17 @@ func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
 	if isClient {
 		state = stateClientProtoBefore
 	}
+	if readLimit <= 0 {
+		readLimit = DefaultHTTPReadLimit
+	}
+	if minBufferSize <= 0 {
+		minBufferSize = DefaultMinBufferSize
+	}
 	return &Parser{
-		state:     state,
-		readLimit: readLimit,
-		isClient:  isClient,
-		Processor: processor,
+		state:         state,
+		readLimit:     readLimit,
+		minBufferSize: minBufferSize,
+		isClient:      isClient,
+		Processor:     processor,
 	}
 }

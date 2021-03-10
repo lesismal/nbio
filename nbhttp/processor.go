@@ -67,9 +67,10 @@ type ServerProcessor struct {
 	handler  http.Handler
 	executor func(f func())
 
-	resQueue     responseQueue
-	sequence     uint64
-	responsedSeq uint64
+	resQueue      responseQueue
+	sequence      uint64
+	responsedSeq  uint64
+	minBufferSize int
 }
 
 // OnMethod .
@@ -152,8 +153,8 @@ func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
 	if p.request.Body == nil {
 		if !needRelease {
 			l := len(data)
-			if l < 2048 {
-				l = 2048
+			if l < p.minBufferSize {
+				l = p.minBufferSize
 			}
 			b := mempool.Malloc(l)[:len(data)]
 			copy(b, data)
@@ -303,16 +304,21 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
+	if executor == nil {
+		executor = func(f func()) { f() }
+	}
+	if minBufferSize <= 0 {
+		minBufferSize = DefaultMinBufferSize
+	}
 	return &ServerProcessor{
-		// Allocator: &Allocator{},
-		// TaskPool:  NewTaskPool(20000),
-		Conn:     conn,
-		handler:  handler,
-		executor: func(f func()) { f() },
+		Conn:          conn,
+		handler:       handler,
+		executor:      executor,
+		minBufferSize: minBufferSize,
 	}
 }
 

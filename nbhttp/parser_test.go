@@ -81,17 +81,18 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	data = append(data, data...)
 
 	maxReadSize := 1024 * 1024 * 4
+	minBufferSize := 1024 * 4
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		nRequest++
 	})
-	processor := NewServerProcessor(nil, mux)
+	processor := NewServerProcessor(nil, mux, nil, 2048)
 	if isClient {
 		processor = NewClientProcessor(func(*http.Response) {
 			nRequest++
 		})
 	}
-	parser = NewParser(processor, isClient, maxReadSize)
+	parser = NewParser(processor, isClient, maxReadSize, minBufferSize)
 	tBegin := time.Now()
 	loop := 10000
 	for i := 0; i < loop; i++ {
@@ -120,14 +121,15 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 
 func newParser(isClient bool) *Parser {
 	maxReadSize := 1024 * 1024 * 4
+	minBufferSize := 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(func(*http.Response) {})
-		return NewParser(processor, isClient, maxReadSize)
+		return NewParser(processor, isClient, maxReadSize, minBufferSize)
 	}
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", pirntMessage)
-	processor := NewServerProcessor(nil, mux)
-	return NewParser(processor, isClient, maxReadSize)
+	processor := NewServerProcessor(nil, mux, nil, 2048)
+	return NewParser(processor, isClient, maxReadSize, minBufferSize)
 }
 
 func pirntMessage(w http.ResponseWriter, request *http.Request) {
@@ -171,11 +173,12 @@ var benchData = []byte("POST /joyent/http-parser HTTP/1.1\r\n" +
 
 func BenchmarkServerProcessor(b *testing.B) {
 	maxReadSize := 1024 * 1024 * 4
+	minBufferSize := 1024 * 4
 	isClient := false
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
-	processor := NewServerProcessor(nil, mux)
-	parser := NewParser(processor, isClient, maxReadSize)
+	processor := NewServerProcessor(nil, mux, nil, 2048)
+	parser := NewParser(processor, isClient, maxReadSize, minBufferSize)
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -188,9 +191,10 @@ func BenchmarkServerProcessor(b *testing.B) {
 
 func BenchmarkEmpryProcessor(b *testing.B) {
 	maxReadSize := 1024 * 1024 * 4
+	minBufferSize := 1024 * 4
 	isClient := false
 	// processor := NewEmptyProcessor()
-	parser := NewParser(nil, isClient, maxReadSize)
+	parser := NewParser(nil, isClient, maxReadSize, minBufferSize)
 
 	b.ReportAllocs()
 	b.ResetTimer()

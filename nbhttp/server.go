@@ -19,11 +19,14 @@ var (
 	// DefaultHTTPReadLimit .
 	DefaultHTTPReadLimit = 1024 * 1024 * 64
 
+	// DefaultMinBufferSize .
+	DefaultMinBufferSize = 1024 * 2
+
 	// DefaultHTTPReadBufferSize .
-	DefaultHTTPReadBufferSize = 1024 * 4
+	DefaultHTTPReadBufferSize = 1024 * 2
 
 	// DefaultHTTPWriteBufferSize .
-	DefaultHTTPWriteBufferSize = 1024 * 4
+	DefaultHTTPWriteBufferSize = 1024 * 2
 
 	// DefaultExecutorTaskPoolSize .
 	DefaultExecutorTaskPoolSize = runtime.NumCPU() * 64
@@ -61,8 +64,11 @@ type Config struct {
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
 	ReadLimit int
 
-	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
+	// ReadBufferSize represents buffer size for reading, it's set to 2k by default.
 	ReadBufferSize int
+
+	// MinBufferSize represents buffer size for http request parsing and response encoding, it's set to 2k by default.
+	MinBufferSize int
 
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
 	// if the connection's Send-Q is full and the data cached by nbio is
@@ -126,6 +132,9 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 	if conf.ReadLimit <= 0 {
 		conf.ReadLimit = DefaultHTTPReadLimit
 	}
+	if conf.MinBufferSize <= 0 {
+		conf.MinBufferSize = DefaultMinBufferSize
+	}
 
 	var taskExecutePool *taskpool.TaskPool
 	var parserExecutePool *taskpool.FixedPool
@@ -168,9 +177,8 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler)
-		processor.HandleExecute(taskExecutor)
-		parser := NewParser(processor, false, conf.ReadLimit)
+		processor := NewServerProcessor(c, handler, taskExecutor, conf.MinBufferSize)
+		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		c.SetSession(parser)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
