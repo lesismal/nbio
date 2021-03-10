@@ -51,7 +51,7 @@ type Processor interface {
 	OnStatus(code int, status string)
 	OnHeader(key, value string)
 	OnContentLength(contentLength int)
-	OnBody(data []byte)
+	OnBody(data []byte, needRelease bool)
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
 	HandleExecute(executor func(f func()))
@@ -148,12 +148,24 @@ func (p *ServerProcessor) OnContentLength(contentLength int) {
 }
 
 // OnBody .
-func (p *ServerProcessor) OnBody(data []byte) {
+func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
 	if p.request.Body == nil {
+		if !needRelease {
+			l := len(data)
+			if l < 2048 {
+				l = 2048
+			}
+			b := mempool.Malloc(l)[:len(data)]
+			copy(b, data)
+			// mempool.Free(data)
+			data = b
+		}
 		p.request.Body = NewBodyReader(data, 0)
 	} else {
 		p.request.Body.(*BodyReader).Append(data)
-		mempool.Free(data)
+		if needRelease {
+			mempool.Free(data)
+		}
 	}
 }
 
@@ -355,7 +367,7 @@ func (p *ClientProcessor) OnContentLength(contentLength int) {
 }
 
 // OnBody .
-func (p *ClientProcessor) OnBody(data []byte) {
+func (p *ClientProcessor) OnBody(data []byte, needRelease bool) {
 	if p.response.Body == nil {
 		p.response.Body = NewBodyReader(data, 0)
 	} else {
@@ -444,7 +456,7 @@ func (p *EmptyProcessor) OnContentLength(contentLength int) {
 }
 
 // OnBody .
-func (p *EmptyProcessor) OnBody(data []byte) {
+func (p *EmptyProcessor) OnBody(data []byte, needRelease bool) {
 
 }
 

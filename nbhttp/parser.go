@@ -10,7 +10,6 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
-	"unsafe"
 
 	"github.com/lesismal/nbio/mempool"
 )
@@ -67,11 +66,6 @@ func (p *Parser) Read(data []byte) error {
 		data = p.cache
 		p.cache = nil
 	}
-	defer func() {
-		if p.cache != nil && unsafe.Pointer(&data[0]) != unsafe.Pointer(&p.cache[0]) {
-			mempool.Free(data)
-		}
-	}()
 	for i := offset; i < len(data); i++ {
 		c = data[i]
 		switch p.state {
@@ -355,28 +349,41 @@ func (p *Parser) Read(data []byte) error {
 		case stateBodyContentLength:
 			cl := p.contentLength
 			left := len(data) - start
-			if left < cl {
-				if left < 2048 {
-					p.cache = mempool.Malloc(2048)[:left]
+			if left == cl {
+				var body []byte
+				// data is body
+				if start == 0 {
+					body = data
+					p.Processor.OnBody(body, true)
 				} else {
-					p.cache = mempool.Malloc(left)
+					body = mempool.Malloc(cl)
+					copy(body, data[start:start+cl])
+					mempool.Free(data)
+					p.Processor.OnBody(body, true)
 				}
+				p.handleMessage()
+				return nil
+			} else if left > cl {
+				left = cl
+				if left < 2048 {
+					left = 2048
+				}
+				body := mempool.Malloc(left)[:cl]
+				copy(body, data[start:start+cl])
+				p.Processor.OnBody(body, true)
+				p.handleMessage()
+				start += cl
+				i = start - 1
+			} else {
+				if start == 0 {
+					p.cache = data
+					return nil
+				}
+				p.cache = mempool.Malloc(cl)[:left]
 				copy(p.cache, data[start:])
+				mempool.Free(data)
 				return nil
 			}
-
-			left = cl
-			if left < 2048 {
-				left = 2048
-			}
-			body := mempool.Malloc(left)[:cl]
-			copy(body, data[start:start+cl])
-			p.Processor.OnBody(body)
-
-			start += cl
-			i = start - 1
-
-			p.handleMessage()
 		case stateBodyChunkSizeBefore:
 			if isHex(c) {
 				p.chunkSize = -1
@@ -441,28 +448,40 @@ func (p *Parser) Read(data []byte) error {
 		case stateBodyChunkData:
 			cl := p.chunkSize
 			left := len(data) - start
-			if left < cl {
+			if left > cl {
+				left = cl
+				if cl < 2048 {
+					left = 2048
+				}
+				body := mempool.Malloc(left)[:cl]
+				copy(body, data[start:start+cl])
+				p.Processor.OnBody(body, true)
+				start += cl
+				i = start - 1
+				p.nextState(stateBodyChunkDataCR)
+			} else if left == cl {
+				if start == 0 {
+					p.Processor.OnBody(data, true)
+				} else {
+					p.Processor.OnBody(data[start:], false)
+					mempool.Free(data)
+				}
+				p.nextState(stateBodyChunkDataCR)
+				return nil
+			} else {
+				if start == 0 {
+					p.cache = data
+					return nil
+				}
 				if left < 2048 {
 					p.cache = mempool.Malloc(2048)[:left]
 				} else {
 					p.cache = mempool.Malloc(left)
 				}
 				copy(p.cache, data[start:])
+				mempool.Free(data)
 				return nil
 			}
-
-			left = cl
-			if left < 2048 {
-				left = 2048
-			}
-			body := mempool.Malloc(left)[:cl]
-			copy(body, data[start:start+cl])
-			p.Processor.OnBody(body)
-
-			start += cl
-			i = start - 1
-
-			p.nextState(stateBodyChunkDataCR)
 		case stateBodyChunkDataCR:
 			if c == '\r' {
 				p.nextState(stateBodyChunkDataLF)
