@@ -122,7 +122,7 @@ func NewGopher(conf Config) *Gopher {
 		network:            conf.Network,
 		addrs:              conf.Addrs,
 		maxLoad:            int64(conf.MaxLoad),
-		listenerNum:        conf.NListener,
+		listenerNum:        1,
 		pollerNum:          conf.NPoller,
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
