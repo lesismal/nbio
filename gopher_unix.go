@@ -104,7 +104,7 @@ func NewGopher(conf Config) *Gopher {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
-	if len(conf.Addrs) > 0 && conf.NListener <= 0 {
+	if len(conf.Addrs) > 0 {
 		conf.NListener = 1
 	}
 	if conf.NPoller <= 0 {
@@ -113,8 +113,8 @@ func NewGopher(conf Config) *Gopher {
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
 	}
-	if conf.MinConnCacheSize==0{
-		conf.MinConnCacheSize= DefaultMinConnCacheSize
+	if conf.MinConnCacheSize == 0 {
+		conf.MinConnCacheSize = DefaultMinConnCacheSize
 	}
 
 	g := &Gopher{
@@ -122,11 +122,11 @@ func NewGopher(conf Config) *Gopher {
 		network:            conf.Network,
 		addrs:              conf.Addrs,
 		maxLoad:            int64(conf.MaxLoad),
-		listenerNum:        1,
+		listenerNum:        conf.NListener,
 		pollerNum:          conf.NPoller,
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
-		minConnCacheSize:	 conf.MinConnCacheSize,
+		minConnCacheSize:   conf.MinConnCacheSize,
 		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
 		connsUnix:          make([]*Conn, MaxOpenFiles),
