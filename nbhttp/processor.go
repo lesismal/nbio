@@ -113,7 +113,7 @@ func (p *ServerProcessor) OnStatus(code int, status string) {
 
 // OnHeader .
 func (p *ServerProcessor) OnHeader(key, value string) {
-	values := p.request.Header.Values(key)
+	values := p.request.Header[key]
 	i, j := 0, 0
 	for i < len(value) && j < len(value) {
 		for i < len(value) {
