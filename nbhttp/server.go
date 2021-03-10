@@ -16,8 +16,8 @@ import (
 )
 
 var (
-	// DefaultHTTPMaxReadSize .
-	DefaultHTTPMaxReadSize = 1024 * 1024
+	// DefaultHTTPReadLimit .
+	DefaultHTTPReadLimit = 1024 * 1024 * 64
 
 	// DefaultHTTPReadBufferSize .
 	DefaultHTTPReadBufferSize = 1024 * 4
@@ -50,13 +50,16 @@ type Config struct {
 	MaxLoad int
 
 	// NListener represents the listener goroutine num on *nix, it's set to 1 by default.
-	NListener int
+	// NListener int
 
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
 	// NParser represents parser goroutine num, it's set to NPoller by default.
 	NParser int
+
+	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
+	ReadLimit int
 
 	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
 	ReadBufferSize int
@@ -69,10 +72,7 @@ type Config struct {
 	// LockThread represents poller's goroutine to lock thread or not, it's set to false by default.
 	LockThread bool
 
-	// MaxReadSize represents buffer size for max reading, it's set to 1M by default.
-	MaxReadSize int
-
-	// MaxReadSize represents max http server's task pool goroutine num, it's set to runtime.NumCPU() * 64 by default.
+	// TaskPoolSize represents max http server's task pool goroutine num, it's set to runtime.NumCPU() * 64 by default.
 	TaskPoolSize int
 
 	// TaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
@@ -118,10 +118,13 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		conf.ReadBufferSize = DefaultHTTPReadBufferSize
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = runtime.NumCPU() * 2
+		conf.NPoller = runtime.NumCPU()
 	}
 	if conf.NParser <= 0 {
-		conf.NParser = conf.NPoller * 2
+		conf.NParser = conf.NPoller
+	}
+	if conf.ReadLimit <= 0 {
+		conf.ReadLimit = DefaultHTTPReadLimit
 	}
 
 	var taskExecutePool *taskpool.TaskPool
@@ -142,16 +145,13 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		taskExecutePool = taskpool.New(conf.TaskPoolSize, conf.TaskIdleTime)
 		taskExecutor = taskExecutePool.Go
 	}
-	if conf.MaxReadSize <= 0 {
-		conf.MaxReadSize = DefaultHTTPMaxReadSize
-	}
 
 	gopherConf := nbio.Config{
-		Name:               conf.Name,
-		Network:            conf.Network,
-		Addrs:              conf.Addrs,
-		MaxLoad:            conf.MaxLoad,
-		NListener:          conf.NListener,
+		Name:    conf.Name,
+		Network: conf.Network,
+		Addrs:   conf.Addrs,
+		MaxLoad: conf.MaxLoad,
+		// NListener:          conf.NListener,
 		NPoller:            conf.NPoller,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
@@ -170,7 +170,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		svr._onOpen(c)
 		processor := NewServerProcessor(c, handler)
 		processor.HandleExecute(taskExecutor)
-		parser := NewParser(processor, false, conf.MaxReadSize)
+		parser := NewParser(processor, false, conf.ReadLimit)
 		c.SetSession(parser)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
