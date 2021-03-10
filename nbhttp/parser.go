@@ -36,9 +36,8 @@ type Parser struct {
 	contentLength int
 	trailer       http.Header
 	// todo
-	readLimit   int
-	maxReadSize int
-	isClient    bool
+	readLimit int
+	isClient  bool
 
 	Processor Processor
 
@@ -59,6 +58,9 @@ func (p *Parser) Read(data []byte) error {
 	var start = 0
 	var offset = len(p.cache)
 	if offset > 0 {
+		if offset+len(data) > p.readLimit {
+			return ErrTooLong
+		}
 		p.cache = mempool.Realloc(p.cache, offset+len(data))
 		copy(p.cache[offset:], data)
 		mempool.Free(data)
@@ -708,7 +710,7 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser .
-func NewParser(processor Processor, isClient bool, maxReadSize int) *Parser {
+func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
 	}
@@ -717,9 +719,9 @@ func NewParser(processor Processor, isClient bool, maxReadSize int) *Parser {
 		state = stateClientProtoBefore
 	}
 	return &Parser{
-		state:       state,
-		maxReadSize: maxReadSize,
-		isClient:    isClient,
-		Processor:   processor,
+		state:     state,
+		readLimit: readLimit,
+		isClient:  isClient,
+		Processor: processor,
 	}
 }
