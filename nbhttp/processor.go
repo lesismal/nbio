@@ -250,6 +250,7 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 			for len(p.resQueue) > 0 {
 				res = p.resQueue[0]
 				if res.sequence != (p.responsedSeq + 1) {
+					p.mux.Unlock()
 					return
 				}
 				req := res.request
