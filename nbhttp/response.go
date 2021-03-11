@@ -5,6 +5,8 @@
 package nbhttp
 
 import (
+	"errors"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -43,6 +45,14 @@ type Response struct {
 
 	bodySize int
 	bodyList [][]byte
+}
+
+// Hijack .
+func (res *Response) Hijack() (net.Conn, error) {
+	if res.processor == nil {
+		return nil, errors.New("nil Proccessor")
+	}
+	return res.processor.Conn(), nil
 }
 
 // Header .
