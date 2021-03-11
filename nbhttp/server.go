@@ -33,6 +33,9 @@ var (
 
 	// DefaultExecutorTaskIdleTime .
 	DefaultExecutorTaskIdleTime = time.Second * 60
+
+	// DefaultKeepaliveTime .
+	DefaultKeepaliveTime = time.Second * 120
 )
 
 // Config .
@@ -83,6 +86,9 @@ type Config struct {
 
 	// TaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
 	TaskIdleTime time.Duration
+
+	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
+	KeepaliveTime time.Duration
 }
 
 // Server .
@@ -135,6 +141,9 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 	if conf.MinBufferSize <= 0 {
 		conf.MinBufferSize = DefaultMinBufferSize
 	}
+	if conf.KeepaliveTime <= 0 {
+		conf.KeepaliveTime = DefaultKeepaliveTime
+	}
 
 	var taskExecutePool *taskpool.TaskPool
 	var parserExecutePool *taskpool.FixedPool
@@ -170,14 +179,14 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 
 	svr := &Server{
 		Gopher:   g,
-		_onOpen:  func(c *nbio.Conn) { c.SetReadDeadline(time.Now().Add(time.Second * 120)) },
+		_onOpen:  func(c *nbio.Conn) { c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime)) },
 		_onClose: func(c *nbio.Conn, err error) {},
 		_onStop:  func() {},
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, taskExecutor, conf.MinBufferSize)
+		processor := NewServerProcessor(c, handler, taskExecutor, conf.MinBufferSize, conf.KeepaliveTime)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		c.SetSession(parser)
 	})
@@ -186,6 +195,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		if parser == nil {
 			loging.Error("nil parser")
 		}
+		parser.onClose(c, err)
 		svr._onClose(c, err)
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
