@@ -86,9 +86,9 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		nRequest++
 	})
-	processor := NewServerProcessor(nil, mux, nil, 2048)
+	processor := NewServerProcessor(nil, mux, nil, 2048, DefaultKeepaliveTime)
 	if isClient {
-		processor = NewClientProcessor(func(*http.Response) {
+		processor = NewClientProcessor(nil, func(*http.Response) {
 			nRequest++
 		})
 	}
@@ -123,12 +123,12 @@ func newParser(isClient bool) *Parser {
 	maxReadSize := 1024 * 1024 * 4
 	minBufferSize := 1024 * 4
 	if isClient {
-		processor := NewClientProcessor(func(*http.Response) {})
+		processor := NewClientProcessor(nil, func(*http.Response) {})
 		return NewParser(processor, isClient, maxReadSize, minBufferSize)
 	}
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", pirntMessage)
-	processor := NewServerProcessor(nil, mux, nil, 2048)
+	processor := NewServerProcessor(nil, mux, nil, 2048, DefaultKeepaliveTime)
 	return NewParser(processor, isClient, maxReadSize, minBufferSize)
 }
 
@@ -177,7 +177,7 @@ func BenchmarkServerProcessor(b *testing.B) {
 	isClient := false
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
-	processor := NewServerProcessor(nil, mux, nil, 2048)
+	processor := NewServerProcessor(nil, mux, nil, 2048, DefaultKeepaliveTime)
 	parser := NewParser(processor, isClient, maxReadSize, minBufferSize)
 
 	b.ReportAllocs()
