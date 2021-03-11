@@ -45,6 +45,7 @@ func resetResponse(res *Response) {
 
 // Processor .
 type Processor interface {
+	Conn() net.Conn
 	OnMethod(method string)
 	OnURL(uri string) error
 	OnProto(proto string) error
@@ -62,7 +63,7 @@ type Processor interface {
 // ServerProcessor .
 type ServerProcessor struct {
 	mux      sync.Mutex
-	Conn     net.Conn
+	conn     net.Conn
 	request  *http.Request
 	handler  http.Handler
 	executor func(f func())
@@ -71,6 +72,12 @@ type ServerProcessor struct {
 	sequence      uint64
 	responsedSeq  uint64
 	minBufferSize int
+	keepaliveTime time.Duration
+}
+
+// Conn .
+func (p *ServerProcessor) Conn() net.Conn {
+	return p.conn
 }
 
 // OnMethod .
@@ -183,8 +190,8 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	request := p.request
 	p.request = nil
 
-	if p.Conn != nil {
-		request.RemoteAddr = p.Conn.RemoteAddr().String()
+	if p.conn != nil {
+		request.RemoteAddr = p.conn.RemoteAddr().String()
 	}
 
 	if request.URL.Host == "" {
@@ -234,7 +241,7 @@ func (p *ServerProcessor) HandleExecute(executor func(f func())) {
 
 // WriteResponse .
 func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
-	if p.Conn != nil {
+	if p.conn != nil {
 		res, ok := w.(*Response)
 		if ok {
 			p.mux.Lock()
@@ -246,7 +253,7 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 					return
 				}
 				req := res.request
-				p.Conn.Write(res.encode())
+				p.conn.Write(res.encode())
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
 				resetResponse(res)
@@ -255,15 +262,15 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 				}
 				if req.Close {
 					// the data may still in the send queue
-					if p.Conn != nil {
-						p.Conn.Close()
+					if p.conn != nil {
+						p.conn.Close()
 						clear = true
 						releaseRequest(req)
 						break
 					}
 				} else {
-					if p.Conn != nil {
-						p.Conn.SetReadDeadline(time.Now().Add(time.Second * 120))
+					if p.conn != nil {
+						p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 					}
 				}
 				releaseRequest(req)
@@ -304,7 +311,7 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
@@ -315,17 +322,24 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f fun
 		minBufferSize = DefaultMinBufferSize
 	}
 	return &ServerProcessor{
-		Conn:          conn,
+		conn:          conn,
 		handler:       handler,
 		executor:      executor,
 		minBufferSize: minBufferSize,
+		keepaliveTime: keepaliveTime,
 	}
 }
 
 // ClientProcessor .
 type ClientProcessor struct {
+	conn     net.Conn
 	response *http.Response
 	handler  func(*http.Response)
+}
+
+// Conn .
+func (p *ClientProcessor) Conn() net.Conn {
+	return p.conn
 }
 
 // OnMethod .
@@ -419,17 +433,23 @@ func (p *ClientProcessor) HandleMessage(handler func(*http.Response)) {
 }
 
 // NewClientProcessor .
-func NewClientProcessor(handler func(*http.Response)) Processor {
+func NewClientProcessor(conn net.Conn, handler func(*http.Response)) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ClientProcessor: nil"))
 	}
 	return &ClientProcessor{
+		conn:    conn,
 		handler: handler,
 	}
 }
 
 // EmptyProcessor .
 type EmptyProcessor struct{}
+
+// Conn .
+func (p *EmptyProcessor) Conn() net.Conn {
+	return nil
+}
 
 // OnMethod .
 func (p *EmptyProcessor) OnMethod(method string) {
