@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -39,19 +40,31 @@ type Parser struct {
 	minBufferSize int
 	isClient      bool
 
+	session interface{}
+
 	Processor Processor
 
-	session interface{}
+	Upgrader Upgrader
 }
 
 func (p *Parser) nextState(state int8) {
 	p.state = state
 }
 
+func (p *Parser) onClose(c *nbio.Conn, err error) {
+	if p.Upgrader != nil {
+		p.Upgrader.OnClose(p, err)
+	}
+}
+
 // Read .
 func (p *Parser) Read(data []byte) error {
 	if len(data) == 0 {
 		return nil
+	}
+
+	if p.Upgrader != nil {
+		return p.Upgrader.Read(p, data)
 	}
 
 	var c byte
