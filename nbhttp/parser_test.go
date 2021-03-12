@@ -149,8 +149,18 @@ func pirntMessage(w http.ResponseWriter, request *http.Request) {
 	}
 	body := request.Body
 	if body != nil {
-		b, _ := io.ReadAll(body)
-		fmt.Println("body:", string(b))
+		nread := 0
+		buffer := make([]byte, 1024)
+		for {
+			n, err := body.Read(buffer)
+			if n > 0 {
+				nread += n
+			}
+			if err == io.EOF {
+				break
+			}
+		}
+		fmt.Println("body:", string(buffer[:nread]))
 	} else {
 		fmt.Println("body: null")
 	}
