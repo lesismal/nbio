@@ -232,7 +232,7 @@ func (p *poller) modWrite(fd int) error {
 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLRDHUP | syscall.EPOLLIN | syscall.EPOLLOUT})
 }
 
-func (p *poller) deleteWrite(fd int) error {
+func (p *poller) deleteEvent(fd int) error {
 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_DEL, fd, &syscall.EpollEvent{Fd: int32(fd)})
 }
 
@@ -261,6 +261,9 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 		if ev.Events&syscall.EPOLLOUT != 0 {
 			c.flush()
 		}
+	} else {
+		syscall.Close(fd)
+		p.deleteEvent(fd)
 	}
 }
 
