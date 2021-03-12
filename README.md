@@ -41,17 +41,20 @@
   - [Std Net Examples](#std-net-examples)
   - [Echo Examples](#echo-examples)
   - [TLS Examples](#tls-examples)
+  - [HTTP Examples](#http-examples)
   - [Bench Examples](#bench-examples)
-  - [Dependency](#dependency)
 
 ## Features
 - [x] linux: epoll
 - [x] macos(bsd): kqueue
 - [x] windows: golang std net
 - [x] nbio.Conn implements a non-blocking net.Conn(except windows)
-- [x] tls supported
 - [x] writev supported
 - [x] least dependency
+- [x] TLS supported
+- [x] HTTP 1.x
+- [ ] Websocket
+- [ ] HTTP 2.0
 
 ## Installation
 
@@ -280,15 +283,14 @@ g.OnData(func(c *Conn, data []byte) {
 - [tls-server](https://github.com/lesismal/nbio/blob/master/examples/tls/server/server.go)
 - [tls-client](https://github.com/lesismal/nbio/blob/master/examples/tls/client/client.go)
 
+## HTTP Examples
+
+- [http-server](https://github.com/lesismal/nbio/blob/master/examples/http/server/server.go)
+- [http-client](https://github.com/lesismal/nbio/blob/master/examples/http/client/client.go)
+
 ## Bench Examples
 
 **refer to this test, or write your own test cases:**
 
 - [bench-server](https://github.com/lesismal/nbio/blob/master/examples/bench/server/server.go)
 - [bench-client](https://github.com/lesismal/nbio/blob/master/examples/bench/client/client.go)
-
-## Dependency
-
-**nbio** depends on std lib only.
-
-extension for TLS depends on [lesismal/llib/std/crypto/tls](), which is copied from go1.6 and rewrited, if tls is used like the [example](#tls-examples), go1.6+ is needed.
