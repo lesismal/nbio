@@ -34,7 +34,7 @@ func (r *runner) call(f func()) {
 	f()
 }
 
-func (r *runner) taskLoop(checkIdleInterval time.Duration, chTask <-chan func(), chClose <-chan struct{}, f func()) {
+func (r *runner) taskLoop(maxIdleTime time.Duration, chTask <-chan func(), chClose <-chan struct{}, f func()) {
 	defer func() {
 		r.parent.wg.Done()
 		<-r.parent.chRunner
@@ -42,11 +42,14 @@ func (r *runner) taskLoop(checkIdleInterval time.Duration, chTask <-chan func(),
 
 	r.call(f)
 
+	timer := time.NewTimer(maxIdleTime)
+	defer timer.Stop()
 	for r.parent.running {
 		select {
 		case f := <-chTask:
 			r.call(f)
-		case <-r.parent.chIdleExit:
+			timer.Reset(maxIdleTime)
+		case <-timer.C:
 			return
 		case <-chClose:
 			return
@@ -61,12 +64,11 @@ type TaskPool struct {
 	running bool
 	stopped int32
 
-	chTask     chan func()
-	chRunner   chan struct{}
-	chIdleExit chan struct{}
-	chClose    chan struct{}
+	chTask   chan func()
+	chRunner chan struct{}
+	chClose  chan struct{}
 
-	checkIdleInterval time.Duration
+	maxIdleTime time.Duration
 }
 
 func (tp *TaskPool) push(f func()) error {
@@ -75,7 +77,7 @@ func (tp *TaskPool) push(f func()) error {
 	case tp.chRunner <- struct{}{}:
 		r := &runner{parent: tp}
 		tp.wg.Add(1)
-		go r.taskLoop(tp.checkIdleInterval, tp.chTask, tp.chClose, f)
+		go r.taskLoop(tp.maxIdleTime, tp.chTask, tp.chClose, f)
 	case <-tp.chClose:
 		return ErrStopped
 	}
@@ -100,35 +102,17 @@ func (tp *TaskPool) Stop() {
 	}
 }
 
-func (tp *TaskPool) checkIdle() {
-	ticker := time.NewTicker(tp.checkIdleInterval)
-	defer ticker.Stop()
-	for tp.running {
-		select {
-		case <-ticker.C:
-			pre := tp.chIdleExit
-			tp.chIdleExit = make(chan struct{})
-			close(pre)
-		case <-tp.chClose:
-			return
-		}
-	}
-}
-
 // New .
-func New(size int, checkIdleInterval time.Duration) *TaskPool {
+func New(size int, maxIdleTime time.Duration) *TaskPool {
 	tp := &TaskPool{
-		wg:                &sync.WaitGroup{},
-		running:           true,
-		chTask:            make(chan func()),
-		chRunner:          make(chan struct{}, size),
-		chIdleExit:        make(chan struct{}),
-		chClose:           make(chan struct{}),
-		checkIdleInterval: checkIdleInterval,
+		wg:          &sync.WaitGroup{},
+		running:     true,
+		chTask:      make(chan func()),
+		chRunner:    make(chan struct{}, size),
+		chClose:     make(chan struct{}),
+		maxIdleTime: maxIdleTime,
 	}
-
 	tp.wg.Add(1)
-	go tp.checkIdle()
 
 	return tp
 }
