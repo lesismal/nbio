@@ -140,7 +140,7 @@ func (p *poller) modWrite(fd int) {
 	p.trigger()
 }
 
-func (p *poller) deleteWrite(fd int) {
+func (p *poller) deleteEvent(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
@@ -168,6 +168,9 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 		if ev.Filter&syscall.EVFILT_WRITE != 0 {
 			c.flush()
 		}
+	} else {
+		syscall.Close(fd)
+		p.deleteEvent(fd)
 	}
 }
 
