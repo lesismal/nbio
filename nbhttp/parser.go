@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -51,7 +50,7 @@ func (p *Parser) nextState(state int8) {
 	p.state = state
 }
 
-func (p *Parser) onClose(c *nbio.Conn, err error) {
+func (p *Parser) onClose(err error) {
 	if p.Upgrader != nil {
 		p.Upgrader.OnClose(p, err)
 	}
