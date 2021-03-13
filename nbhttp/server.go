@@ -195,7 +195,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		if parser == nil {
 			loging.Error("nil parser")
 		}
-		parser.onClose(c, err)
+		parser.onClose(err)
 		svr._onClose(c, err)
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
