@@ -122,33 +122,40 @@ func (p *ServerProcessor) OnStatus(code int, status string) {
 // OnHeader .
 func (p *ServerProcessor) OnHeader(key, value string) {
 	values := p.request.Header[key]
-	i, j := 0, 0
-	for i < len(value) && j < len(value) {
-		for i < len(value) {
-			c := value[i]
-			if c != ' ' && c != ',' {
-				break
-			}
-			i++
-		}
-		j = i + 1
-		for j < len(value) {
-			c := value[j]
-			if c == ' ' || c == ',' {
-				break
-			}
-			j++
-		}
-		if j <= len(value) {
-			values = append(values, value[i:j])
-		}
-		i = j + 1
-	}
-	if len(values) == 0 {
-		values = append(values, "")
-	}
+	values = append(values, value)
 	p.request.Header[key] = values
 }
+
+// OnHeader .
+// func (p *ServerProcessor) OnHeader(key, value string) {
+// 	values := p.request.Header[key]
+// 	i, j := 0, 0
+// 	for i < len(value) && j < len(value) {
+// 		for i < len(value) {
+// 			c := value[i]
+// 			if c != ' ' && c != ',' {
+// 				break
+// 			}
+// 			i++
+// 		}
+// 		j = i + 1
+// 		for j < len(value) {
+// 			c := value[j]
+// 			if c == ' ' || c == ',' {
+// 				break
+// 			}
+// 			j++
+// 		}
+// 		if j <= len(value) {
+// 			values = append(values, value[i:j])
+// 		}
+// 		i = j + 1
+// 	}
+// 	if len(values) == 0 {
+// 		values = append(values, "")
+// 	}
+// 	p.request.Header[key] = values
+// }
 
 // OnContentLength .
 func (p *ServerProcessor) OnContentLength(contentLength int) {
