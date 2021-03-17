@@ -151,21 +151,22 @@ func (res *Response) encode() []byte {
 			}
 			continue
 		}
-
-		value := strings.Join(vv, ",")
-		data = mempool.Realloc(data, i+len(k)+len(value)+4+res.bodySize)
-		copy(data[i:], k)
-		i += len(k)
-		data[i] = ':'
-		i++
-		data[i] = ' '
-		i++
-		copy(data[i:], value)
-		i += len(value)
-		data[i] = '\r'
-		i++
-		data[i] = '\n'
-		i++
+		for _, value := range vv {
+			// value := strings.Join(vv, ",")
+			data = mempool.Realloc(data, i+len(k)+len(value)+4+res.bodySize)
+			copy(data[i:], k)
+			i += len(k)
+			data[i] = ':'
+			i++
+			data[i] = ' '
+			i++
+			copy(data[i:], value)
+			i += len(value)
+			data[i] = '\r'
+			i++
+			data[i] = '\n'
+			i++
+		}
 	}
 
 	if len(res.header["Content-Type"]) == 0 {
