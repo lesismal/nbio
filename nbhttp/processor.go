@@ -73,6 +73,7 @@ type ServerProcessor struct {
 	responsedSeq  uint64
 	minBufferSize int
 	keepaliveTime time.Duration
+	isUpgrade     bool
 }
 
 // Conn .
@@ -124,6 +125,7 @@ func (p *ServerProcessor) OnHeader(key, value string) {
 	values := p.request.Header[key]
 	values = append(values, value)
 	p.request.Header[key] = values
+	p.isUpgrade = (key == "Connection" && value == "upgrade")
 }
 
 // OnHeader .
@@ -231,12 +233,15 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	response := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
-	p.executor(func() {
+	if !p.isUpgrade {
+		p.executor(func() {
+			p.handler.ServeHTTP(response, request)
+			p.WriteResponse(response)
+		})
+	} else {
 		p.handler.ServeHTTP(response, request)
 		p.WriteResponse(response)
-
-	})
-
+	}
 }
 
 // HandleExecute .

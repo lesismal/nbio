@@ -73,6 +73,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
+		c.g.onWBRelease(c, b)
 		return -1, errClosed
 	}
 
@@ -106,6 +107,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
+		for _, v := range in {
+			c.g.onWBRelease(c, v)
+		}
 		return 0, errClosed
 	}
 

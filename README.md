@@ -42,6 +42,9 @@
   - [Echo Examples](#echo-examples)
   - [TLS Examples](#tls-examples)
   - [HTTP Examples](#http-examples)
+  - [HTTP 1M Connections Examples](#http-1m-connections-examples)
+  - [Websocket Examples](#websocket-examples)
+  - [Websocket 1M Connections Examples](#websocket-1m-connections-examples)
   - [Bench Examples](#bench-examples)
 
 ## Features
@@ -272,7 +275,6 @@ g.OnData(func(c *Conn, data []byte) {
 - [std-net-echo-server](https://github.com/lesismal/nbio/blob/master/examples/netstd/server/server.go)
 - [std-net-echo-client](https://github.com/lesismal/nbio/blob/master/examples/netstd/client/client.go)
 
-
 ## Echo Examples
 
 - [echo-server](https://github.com/lesismal/nbio/blob/master/examples/echo/server/server.go)
@@ -287,6 +289,21 @@ g.OnData(func(c *Conn, data []byte) {
 
 - [http-server](https://github.com/lesismal/nbio/blob/master/examples/http/server/server.go)
 - [http-client](https://github.com/lesismal/nbio/blob/master/examples/http/client/client.go)
+
+## HTTP 1M Connections Examples
+
+- [http-server](https://github.com/lesismal/nbio/blob/master/examples/http_1m/server/server.go)
+- [http-client](https://github.com/lesismal/nbio/blob/master/examples/http_1m/client/client.go)
+
+## Websocket Examples
+
+- [http-server](https://github.com/lesismal/nbio/tree/websocket/examples/websocket/server/server.go)
+- [http-client](https://github.com/lesismal/nbio/tree/websocket/examples/websocket/client/client.go)
+
+## Websocket 1M Connections Examples
+
+- [http-server](https://github.com/lesismal/nbio/tree/websocket/examples/websocket_1m/server/server.go)
+- [http-client](https://github.com/lesismal/nbio/tree/websocket/examples/websocket_1m/client/client.go)
 
 ## Bench Examples
 

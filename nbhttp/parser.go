@@ -52,7 +52,7 @@ func (p *Parser) nextState(state int8) {
 
 func (p *Parser) onClose(err error) {
 	if p.Upgrader != nil {
-		p.Upgrader.OnClose(p, err)
+		p.Upgrader.Close(p, err)
 	}
 }
 
@@ -60,10 +60,6 @@ func (p *Parser) onClose(err error) {
 func (p *Parser) Read(data []byte) error {
 	if len(data) == 0 {
 		return nil
-	}
-
-	if p.Upgrader != nil {
-		return p.Upgrader.Read(p, data)
 	}
 
 	var c byte
@@ -79,7 +75,12 @@ func (p *Parser) Read(data []byte) error {
 		data = p.cache
 		p.cache = nil
 	}
-	for i := offset; i < len(data); i++ {
+
+	if p.Upgrader != nil {
+		return p.Upgrader.Read(p, data)
+	}
+
+	for i := offset; i < len(data) && p.Upgrader == nil; i++ {
 		c = data[i]
 		switch p.state {
 		case stateMethodBefore:

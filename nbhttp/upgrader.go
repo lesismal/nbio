@@ -12,7 +12,7 @@ type Hijacker interface {
 
 // Upgrader .
 type Upgrader interface {
-	Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) error
+	Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error)
 	Read(p *Parser, data []byte) error
-	OnClose(p *Parser, err error)
+	Close(p *Parser, err error)
 }
