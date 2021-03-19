@@ -181,9 +181,11 @@ func (c *Conn) SetDeadline(t time.Time) error {
 		} else {
 			if c.rTimer != nil {
 				c.rTimer.Stop()
+				c.rTimer = nil
 			}
 			if c.wTimer != nil {
 				c.wTimer.Stop()
+				c.wTimer = nil
 			}
 		}
 	}
@@ -204,6 +206,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 			}
 		} else if c.rTimer != nil {
 			c.rTimer.Stop()
+			c.rTimer = nil
 		}
 	}
 	c.mux.Unlock()
@@ -223,6 +226,7 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 			}
 		} else if c.wTimer != nil {
 			c.wTimer.Stop()
+			c.wTimer = nil
 		}
 	}
 	c.mux.Unlock()
