@@ -42,6 +42,7 @@
   - [Echo Examples](#echo-examples)
   - [TLS Examples](#tls-examples)
   - [HTTP Examples](#http-examples)
+  - [HTTPS Examples](#https-examples)
   - [HTTP 1M Connections Examples](#http-1m-connections-examples)
   - [Websocket Examples](#websocket-examples)
   - [Websocket 1M Connections Examples](#websocket-1m-connections-examples)
@@ -55,8 +56,8 @@
 - [x] writev supported
 - [x] least dependency
 - [x] TLS supported
-- [x] HTTP 1.x
-- [ ] Websocket
+- [x] HTTP/HTTPS 1.x
+- [x] Websocket
 - [ ] HTTP 2.0
 
 ## Installation
@@ -289,6 +290,12 @@ g.OnData(func(c *Conn, data []byte) {
 
 - [http-server](https://github.com/lesismal/nbio/blob/master/examples/http/server/server.go)
 - [http-client](https://github.com/lesismal/nbio/blob/master/examples/http/client/client.go)
+
+## HTTPS Examples
+
+- [http-tls_server](https://github.com/lesismal/nbio/blob/master/examples/http/server_tls/server.go)
+- visit: https://localhost:28000/echo
+
 
 ## HTTP 1M Connections Examples
 
