@@ -2,8 +2,9 @@ package taskpool
 
 import (
 	"container/list"
-	"runtime/debug"
+	"runtime"
 	"sync"
+	"unsafe"
 
 	"github.com/lesismal/nbio/loging"
 )
@@ -15,8 +16,10 @@ type fastRunner struct {
 func (r *fastRunner) call(e interface{}) {
 	defer func() {
 		if err := recover(); err != nil {
-			loging.Error("taskpool fixedRunner call failed: %v", err)
-			debug.PrintStack()
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			loging.Error("taskpool fastRunner call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
 	e.(func())()

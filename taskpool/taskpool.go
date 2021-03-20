@@ -6,10 +6,11 @@ package taskpool
 
 import (
 	"errors"
-	"runtime/debug"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/nbio/loging"
 )
@@ -27,8 +28,10 @@ type runner struct {
 func (r *runner) call(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			loging.Error("taskpool runner call failed: %v", err)
-			debug.PrintStack()
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			loging.Error("taskpool runner call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
 	f()
