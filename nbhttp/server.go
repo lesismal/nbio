@@ -11,7 +11,6 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
-	ntls "github.com/lesismal/nbio/extension/tls"
 	"github.com/lesismal/nbio/loging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/taskpool"
@@ -243,16 +242,81 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 	return svr
 }
 
+// NewServerTLS .
 func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index int, f func()), messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
-	svr := NewServer(conf, handler, parserExecutor, messageHandlerExecutor)
+	if conf.ReadBufferSize == 0 {
+		conf.ReadBufferSize = DefaultHTTPReadBufferSize
+	}
+	if conf.NPoller <= 0 {
+		conf.NPoller = runtime.NumCPU()
+	}
+	if conf.NParser <= 0 {
+		conf.NParser = conf.NPoller
+	}
+	if conf.ReadLimit <= 0 {
+		conf.ReadLimit = DefaultHTTPReadLimit
+	}
+	if conf.MinBufferSize <= 0 {
+		conf.MinBufferSize = DefaultMinBufferSize
+	}
+	if conf.KeepaliveTime <= 0 {
+		conf.KeepaliveTime = DefaultKeepaliveTime
+	}
+	if conf.ReadBufferSize <= 0 {
+		conf.ReadBufferSize = nbio.DefaultReadBufferSize
+	}
+
+	var parserExecutePool *taskpool.FixedPool
+	var messageHandlerExecutePool *taskpool.TaskPool
+	if parserExecutor == nil {
+		parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
+		parserExecutor = func(index int, f func()) {
+			parserExecutePool.GoByIndex(index, f)
+		}
+	}
+	if messageHandlerExecutor == nil {
+		if conf.MessageHandlerPoolSize <= 0 {
+			conf.MessageHandlerPoolSize = DefaultMessageHandlerPoolSize
+		}
+		if conf.MessageHandlerTaskIdleTime <= 0 {
+			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
+		}
+		messageHandlerExecutePool = taskpool.New(conf.MessageHandlerPoolSize, conf.MessageHandlerTaskIdleTime)
+		messageHandlerExecutor = messageHandlerExecutePool.Go
+	}
+
+	gopherConf := nbio.Config{
+		Name:    conf.Name,
+		Network: conf.Network,
+		Addrs:   conf.Addrs,
+		MaxLoad: conf.MaxLoad,
+		// NListener:          conf.NListener,
+		NPoller:            conf.NPoller,
+		ReadBufferSize:     conf.ReadBufferSize,
+		MaxWriteBufferSize: conf.MaxWriteBufferSize,
+		LockThread:         conf.LockThread,
+	}
+	g := nbio.NewGopher(gopherConf)
+
+	svr := &Server{
+		Gopher:                 g,
+		_onOpen:                func(c *nbio.Conn) { c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime)) },
+		_onClose:               func(c *nbio.Conn, err error) {},
+		_onStop:                func() {},
+		ParserExecutor:         parserExecutor,
+		MessageHandlerExecutor: messageHandlerExecutor,
+	}
+
 	isClient := false
-	svr.OnOpen(ntls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+
+	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
+		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
+		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		c.SetSession(parser)
-	}))
-	svr.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {
+	})
+	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			loging.Error("nil parser")
@@ -260,21 +324,90 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 		}
 		parser.onClose(err)
 		svr._onClose(c, err)
-	}))
-	svr.OnData(ntls.WrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
+	})
+	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			loging.Error("nil parser")
 			c.Close()
 			return
 		}
-		parserExecutor(c.Hash(), func() {
-			err := parser.Read(data)
-			if err != nil {
-				loging.Error("parser.Read failed: %v", err)
-				c.Close()
+		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
+			tlsConn.Append(data)
+			for {
+				n, err := tlsConn.Read(tlsConn.ReadBuffer)
+				if err != nil {
+					c.Close()
+					return
+				}
+				parserExecutor(c.Hash(), func() {
+					err := parser.Read(tlsConn.ReadBuffer[:n])
+					if err != nil {
+						loging.Error("parser.Read failed: %v", err)
+						c.Close()
+					}
+				})
+				if n < len(tlsConn.ReadBuffer) {
+					return
+				}
 			}
-		})
-	}))
+		}
+	})
+	g.OnMemAlloc(func(c *nbio.Conn) []byte {
+		return mempool.Malloc(int(conf.ReadBufferSize))
+	})
+	// g.OnMemFree(func(c *nbio.Conn, buffer []byte) {})
+	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+		mempool.Free(buffer)
+	})
+
+	g.OnStop(func() {
+		svr._onStop()
+		messageHandlerExecutor = func(f func()) {}
+		parserExecutor = func(index int, f func()) {}
+		if parserExecutePool != nil {
+			parserExecutePool.Stop()
+		}
+		if messageHandlerExecutePool != nil {
+			messageHandlerExecutePool.Stop()
+		}
+	})
 	return svr
 }
+
+// // NewServerTLS .
+// func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index int, f func()), messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
+// 	svr := NewServer(conf, handler, parserExecutor, messageHandlerExecutor)
+// 	isClient := false
+// 	svr.Gopher.OnOpen(ntls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+// 		svr._onOpen(c)
+// 		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
+// 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+// 		c.SetSession(parser)
+// 	}))
+// 	svr.Gopher.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {
+// 		parser := c.Session().(*Parser)
+// 		if parser == nil {
+// 			loging.Error("nil parser")
+// 			return
+// 		}
+// 		parser.onClose(err)
+// 		svr._onClose(c, err)
+// 	}))
+// 	svr.Gopher.OnData(ntls.WrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
+// 		parser := c.Session().(*Parser)
+// 		if parser == nil {
+// 			loging.Error("nil parser")
+// 			c.Close()
+// 			return
+// 		}
+// 		parserExecutor(c.Hash(), func() {
+// 			err := parser.Read(data)
+// 			if err != nil {
+// 				loging.Error("parser.Read failed: %v", err)
+// 				c.Close()
+// 			}
+// 		})
+// 	}))
+// 	return svr
+// }
