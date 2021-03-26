@@ -64,6 +64,7 @@ type Processor interface {
 type ServerProcessor struct {
 	mux      sync.Mutex
 	conn     net.Conn
+	parser   *Parser
 	request  *http.Request
 	handler  http.Handler
 	executor func(f func())
@@ -226,6 +227,13 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 			}
 			request.Close = hasClose || !keepAlive
 		}
+	}
+
+	// http 2.0
+	if request.Method == "PRI" && len(request.Header) == 0 && request.URL.Path == "*" && request.Proto == "HTTP/2.0" {
+		p.isUpgrade = true
+		p.parser.Upgrader = &Http2Upgrader{}
+		return
 	}
 
 	if request.Body == nil {
