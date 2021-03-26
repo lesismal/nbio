@@ -143,12 +143,6 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 
 // Close implements Close
 func (c *Conn) Close() error {
-	if c.wTimer != nil {
-		c.wTimer.Stop()
-	}
-	if c.rTimer != nil {
-		c.rTimer.Stop()
-	}
 	return c.closeWithError(nil)
 }
 
@@ -442,6 +436,14 @@ func (c *Conn) closeWithError(err error) error {
 	if !c.closed {
 		c.closed = true
 		c.mux.Unlock()
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+			c.wTimer = nil
+		}
+		if c.rTimer != nil {
+			c.rTimer.Stop()
+			c.rTimer = nil
+		}
 		return c.closeWithErrorWithoutLock(err)
 	}
 	c.mux.Unlock()
