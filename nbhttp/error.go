@@ -67,6 +67,14 @@ var (
 )
 
 var (
+	// ErrInvalidH2SM .
+	ErrInvalidH2SM = errors.New("invalid http2 SM characters")
+
+	// ErrInvalidH2HeaderR .
+	ErrInvalidH2HeaderR = errors.New("invalid http2 SM characters")
+)
+
+var (
 	// ErrNilConn .
 	ErrNilConn = errors.New("nil Conn")
 )
