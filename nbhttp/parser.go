@@ -76,11 +76,24 @@ func (p *Parser) Read(data []byte) error {
 		p.cache = nil
 	}
 
+UPGRADER:
 	if p.Upgrader != nil {
-		return p.Upgrader.Read(p, data)
+		udata := data[start:]
+		if start > 0 {
+			udata = mempool.Malloc(len(data) - start)
+			copy(udata, data[start:])
+			// if len(p.cache) > 0 {
+			// 	mempool.Free(p.cache)
+			// 	p.cache = nil
+			// }
+		}
+		return p.Upgrader.Read(p, udata)
 	}
 
-	for i := offset; i < len(data) && p.Upgrader == nil; i++ {
+	for i := offset; i < len(data); i++ {
+		if p.Upgrader != nil {
+			goto UPGRADER
+		}
 		c = data[i]
 		switch p.state {
 		case stateMethodBefore:
@@ -105,12 +118,15 @@ func (p *Parser) Read(data []byte) error {
 				return ErrInvalidMethod
 			}
 		case statePathBefore:
-			if c == '/' {
+			switch c {
+			case '/', '*':
 				start = i
 				p.nextState(statePath)
 				continue
 			}
-			if c != ' ' {
+			switch c {
+			case ' ':
+			default:
 				return ErrInvalidRequestURI
 			}
 		case statePath:
