@@ -16,6 +16,9 @@ var (
 		"DELETE":  true,
 		"TRACE":   true,
 		"CONNECT": true,
+
+		// http 2.0
+		"PRI": true,
 	}
 
 	tokenCharMap = [256]bool{
