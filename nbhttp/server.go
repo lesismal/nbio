@@ -288,7 +288,7 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 
 	// setup prefer protos: http2.0, other protos to be added
 	preferenceProtos := map[string]struct{}{
-		"h2": {},
+		// "h2": {},
 	}
 	for _, v := range tlsConfig.NextProtos {
 		if _, ok := preferenceProtos[v]; ok {
