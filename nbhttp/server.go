@@ -194,6 +194,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		svr._onOpen(c)
 		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
@@ -287,7 +288,7 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 
 	// setup prefer protos: http2.0, other protos to be added
 	preferenceProtos := map[string]struct{}{
-		// "h2": {},
+		"h2": {},
 	}
 	for _, v := range tlsConfig.NextProtos {
 		if _, ok := preferenceProtos[v]; ok {
@@ -327,6 +328,7 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
@@ -346,26 +348,27 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 			return
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
-			tlsConn.Append(data)
-			for {
-				n, err := tlsConn.Read(tlsConn.ReadBuffer)
-				if err != nil {
-					c.Close()
-					return
-				}
-				if n > 0 {
-					parserExecutor(c.Hash(), func() {
-						err := parser.Read(tlsConn.ReadBuffer[:n])
+			parserExecutor(c.Hash(), func() {
+				tlsConn.Append(data)
+				for {
+					buffer := mempool.Malloc(len(data))
+					n, err := tlsConn.Read(buffer)
+					if err != nil {
+						c.Close()
+						return
+					}
+					if n > 0 {
+						err := parser.Read(buffer[:n])
 						if err != nil {
 							loging.Error("parser.Read failed: %v", err)
 							c.Close()
 						}
-					})
+					}
+					if n < len(buffer) {
+						return
+					}
 				}
-				if n < len(tlsConn.ReadBuffer) {
-					return
-				}
-			}
+			})
 		}
 	})
 	g.OnMemAlloc(func(c *nbio.Conn) []byte {
