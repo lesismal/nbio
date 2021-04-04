@@ -18,7 +18,7 @@ var (
 	total uint64 = 0
 )
 
-// visit: https://localhost:28000/echo
+// visit: https://localhost:8888/echo
 func onEcho(w http.ResponseWriter, r *http.Request) {
 	data, _ := io.ReadAll(r.Body)
 	if len(data) > 0 {
@@ -45,7 +45,7 @@ func main() {
 
 	svr := nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:28000"},
+		Addrs:   []string{"localhost:8888"},
 	}, mux, nil, nil, tlsConfig)
 
 	err = svr.Start()

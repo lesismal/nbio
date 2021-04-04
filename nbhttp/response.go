@@ -74,15 +74,28 @@ func (res *Response) WriteHeader(statusCode int) {
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
 	res.WriteHeader(http.StatusOK)
-	if len(data) > 0 {
-		res.bodyList = append(res.bodyList, data)
-		res.bodySize += len(data)
+	n := len(data)
+	if n > 0 {
+		if n <= 4096 {
+			res.bodyList = append(res.bodyList, data)
+			res.bodySize += len(data)
+		} else {
+			n = 4096
+			for len(data) > 0 {
+				if len(data) < n {
+					n = len(data)
+				}
+				res.bodyList = append(res.bodyList, data[:n])
+				data = data[n:]
+			}
+			res.bodySize += len(data)
+		}
 	}
 	return len(data), nil
 }
 
-// finish .
-func (res *Response) encode() []byte {
+// encode .
+func (res *Response) encode() [][]byte {
 	res.WriteHeader(http.StatusOK)
 	statusCode := res.statusCode
 	status := res.status
@@ -204,14 +217,25 @@ func (res *Response) encode() []byte {
 	i += 2
 
 	if res.bodySize == 0 {
-		return data
+		return [][]byte{data}
 	}
 
+	var ret [][]byte
 	if !chunked {
-		data = mempool.Realloc(data, i+res.bodySize)
-		for _, v := range res.bodyList {
-			copy(data[i:], v)
-			i += len(v)
+		if i+res.bodySize <= 8192 {
+			data = mempool.Realloc(data, i+res.bodySize)
+			for _, v := range res.bodyList {
+				copy(data[i:], v)
+				i += len(v)
+			}
+			ret = append(ret, data)
+		} else {
+			ret = append(ret, data)
+			for _, v := range res.bodyList {
+				data = mempool.Malloc(len(v))
+				copy(data, v)
+				ret = append(ret, data)
+			}
 		}
 	} else {
 		for _, v := range res.bodyList {
@@ -225,6 +249,11 @@ func (res *Response) encode() []byte {
 			i += len(v)
 			copy(data[i:], "\r\n")
 			i += 2
+			if len(data) > 4096 {
+				ret = append(ret, data)
+				data = mempool.Malloc(4096)[0:0]
+				i = 0
+			}
 		}
 		data = mempool.Realloc(data, i+5)
 		if len(trailer) == 0 {
@@ -253,7 +282,7 @@ func (res *Response) encode() []byte {
 		}
 	}
 
-	return data
+	return ret
 }
 
 // NewResponse .

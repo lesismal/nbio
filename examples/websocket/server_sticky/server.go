@@ -27,7 +27,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		svr.MessageHandlerExecutor(func() {
 			// echo
-			wsConn.WriteMessage(messageType, data)
+			c.WriteMessage(messageType, data)
 
 			fmt.Println("OnMessage:", messageType, string(data))
 		})

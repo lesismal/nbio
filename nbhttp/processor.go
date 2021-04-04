@@ -267,6 +267,7 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 			p.mux.Lock()
 			heap.Push(&p.resQueue, res)
 			clear := false
+		RESQUEUE:
 			for len(p.resQueue) > 0 {
 				res = p.resQueue[0]
 				if res.sequence != (p.responsedSeq + 1) {
@@ -274,7 +275,13 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 					return
 				}
 				req := res.request
-				p.conn.Write(res.encode())
+				pkts := res.encode()
+				for _, v := range pkts {
+					if _, err := p.conn.Write(v); err != nil {
+						clear = true
+						break RESQUEUE
+					}
+				}
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
 				resetResponse(res)

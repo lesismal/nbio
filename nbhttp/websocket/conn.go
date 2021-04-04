@@ -152,6 +152,7 @@ func (c *Conn) writeMessage(messageType int8, fin bool, data []byte) error {
 	return err
 }
 
+// overwrite nbio.Conn.Write
 func (c *Conn) Write(data []byte) (int, error) {
 	return -1, ErrInvalidWriteCalling
 }

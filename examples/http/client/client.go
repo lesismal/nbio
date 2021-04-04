@@ -30,6 +30,7 @@ func post() {
 	url := "http://localhost:8888/echo"
 	method := "POST"
 	client := &http.Client{}
+
 	for i := 0; i < 5; i++ {
 		payload := strings.NewReader("hello")
 		req, err := http.NewRequest(method, url, payload)
