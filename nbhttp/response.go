@@ -80,6 +80,8 @@ func (res *Response) Write(data []byte) (int, error) {
 			res.bodyList = append(res.bodyList, data)
 			res.bodySize += len(data)
 		} else {
+			res.bodySize += len(data)
+
 			n = 4096
 			for len(data) > 0 {
 				if len(data) < n {
@@ -88,7 +90,6 @@ func (res *Response) Write(data []byte) (int, error) {
 				res.bodyList = append(res.bodyList, data[:n])
 				data = data[n:]
 			}
-			res.bodySize += len(data)
 		}
 	}
 	return len(data), nil
@@ -216,12 +217,11 @@ func (res *Response) encode() [][]byte {
 	copy(data[i:], "\r\n")
 	i += 2
 
-	if res.bodySize == 0 {
-		return [][]byte{data}
-	}
-
 	var ret [][]byte
 	if !chunked {
+		if res.bodySize == 0 {
+			return [][]byte{data}
+		}
 		if i+res.bodySize <= 8192 {
 			data = mempool.Realloc(data, i+res.bodySize)
 			for _, v := range res.bodyList {
@@ -230,8 +230,11 @@ func (res *Response) encode() [][]byte {
 			}
 			ret = append(ret, data)
 		} else {
+			data = mempool.Realloc(data, i+len(res.bodyList[0]))
+			copy(data[i:], res.bodyList[0])
 			ret = append(ret, data)
-			for _, v := range res.bodyList {
+			for i := 1; i < len(res.bodyList); i++ {
+				v := res.bodyList[i]
 				data = mempool.Malloc(len(v))
 				copy(data, v)
 				ret = append(ret, data)
@@ -280,6 +283,7 @@ func (res *Response) encode() [][]byte {
 			data = mempool.Realloc(data, i+2)
 			copy(data[i:], "\r\n")
 		}
+		ret = append(ret, data)
 	}
 
 	return ret

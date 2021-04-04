@@ -25,7 +25,6 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 	}
 	if available >= need {
 		copy(p, br.buffer[br.index:br.index+need])
-		br.buffer = br.buffer[br.index+need:]
 		br.index += need
 		if available == need {
 			br.Close()
