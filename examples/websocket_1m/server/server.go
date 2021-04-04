@@ -25,7 +25,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(messageType int8, data []byte) {
+	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		svr.MessageHandlerExecutor(func() {
 			wsConn.WriteMessage(messageType, data)
 			atomic.AddUint64(&qps, 1)

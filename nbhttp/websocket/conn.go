@@ -30,10 +30,10 @@ type Conn struct {
 
 	subprotocol string
 
-	pingHandler    func(appData string)
-	pongHandler    func(appData string)
-	messageHandler func(messageType int8, data []byte)
-	closeHandler   func(code int, text string)
+	pingHandler    func(c *Conn, appData string)
+	pongHandler    func(c *Conn, appData string)
+	messageHandler func(c *Conn, messageType int8, data []byte)
+	closeHandler   func(c *Conn, code int, text string)
 
 	onClose func(c *Conn, err error)
 }
@@ -41,47 +41,49 @@ type Conn struct {
 func (c *Conn) handleMessage(opcode int8, data []byte) {
 	switch opcode {
 	case TextMessage, BinaryMessage:
-		c.messageHandler(opcode, data)
+		c.messageHandler(c, opcode, data)
 	case CloseMessage:
 		if len(data) >= 2 {
 			code := int(binary.BigEndian.Uint16(data[:2]))
-			c.closeHandler(code, string(data[2:]))
+			c.closeHandler(c, code, string(data[2:]))
 		} else {
 			c.WriteMessage(CloseMessage, nil)
 		}
+		// close immediately, no need to wait for data flushed on a blocked conn
+		c.Close()
 	case PingMessage:
-		c.pingHandler(string(data))
+		c.pingHandler(c, string(data))
 	case PongMessage:
-		c.pongHandler(string(data))
+		c.pongHandler(c, string(data))
 	default:
 	}
 }
 
-func (c *Conn) SetCloseHandler(h func(code int, text string)) {
+func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
 	if h != nil {
 		c.closeHandler = h
 	}
 }
 
-func (c *Conn) SetPingHandler(h func(appData string)) {
+func (c *Conn) SetPingHandler(h func(*Conn, string)) {
 	if h != nil {
 		c.pingHandler = h
 	}
 }
 
-func (c *Conn) SetPongHandler(h func(appData string)) {
+func (c *Conn) SetPongHandler(h func(*Conn, string)) {
 	if h != nil {
 		c.pongHandler = h
 	}
 }
 
-func (c *Conn) OnMessage(h func(messageType int8, data []byte)) {
+func (c *Conn) OnMessage(h func(*Conn, int8, []byte)) {
 	if h != nil {
 		c.messageHandler = h
 	}
 }
 
-func (c *Conn) OnClose(h func(c *Conn, err error)) {
+func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h != nil {
 		c.onClose = h
 	}
@@ -158,14 +160,14 @@ func newConn(c *nbio.Conn, compress bool, subprotocol string) *Conn {
 	conn := &Conn{
 		Conn:           c,
 		subprotocol:    subprotocol,
-		pongHandler:    func(string) {},
-		messageHandler: func(int8, []byte) {},
+		pongHandler:    func(*Conn, string) {},
+		messageHandler: func(*Conn, int8, []byte) {},
 		onClose:        func(*Conn, error) {},
 	}
-	conn.pingHandler = func(message string) {
+	conn.pingHandler = func(*Conn, string) {
 		conn.WriteMessage(PongMessage, nil)
 	}
-	conn.closeHandler = func(code int, text string) {
+	conn.closeHandler = func(c *Conn, code int, text string) {
 		if len(text)+2 > maxControlFramePayloadSize {
 			return //ErrInvalidControlFrame
 		}
