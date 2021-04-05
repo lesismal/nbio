@@ -1,4 +1,4 @@
-# NBIO - NON-BLOCKING IO / NIUBILITY IO
+# NBIO - NON-BLOCKING IO
 
 [![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][11]][12]
 
@@ -18,7 +18,7 @@
 
 ## Contents
 
-- [NBIO - NON-BLOCKING IO / NIUBILITY IO](#nbio---non-blocking-io--niubility-io)
+- [NBIO - NON-BLOCKING IO](#nbio---non-blocking-io)
   - [Contents](#contents)
   - [Features](#features)
   - [Installation](#installation)
@@ -35,6 +35,7 @@
     - [Handle Disconnected](#handle-disconnected)
     - [Handle Data](#handle-data)
     - [Handle Memory Allocation/Free For Reading](#handle-memory-allocationfree-for-reading)
+    - [Handle Memory Free For Writing](#handle-memory-free-for-writing)
     - [Handle Conn Before Read](#handle-conn-before-read)
     - [Handle Conn After Read](#handle-conn-after-read)
     - [Handle Conn Before Write](#handle-conn-before-write)
@@ -244,6 +245,13 @@ g.OnReadBufferAlloc(func(c *Conn) []byte {
 })
 g.OnReadBufferFree(func(c *Conn, b []byte) {
     memPool.Put(b)
+})
+```
+
+### Handle Memory Free For Writing
+```golang
+g.OnWriteBufferFree(func(c *Conn, b []byte) {
+    // ...
 })
 ```
 
