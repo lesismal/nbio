@@ -239,10 +239,10 @@ var memPool = sync.Pool{
     },
 }
 
-g.OnMemAlloc(func(c *Conn) []byte {
+g.OnReadBufferAlloc(func(c *Conn) []byte {
     return memPool.Get().([]byte)
 })
-g.OnMemFree(func(c *Conn, b []byte) {
+g.OnReadBufferFree(func(c *Conn, b []byte) {
     memPool.Put(b)
 })
 ```

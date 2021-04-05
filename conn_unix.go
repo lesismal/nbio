@@ -73,7 +73,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		c.g.onWBRelease(c, b)
+		c.g.onWriteBufferFree(c, b)
 		return -1, errClosed
 	}
 
@@ -108,7 +108,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	if c.closed {
 		c.mux.Unlock()
 		for _, v := range in {
-			c.g.onWBRelease(c, v)
+			c.g.onWriteBufferFree(c, v)
 		}
 		return 0, errClosed
 	}
@@ -313,7 +313,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	}
 
 	if c.overflow(len(b)) {
-		c.g.onWBRelease(c, b)
+		c.g.onWriteBufferFree(c, b)
 		return -1, syscall.EINVAL
 	}
 
@@ -335,24 +335,25 @@ func (c *Conn) write(b []byte) (int, error) {
 						c.writeBuffer = mempool.Malloc(size)
 					}
 					copy(c.writeBuffer, b[nwrite:])
-					c.g.onWBRelease(c, b)
+					c.g.onWriteBufferFree(c, b)
 					return nwrite, err
 				}
 			}
 			if err == syscall.EINTR || err == syscall.EAGAIN {
 				continue
 			}
-			c.g.onWBRelease(c, b)
+			c.g.onWriteBufferFree(c, b)
 			return nwrite, err
 		}
 	}
-	if len(c.writeBuffer) < c.g.minConnCacheSize {
-		c.writeBuffer = mempool.Realloc(c.writeBuffer, c.g.minConnCacheSize)[:len(c.writeBuffer)]
+	need := len(c.writeBuffer) + len(b)
+	if need < c.g.minConnCacheSize {
+		c.writeBuffer = mempool.Realloc(c.writeBuffer, c.g.minConnCacheSize)[:need]
 	} else {
-		c.writeBuffer = mempool.Realloc(c.writeBuffer, len(c.writeBuffer)+len(b))
+		c.writeBuffer = mempool.Realloc(c.writeBuffer, need)
 	}
 	copy(c.writeBuffer[len(c.writeBuffer)-len(b):], b)
-	c.g.onWBRelease(c, b)
+	c.g.onWriteBufferFree(c, b)
 
 	return nwrite, err
 }
@@ -396,7 +397,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	}
 	if c.overflow(size) {
 		for _, v := range in {
-			c.g.onWBRelease(c, v)
+			c.g.onWriteBufferFree(c, v)
 		}
 		return -1, syscall.EINVAL
 	}
@@ -407,7 +408,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		for _, v := range in {
 			copy(c.writeBuffer[copied:], v)
 			copied += len(v)
-			c.g.onWBRelease(c, v)
+			c.g.onWriteBufferFree(c, v)
 		}
 		return 0, nil
 	}
@@ -422,7 +423,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	for _, v := range in {
 		copy(b[copied:], v)
 		copied += len(v)
-		c.g.onWBRelease(c, v)
+		c.g.onWriteBufferFree(c, v)
 	}
 	return c.write(b)
 }
@@ -443,6 +444,10 @@ func (c *Conn) closeWithError(err error) error {
 		if c.rTimer != nil {
 			c.rTimer.Stop()
 			c.rTimer = nil
+		}
+		if c.writeBuffer != nil {
+			mempool.Free(c.writeBuffer)
+			c.writeBuffer = nil
 		}
 		return c.closeWithErrorWithoutLock(err)
 	}

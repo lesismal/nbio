@@ -120,7 +120,7 @@ func NewGopher(conf Config) *Gopher {
 
 	g.initHandlers()
 
-	g.OnMemAlloc(func(c *Conn) []byte {
+	g.OnReadBufferAlloc(func(c *Conn) []byte {
 		if c.ReadBuffer == nil {
 			c.ReadBuffer = make([]byte, int(g.readBufferSize))
 		}

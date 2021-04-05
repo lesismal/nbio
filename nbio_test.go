@@ -73,10 +73,10 @@ func TestEcho(t *testing.T) {
 		}
 	})
 
-	g.OnMemAlloc(func(c *Conn) []byte {
+	g.OnReadBufferAlloc(func(c *Conn) []byte {
 		return make([]byte, 1024)
 	})
-	g.OnMemFree(func(c *Conn, b []byte) {
+	g.OnReadBufferFree(func(c *Conn, b []byte) {
 
 	})
 

@@ -221,10 +221,10 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		})
 	})
 
-	g.OnMemAlloc(func(c *nbio.Conn) []byte {
+	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
 		return mempool.Malloc(int(conf.ReadBufferSize))
 	})
-	// g.OnMemFree(func(c *nbio.Conn, buffer []byte) {})
+	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
@@ -371,10 +371,10 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 			})
 		}
 	})
-	g.OnMemAlloc(func(c *nbio.Conn) []byte {
+	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
 		return mempool.Malloc(int(conf.ReadBufferSize))
 	})
-	// g.OnMemFree(func(c *nbio.Conn, buffer []byte) {})
+	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
