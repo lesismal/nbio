@@ -275,12 +275,9 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 					return
 				}
 				req := res.request
-				pkts := res.encode()
-				for _, v := range pkts {
-					if _, err := p.conn.Write(v); err != nil {
-						clear = true
-						break RESQUEUE
-					}
+				if err := res.flush(p.conn); err != nil {
+					clear = true
+					break RESQUEUE
 				}
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
