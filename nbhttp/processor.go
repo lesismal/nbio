@@ -36,7 +36,7 @@ func releaseRequest(req *http.Request) {
 	}
 }
 
-func resetResponse(res *Response) {
+func releaseResponse(res *Response) {
 	if res != nil {
 		*res = emptyResponse
 		responsePool.Put(res)
@@ -69,12 +69,13 @@ type ServerProcessor struct {
 	handler  http.Handler
 	executor func(f func())
 
-	resQueue      responseQueue
-	sequence      uint64
-	responsedSeq  uint64
-	minBufferSize int
-	keepaliveTime time.Duration
-	isUpgrade     bool
+	resQueue            responseQueue
+	sequence            uint64
+	responsedSeq        uint64
+	minBufferSize       int
+	keepaliveTime       time.Duration
+	isUpgrade           bool
+	outOfOrderExecution bool
 }
 
 // Conn .
@@ -241,11 +242,42 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	response := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
+
 	if !p.isUpgrade {
-		p.executor(func() {
-			p.handler.ServeHTTP(response, request)
-			p.WriteResponse(response)
-		})
+		if !p.outOfOrderExecution {
+			var executing bool
+			p.mux.Lock()
+			p.resQueue = append(p.resQueue, response.(*Response))
+			executing = len(p.resQueue) > 1
+			p.mux.Unlock()
+
+			if !executing {
+				req := request
+				res := response.(*Response)
+				p.executor(func() {
+					for {
+						p.handler.ServeHTTP(res, req)
+						p.WriteResponse(response)
+
+						p.mux.Lock()
+						p.resQueue = p.resQueue[1:]
+						if len(p.resQueue) == 0 {
+							p.resQueue = nil
+							p.mux.Unlock()
+							return
+						}
+						res = p.resQueue[0]
+						req = res.request
+						p.mux.Unlock()
+					}
+				})
+			}
+		} else {
+			p.executor(func() {
+				p.handler.ServeHTTP(response, request)
+				p.WriteResponse(response)
+			})
+		}
 	} else {
 		p.handler.ServeHTTP(response, request)
 		p.WriteResponse(response)
@@ -259,8 +291,39 @@ func (p *ServerProcessor) HandleExecute(executor func(f func())) {
 	}
 }
 
-// WriteResponse .
 func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
+	if !p.outOfOrderExecution {
+		p.writeResponseInOrder(w)
+	} else {
+		p.writeResponseOutofOrder(w)
+	}
+}
+
+func (p *ServerProcessor) writeResponseInOrder(w http.ResponseWriter) {
+	if p.conn != nil {
+		res, ok := w.(*Response)
+		if ok {
+			req := res.request
+			if err := res.flush(p.conn); err != nil {
+				p.conn.Close()
+				return
+			}
+			if req.Body != nil {
+				req.Body.Close()
+			}
+			if req.Close {
+				// the data may still in the send queue
+				p.conn.Close()
+			} else {
+				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+			}
+			releaseRequest(req)
+			releaseResponse(res)
+		}
+	}
+}
+
+func (p *ServerProcessor) writeResponseOutofOrder(w http.ResponseWriter) {
 	if p.conn != nil {
 		res, ok := w.(*Response)
 		if ok {
@@ -276,12 +339,13 @@ func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
 				}
 				req := res.request
 				if err := res.flush(p.conn); err != nil {
+					p.conn.Close()
 					clear = true
 					break RESQUEUE
 				}
 				heap.Remove(&p.resQueue, res.index)
 				p.responsedSeq++
-				resetResponse(res)
+				releaseResponse(res)
 				if req.Body != nil {
 					req.Body.Close()
 				}
@@ -313,7 +377,8 @@ func (p *ServerProcessor) Clear() {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 	for _, res := range p.resQueue {
-		resetResponse(res)
+		releaseRequest(res.request)
+		releaseResponse(res)
 	}
 	p.resQueue = nil
 }
@@ -336,7 +401,7 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration, outOfOrderExecution bool) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
@@ -347,11 +412,12 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f fun
 		minBufferSize = DefaultMinBufferSize
 	}
 	return &ServerProcessor{
-		conn:          conn,
-		handler:       handler,
-		executor:      executor,
-		minBufferSize: minBufferSize,
-		keepaliveTime: keepaliveTime,
+		conn:                conn,
+		handler:             handler,
+		executor:            executor,
+		minBufferSize:       minBufferSize,
+		keepaliveTime:       keepaliveTime,
+		outOfOrderExecution: outOfOrderExecution,
 	}
 }
 
