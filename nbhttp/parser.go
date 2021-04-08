@@ -16,8 +16,6 @@ import (
 
 // Parser .
 type Parser struct {
-	state int8
-
 	cache []byte
 
 	proto string
@@ -28,18 +26,20 @@ type Parser struct {
 	headerKey   string
 	headerValue string
 
+	header  http.Header
+	trailer http.Header
+
+	contentLength int
 	chunkSize     int
-	header        http.Header
 	chunked       bool
 	headerExists  bool
-	contentLength int
-	trailer       http.Header
-	// todo
+
+	state         int8
 	readLimit     int
 	minBufferSize int
 	isClient      bool
 
-	session interface{}
+	// session interface{}
 
 	Processor Processor
 
@@ -644,14 +644,14 @@ UPGRADER:
 }
 
 // Session returns user session
-func (p *Parser) Session() interface{} {
-	return p.session
-}
+// func (p *Parser) Session() interface{} {
+// 	return p.session
+// }
 
 // SetSession sets user session
-func (p *Parser) SetSession(session interface{}) {
-	p.session = session
-}
+// func (p *Parser) SetSession(session interface{}) {
+// 	p.session = session
+// }
 
 func (p *Parser) parseTransferEncoding() error {
 	raw, present := p.header["Transfer-Encoding"]
