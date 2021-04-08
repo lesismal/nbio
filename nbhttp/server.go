@@ -90,6 +90,9 @@ type Config struct {
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
+
+	// HTTP1xOutOfOrderExecution represents whether to process the request sequentially.
+	HTTP1xOutOfOrderExecution bool
 }
 
 // Server .
@@ -192,7 +195,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
+		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.HTTP1xOutOfOrderExecution)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -326,7 +329,7 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
-		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
+		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.HTTP1xOutOfOrderExecution)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
