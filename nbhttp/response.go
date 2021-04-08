@@ -95,8 +95,8 @@ func (res *Response) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-// encode .
-func (res *Response) encode() [][]byte {
+// flush .
+func (res *Response) flush(conn net.Conn) error {
 	res.WriteHeader(http.StatusOK)
 	statusCode := res.statusCode
 	status := res.status
@@ -127,7 +127,7 @@ func (res *Response) encode() [][]byte {
 		res.header.Add("Content-Length", strconv.Itoa(res.bodySize))
 	}
 
-	size := res.bodySize
+	size := res.bodySize + 1024
 
 	if size < 2048 {
 		size = 2048
@@ -217,10 +217,10 @@ func (res *Response) encode() [][]byte {
 	copy(data[i:], "\r\n")
 	i += 2
 
-	var ret [][]byte
 	if !chunked {
 		if res.bodySize == 0 {
-			return [][]byte{data}
+			_, err := conn.Write(data)
+			return err
 		}
 		if i+res.bodySize <= 8192 {
 			data = mempool.Realloc(data, i+res.bodySize)
@@ -228,16 +228,23 @@ func (res *Response) encode() [][]byte {
 				copy(data[i:], v)
 				i += len(v)
 			}
-			ret = append(ret, data)
+			_, err := conn.Write(data)
+			return err
 		} else {
 			data = mempool.Realloc(data, i+len(res.bodyList[0]))
 			copy(data[i:], res.bodyList[0])
-			ret = append(ret, data)
+			_, err := conn.Write(data)
+			if err != nil {
+				return err
+			}
 			for i := 1; i < len(res.bodyList); i++ {
 				v := res.bodyList[i]
 				data = mempool.Malloc(len(v))
 				copy(data, v)
-				ret = append(ret, data)
+				_, err = conn.Write(data)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	} else {
@@ -253,7 +260,10 @@ func (res *Response) encode() [][]byte {
 			copy(data[i:], "\r\n")
 			i += 2
 			if len(data) > 4096 {
-				ret = append(ret, data)
+				_, err := conn.Write(data)
+				if err != nil {
+					return err
+				}
 				data = mempool.Malloc(4096)[0:0]
 				i = 0
 			}
@@ -283,10 +293,13 @@ func (res *Response) encode() [][]byte {
 			data = mempool.Realloc(data, i+2)
 			copy(data[i:], "\r\n")
 		}
-		ret = append(ret, data)
+		_, err := conn.Write(data)
+		if err != nil {
+			return err
+		}
 	}
 
-	return ret
+	return nil
 }
 
 // NewResponse .
