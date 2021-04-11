@@ -29,7 +29,9 @@ var (
 func releaseRequest(req *http.Request) {
 	if req != nil {
 		if req.Body != nil {
-			req.Body.Close()
+			br := req.Body.(*BodyReader)
+			br.close()
+			bodyReaderPool.Put(br)
 		}
 		*req = emptyRequest
 		requestPool.Put(req)
@@ -304,9 +306,11 @@ func (p *ServerProcessor) writeResponseInOrder(res *Response) {
 			p.conn.Close()
 			return
 		}
-		if req.Body != nil {
-			req.Body.(*BodyReader).close()
-		}
+		// if req.Body != nil {
+		// 	br := req.Body.(*BodyReader)
+		// 	br.close()
+		// 	bodyReaderPool.Put(br)
+		// }
 		if req.Close {
 			// the data may still in the send queue
 			p.conn.Close()
@@ -339,9 +343,11 @@ func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
 			heap.Remove(&p.resQueue, res.index)
 			p.responsedSeq++
 			releaseResponse(res)
-			if req.Body != nil {
-				req.Body.Close()
-			}
+			// if req.Body != nil {
+			// 	br := req.Body.(*BodyReader)
+			// 	br.close()
+			//	bodyReaderPool.Put(br)
+			// }
 			if req.Close {
 				// the data may still in the send queue
 				if p.conn != nil {

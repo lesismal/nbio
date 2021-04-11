@@ -6,8 +6,17 @@ package nbhttp
 
 import (
 	"io"
+	"sync"
 
 	"github.com/lesismal/nbio/mempool"
+)
+
+var (
+	bodyReaderPool = sync.Pool{
+		New: func() interface{} {
+			return &BodyReader{}
+		},
+	}
 )
 
 // BodyReader .
@@ -15,6 +24,8 @@ type BodyReader struct {
 	index  int
 	buffer []byte
 }
+
+var mux = sync.Mutex{}
 
 // Read implements io.Reader
 func (br *BodyReader) Read(p []byte) (int, error) {
@@ -77,8 +88,8 @@ func (br *BodyReader) close() error {
 
 // NewBodyReader creates a BodyReader
 func NewBodyReader(buffer []byte) *BodyReader {
-	return &BodyReader{
-		// index:  index,
-		buffer: buffer,
-	}
+	br := bodyReaderPool.Get().(*BodyReader)
+	br.index = 0
+	br.buffer = buffer
+	return br
 }
