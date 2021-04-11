@@ -218,7 +218,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		parserExecutor(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
-				loging.Error("parser.Read failed: %v", err)
+				loging.Debug("parser.Read failed: %v", err)
 				c.Close()
 			}
 		})
@@ -363,7 +363,7 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 					if n > 0 {
 						err := parser.Read(buffer[:n])
 						if err != nil {
-							loging.Error("parser.Read failed: %v", err)
+							loging.Debug("parser.Read failed: %v", err)
 							c.Close()
 						}
 					}
