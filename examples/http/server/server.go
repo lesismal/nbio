@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -16,8 +17,8 @@ var (
 	total uint64 = 0
 )
 
-func onEcho(w http.ResponseWriter, r *http.Request) {
-	data, _ := io.ReadAll(r.Body)
+func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+	data := r.Body.(*nbhttp.BodyReader).TakeOver()
 	if len(data) > 0 {
 		w.Write(data)
 	} else {
@@ -27,13 +28,26 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/echo", onEcho)
+	go func() {
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			panic(err)
+		}
+	}()
 
+	// mux := &http.ServeMux{}
+	// mux.HandleFunc("/echo", onEcho)
+
+	router := httprouter.New()
+	router.POST("/echo", onEcho)
+
+	// pool := taskpool.NewFastPool(4096)
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
-	}, mux, nil, nil)
+		// NPoller: 32,
+		MessageHandlerPoolSize:    2048,
+		HTTP1xOutOfOrderExecution: true,
+	}, router, nil) // pool.Go)
 
 	err := svr.Start()
 	if err != nil {

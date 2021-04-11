@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"runtime"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
@@ -132,7 +133,7 @@ func (s *Server) OnStop(h func()) {
 }
 
 // NewServer .
-func NewServer(conf Config, handler http.Handler, parserExecutor func(index int, f func()), messageHandlerExecutor func(f func())) *Server {
+func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f func())) *Server {
 	if conf.ReadBufferSize == 0 {
 		conf.ReadBufferSize = DefaultHTTPReadBufferSize
 	}
@@ -154,12 +155,24 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 
 	var parserExecutePool *taskpool.FixedPool
 	var messageHandlerExecutePool *taskpool.TaskPool
-	if parserExecutor == nil {
-		parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
-		parserExecutor = func(index int, f func()) {
-			parserExecutePool.GoByIndex(index, f)
-		}
+	// if parserExecutor == nil {
+	// 	parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
+	// 	parserExecutor = func(index int, f func()) {
+	// 		parserExecutePool.GoByIndex(index, f)
+	// 	}
+	// }
+	parserExecutor := func(index int, f func()) {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				loging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+		}()
+		f()
 	}
+
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = DefaultMessageHandlerPoolSize
@@ -224,9 +237,9 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 		})
 	})
 
-	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-		return mempool.Malloc(int(conf.ReadBufferSize))
-	})
+	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+	// 	return mempool.Malloc(int(conf.ReadBufferSize))
+	// })
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
@@ -247,7 +260,7 @@ func NewServer(conf Config, handler http.Handler, parserExecutor func(index int,
 }
 
 // NewServerTLS .
-func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index int, f func()), messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
+func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
 	if conf.ReadBufferSize == 0 {
 		conf.ReadBufferSize = DefaultHTTPReadBufferSize
 	}
@@ -272,11 +285,22 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 
 	var parserExecutePool *taskpool.FixedPool
 	var messageHandlerExecutePool *taskpool.TaskPool
-	if parserExecutor == nil {
-		parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
-		parserExecutor = func(index int, f func()) {
-			parserExecutePool.GoByIndex(index, f)
-		}
+	// if parserExecutor == nil {
+	// 	parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
+	// 	parserExecutor = func(index int, f func()) {
+	// 		parserExecutePool.GoByIndex(index, f)
+	// 	}
+	// }
+	parserExecutor := func(index int, f func()) {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				loging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+		}()
+		f()
 	}
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
@@ -374,9 +398,9 @@ func NewServerTLS(conf Config, handler http.Handler, parserExecutor func(index i
 			})
 		}
 	})
-	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-		return mempool.Malloc(int(conf.ReadBufferSize))
-	})
+	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+	// 	return mempool.Malloc(int(conf.ReadBufferSize))
+	// })
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)

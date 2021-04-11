@@ -73,7 +73,7 @@ func post(conn net.Conn, addr string) {
 	}
 	time.Sleep(time.Second / 10)
 	n, err = io.ReadFull(conn, resData)
-	if err != nil || n < len(resData) {
+	if err != nil || n < len(resData) || string(resData[len(resData)-5:]) != "hello" {
 		atomic.AddUint64(&failed, 1)
 		fmt.Println("read failed:", n, err)
 	}

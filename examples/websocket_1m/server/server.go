@@ -42,7 +42,7 @@ func main() {
 		Network: "tcp",
 		Addrs:   addrs,
 		MaxLoad: 1000000,
-	}, mux, nil, nil)
+	}, mux, nil)
 
 	err := svr.Start()
 	if err != nil {

@@ -35,7 +35,7 @@ func main() {
 		Network: "tcp",
 		Addrs:   addrs,
 		MaxLoad: 1000000,
-	}, mux, nil, nil)
+	}, mux, nil)
 
 	// the http server SetReadline(120s) by default in OnOpen, empty func() to cancel that deadline for testing
 	svr.OnOpen(func(c *nbio.Conn) {})

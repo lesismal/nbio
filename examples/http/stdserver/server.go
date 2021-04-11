@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
+
+	"github.com/julienschmidt/httprouter"
 )
 
 var (
@@ -14,7 +17,7 @@ var (
 	total uint64 = 0
 )
 
-func onEcho(w http.ResponseWriter, r *http.Request) {
+func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 	data, _ := io.ReadAll(r.Body)
 	if len(data) > 0 {
 		w.Write(data)
@@ -27,11 +30,14 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 func serve(addrs []string) {
 	for _, v := range addrs {
 		go func(addr string) {
-			mux := &http.ServeMux{}
-			mux.HandleFunc("/echo", onEcho)
+			// mux := &http.ServeMux{}
+			// mux.HandleFunc("/echo", onEcho)
+
+			router := httprouter.New()
+			router.POST("/echo", onEcho)
 			server := http.Server{
 				Addr:    addr,
-				Handler: mux,
+				Handler: router,
 			}
 			server.ListenAndServe()
 		}(v)
@@ -39,6 +45,12 @@ func serve(addrs []string) {
 }
 
 func main() {
+	go func() {
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			panic(err)
+		}
+	}()
+
 	addrs := []string{"localhost:8888"}
 	serve(addrs)
 

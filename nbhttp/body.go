@@ -26,13 +26,13 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 	if available >= need {
 		copy(p, br.buffer[br.index:br.index+need])
 		br.index += need
-		if available == need {
-			br.Close()
-		}
+		// if available == need {
+		// 	br.Close()
+		// }
 		return need, nil
 	}
 	copy(p[:available], br.buffer[br.index:])
-	br.Close()
+	br.index += available
 	return available, io.EOF
 }
 
@@ -44,8 +44,29 @@ func (br *BodyReader) Append(b []byte) {
 	}
 }
 
+// RawBody returns BodyReader's buffer directly,
+// the buffer returned would be released to the mempool after http handler func,
+// the application layer should not hold it any longer after the http handler func.
+func (br *BodyReader) RawBody() []byte {
+	return br.buffer
+}
+
+// TakeOver returns BodyReader's buffer,
+// the buffer returned would not be released to the mempool after http handler func,
+// the application layer could hold it longer and should manage when to release the buffer to the mempool.
+func (br *BodyReader) TakeOver() []byte {
+	b := br.buffer
+	br.buffer = nil
+	br.index = 0
+	return b
+}
+
 // Close implements io. Closer
 func (br *BodyReader) Close() error {
+	return nil
+}
+
+func (br *BodyReader) close() error {
 	if br.buffer != nil {
 		mempool.Free(br.buffer)
 		br.buffer = nil
@@ -55,9 +76,9 @@ func (br *BodyReader) Close() error {
 }
 
 // NewBodyReader creates a BodyReader
-func NewBodyReader(buffer []byte, index int) *BodyReader {
+func NewBodyReader(buffer []byte) *BodyReader {
 	return &BodyReader{
-		index:  index,
+		// index:  index,
 		buffer: buffer,
 	}
 }

@@ -179,7 +179,7 @@ func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
 			// mempool.Free(data)
 			data = b
 		}
-		p.request.Body = NewBodyReader(data, 0)
+		p.request.Body = NewBodyReader(data)
 	} else {
 		p.request.Body.(*BodyReader).Append(data)
 		if needRelease {
@@ -238,7 +238,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	if request.Body == nil {
-		request.Body = &BodyReader{}
+		request.Body = NewBodyReader(nil)
 	}
 
 	res := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
@@ -305,7 +305,7 @@ func (p *ServerProcessor) writeResponseInOrder(res *Response) {
 			return
 		}
 		if req.Body != nil {
-			req.Body.Close()
+			req.Body.(*BodyReader).close()
 		}
 		if req.Close {
 			// the data may still in the send queue
@@ -472,7 +472,7 @@ func (p *ClientProcessor) OnContentLength(contentLength int) {
 // OnBody .
 func (p *ClientProcessor) OnBody(data []byte, needRelease bool) {
 	if p.response.Body == nil {
-		p.response.Body = NewBodyReader(data, 0)
+		p.response.Body = NewBodyReader(data)
 	} else {
 		p.response.Body.(*BodyReader).Append(data)
 		mempool.Free(data)
