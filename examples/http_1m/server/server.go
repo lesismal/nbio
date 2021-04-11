@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"runtime"
 	"sync/atomic"
@@ -18,7 +17,8 @@ var (
 )
 
 func onEcho(w http.ResponseWriter, r *http.Request) {
-	data, _ := io.ReadAll(r.Body)
+	// data, _ := io.ReadAll(r.Body)
+	data := r.Body.(*nbhttp.BodyReader).RawBody()
 	if len(data) > 0 {
 		w.Write(data)
 	} else {
