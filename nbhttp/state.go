@@ -6,7 +6,8 @@ package nbhttp
 
 const (
 	// state: RequestLine
-	stateMethodBefore int8 = iota
+	stateClose int8 = iota
+	stateMethodBefore
 	stateMethod
 
 	statePathBefore

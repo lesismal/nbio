@@ -9,6 +9,9 @@ import (
 )
 
 var (
+	// ErrClosed .
+	ErrClosed = errors.New("closed")
+
 	// ErrInvalidCRLF .
 	ErrInvalidCRLF = errors.New("invalid cr/lf at the end of line")
 

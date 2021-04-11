@@ -56,7 +56,7 @@ type Processor interface {
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
 	HandleExecute(executor func(f func()))
-	WriteResponse(w http.ResponseWriter)
+	// WriteResponse(w http.ResponseWriter)
 	Clear()
 }
 
@@ -241,23 +241,21 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = &BodyReader{}
 	}
 
-	response := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
+	res := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
 
 	if !p.isUpgrade {
 		if !p.outOfOrderExecution {
 			var executing bool
 			p.mux.Lock()
-			p.resQueue = append(p.resQueue, response.(*Response))
-			executing = len(p.resQueue) > 1
+			p.resQueue = append(p.resQueue, res)
+			executing = (p.resQueue[0] != res)
 			p.mux.Unlock()
 
 			if !executing {
-				req := request
-				res := response.(*Response)
-				p.executor(func() {
+				f := func() {
 					for {
-						p.handler.ServeHTTP(res, req)
-						p.WriteResponse(response)
+						p.handler.ServeHTTP(res, res.request)
+						p.WriteResponse(res)
 
 						p.mux.Lock()
 						p.resQueue = p.resQueue[1:]
@@ -267,20 +265,20 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 							return
 						}
 						res = p.resQueue[0]
-						req = res.request
 						p.mux.Unlock()
 					}
-				})
+				}
+				p.executor(f)
 			}
 		} else {
 			p.executor(func() {
-				p.handler.ServeHTTP(response, request)
-				p.WriteResponse(response)
+				p.handler.ServeHTTP(res, request)
+				p.WriteResponse(res)
 			})
 		}
 	} else {
-		p.handler.ServeHTTP(response, request)
-		p.WriteResponse(response)
+		p.handler.ServeHTTP(res, request)
+		p.WriteResponse(res)
 	}
 }
 
@@ -291,83 +289,77 @@ func (p *ServerProcessor) HandleExecute(executor func(f func())) {
 	}
 }
 
-func (p *ServerProcessor) WriteResponse(w http.ResponseWriter) {
+func (p *ServerProcessor) WriteResponse(res *Response) {
 	if !p.outOfOrderExecution {
-		p.writeResponseInOrder(w)
+		p.writeResponseInOrder(res)
 	} else {
-		p.writeResponseOutofOrder(w)
+		p.writeResponseOutofOrder(res)
 	}
 }
 
-func (p *ServerProcessor) writeResponseInOrder(w http.ResponseWriter) {
+func (p *ServerProcessor) writeResponseInOrder(res *Response) {
 	if p.conn != nil {
-		res, ok := w.(*Response)
-		if ok {
+		req := res.request
+		if err := res.flush(p.conn); err != nil {
+			p.conn.Close()
+			return
+		}
+		if req.Body != nil {
+			req.Body.Close()
+		}
+		if req.Close {
+			// the data may still in the send queue
+			p.conn.Close()
+		} else {
+			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+		}
+		releaseRequest(req)
+		releaseResponse(res)
+	}
+}
+
+func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
+	if p.conn != nil {
+		p.mux.Lock()
+		heap.Push(&p.resQueue, res)
+		clear := false
+	RESQUEUE:
+		for len(p.resQueue) > 0 {
+			res = p.resQueue[0]
+			if res.sequence != (p.responsedSeq + 1) {
+				p.mux.Unlock()
+				return
+			}
 			req := res.request
 			if err := res.flush(p.conn); err != nil {
 				p.conn.Close()
-				return
+				clear = true
+				break RESQUEUE
 			}
+			heap.Remove(&p.resQueue, res.index)
+			p.responsedSeq++
+			releaseResponse(res)
 			if req.Body != nil {
 				req.Body.Close()
 			}
 			if req.Close {
 				// the data may still in the send queue
-				p.conn.Close()
-			} else {
-				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
-			}
-			releaseRequest(req)
-			releaseResponse(res)
-		}
-	}
-}
-
-func (p *ServerProcessor) writeResponseOutofOrder(w http.ResponseWriter) {
-	if p.conn != nil {
-		res, ok := w.(*Response)
-		if ok {
-			p.mux.Lock()
-			heap.Push(&p.resQueue, res)
-			clear := false
-		RESQUEUE:
-			for len(p.resQueue) > 0 {
-				res = p.resQueue[0]
-				if res.sequence != (p.responsedSeq + 1) {
-					p.mux.Unlock()
-					return
-				}
-				req := res.request
-				if err := res.flush(p.conn); err != nil {
+				if p.conn != nil {
 					p.conn.Close()
 					clear = true
-					break RESQUEUE
+					releaseRequest(req)
+					break
 				}
-				heap.Remove(&p.resQueue, res.index)
-				p.responsedSeq++
-				releaseResponse(res)
-				if req.Body != nil {
-					req.Body.Close()
+			} else {
+				if p.conn != nil {
+					p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 				}
-				if req.Close {
-					// the data may still in the send queue
-					if p.conn != nil {
-						p.conn.Close()
-						clear = true
-						releaseRequest(req)
-						break
-					}
-				} else {
-					if p.conn != nil {
-						p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
-					}
-				}
-				releaseRequest(req)
 			}
-			p.mux.Unlock()
-			if clear {
-				p.Clear()
-			}
+			releaseRequest(req)
+		}
+		p.mux.Unlock()
+		if clear {
+			p.Clear()
 		}
 	}
 }
@@ -507,9 +499,9 @@ func (p *ClientProcessor) HandleExecute(executor func(f func())) {
 }
 
 // WriteResponse .
-func (p *ClientProcessor) WriteResponse(response http.ResponseWriter) {
+// func (p *ClientProcessor) WriteResponse(response http.ResponseWriter) {
 
-}
+// }
 
 // Clear .
 func (p *ClientProcessor) Clear() {
@@ -593,9 +585,9 @@ func (p *EmptyProcessor) HandleExecute(executor func(f func())) {
 }
 
 // WriteResponse .
-func (p *EmptyProcessor) WriteResponse(response http.ResponseWriter) {
+// func (p *EmptyProcessor) WriteResponse(response http.ResponseWriter) {
 
-}
+// }
 
 // Clear .
 func (p *EmptyProcessor) Clear() {

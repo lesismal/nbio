@@ -39,7 +39,7 @@ func serve(addrs []string) {
 }
 
 func main() {
-	addrs := []string{"localhost:29000"}
+	addrs := []string{"localhost:8888"}
 	serve(addrs)
 
 	ticker := time.NewTicker(time.Second)

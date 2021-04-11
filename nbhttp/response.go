@@ -303,7 +303,7 @@ func (res *Response) flush(conn net.Conn) error {
 }
 
 // NewResponse .
-func NewResponse(processor Processor, request *http.Request, sequence uint64) http.ResponseWriter {
+func NewResponse(processor Processor, request *http.Request, sequence uint64) *Response {
 	response := responsePool.Get().(*Response)
 	response.processor = processor
 	response.request = request

@@ -34,10 +34,11 @@ type Parser struct {
 	chunked       bool
 	headerExists  bool
 
-	state         int8
+	state    int8
+	isClient bool
+
 	readLimit     int
 	minBufferSize int
-	isClient      bool
 
 	// session interface{}
 
@@ -47,12 +48,20 @@ type Parser struct {
 }
 
 func (p *Parser) nextState(state int8) {
-	p.state = state
+	switch p.state {
+	case stateClose:
+	default:
+		p.state = state
+	}
 }
 
 func (p *Parser) onClose(err error) {
+	p.state = stateClose
 	if p.Upgrader != nil {
 		p.Upgrader.Close(p, err)
+	}
+	if p.cache != nil {
+		mempool.Free(p.cache)
 	}
 }
 
@@ -96,6 +105,8 @@ UPGRADER:
 		}
 		c = data[i]
 		switch p.state {
+		case stateClose:
+			return ErrClosed
 		case stateMethodBefore:
 			if isValidMethodChar(c) {
 				start = i
