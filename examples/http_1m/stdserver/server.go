@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"runtime"
@@ -9,7 +10,6 @@ import (
 	"time"
 
 	"github.com/julienschmidt/httprouter"
-	"github.com/lesismal/nbio/nbhttp"
 )
 
 var (
@@ -18,14 +18,30 @@ var (
 )
 
 func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// data, _ := io.ReadAll(r.Body)
-	data := r.Body.(*nbhttp.BodyReader).RawBody()
+	data, _ := io.ReadAll(r.Body)
 	if len(data) > 0 {
 		w.Write(data)
 	} else {
 		w.Write([]byte(time.Now().Format("20060102 15:04:05")))
 	}
 	atomic.AddUint64(&qps, 1)
+}
+
+func serve(addrs []string) {
+	for _, v := range addrs {
+		go func(addr string) {
+			// mux := &http.ServeMux{}
+			// mux.HandleFunc("/echo", onEcho)
+
+			router := httprouter.New()
+			router.POST("/echo", onEcho)
+			server := http.Server{
+				Addr:    addr,
+				Handler: router,
+			}
+			server.ListenAndServe()
+		}(v)
+	}
 }
 
 func main() {
@@ -35,28 +51,15 @@ func main() {
 		}
 	}()
 
-	router := httprouter.New()
-	router.POST("/echo", onEcho)
-	svr := nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   addrs,
-		MaxLoad: 1000000,
-		NPoller: runtime.NumCPU() * 2,
-	}, router, nil)
-
-	err := svr.Start()
-	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
-		return
-	}
-	defer svr.Stop()
+	// addrs := []string{"localhost:8888"}
+	serve(addrs)
 
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {
 		<-ticker.C
 		n := atomic.SwapUint64(&qps, 0)
 		total += n
-		fmt.Printf("running for %v seconds, online: %v, NumGoroutine: %v, qps: %v, total: %v\n", i, svr.State().Online, runtime.NumGoroutine(), n, total)
+		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
 	}
 }
 

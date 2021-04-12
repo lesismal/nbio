@@ -31,7 +31,7 @@ var (
 	DefaultHTTPWriteBufferSize = 1024 * 2
 
 	// DefaultMessageHandlerPoolSize .
-	DefaultMessageHandlerPoolSize = runtime.NumCPU() * 256
+	// DefaultMessageHandlerPoolSize = runtime.NumCPU() * 256
 
 	// DefaultMessageHandlerTaskIdleTime .
 	DefaultMessageHandlerTaskIdleTime = time.Second * 60
@@ -153,14 +153,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		conf.KeepaliveTime = DefaultKeepaliveTime
 	}
 
-	var parserExecutePool *taskpool.FixedPool
-	var messageHandlerExecutePool *taskpool.TaskPool
-	// if parserExecutor == nil {
-	// 	parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
-	// 	parserExecutor = func(index int, f func()) {
-	// 		parserExecutePool.GoByIndex(index, f)
-	// 	}
-	// }
+	var messageHandlerExecutePool *taskpool.MixedPool
 	parserExecutor := func(index int, f func()) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -175,12 +168,12 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = DefaultMessageHandlerPoolSize
+			conf.MessageHandlerPoolSize = conf.NPoller * 256
 		}
 		if conf.MessageHandlerTaskIdleTime <= 0 {
 			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
 		}
-		messageHandlerExecutePool = taskpool.New(conf.MessageHandlerPoolSize, conf.MessageHandlerTaskIdleTime)
+		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MessageHandlerPoolSize, conf.NPoller, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
@@ -249,9 +242,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		svr._onStop()
 		messageHandlerExecutor = func(f func()) {}
 		parserExecutor = func(index int, f func()) {}
-		if parserExecutePool != nil {
-			parserExecutePool.Stop()
-		}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}
@@ -283,14 +273,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
 
-	var parserExecutePool *taskpool.FixedPool
-	var messageHandlerExecutePool *taskpool.TaskPool
-	// if parserExecutor == nil {
-	// 	parserExecutePool = taskpool.NewFixedPool(conf.NParser, 32)
-	// 	parserExecutor = func(index int, f func()) {
-	// 		parserExecutePool.GoByIndex(index, f)
-	// 	}
-	// }
+	var messageHandlerExecutePool *taskpool.MixedPool
 	parserExecutor := func(index int, f func()) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -304,12 +287,12 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = DefaultMessageHandlerPoolSize
+			conf.MessageHandlerPoolSize = conf.NPoller * 256
 		}
 		if conf.MessageHandlerTaskIdleTime <= 0 {
 			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
 		}
-		messageHandlerExecutePool = taskpool.New(conf.MessageHandlerPoolSize, conf.MessageHandlerTaskIdleTime)
+		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MessageHandlerPoolSize, conf.NPoller, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
@@ -410,9 +393,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr._onStop()
 		messageHandlerExecutor = func(f func()) {}
 		parserExecutor = func(index int, f func()) {}
-		if parserExecutePool != nil {
-			parserExecutePool.Stop()
-		}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}

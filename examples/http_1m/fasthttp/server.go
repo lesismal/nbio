@@ -8,8 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/julienschmidt/httprouter"
-	"github.com/lesismal/nbio/nbhttp"
+	"github.com/valyala/fasthttp"
 )
 
 var (
@@ -17,13 +16,12 @@ var (
 	total uint64 = 0
 )
 
-func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// data, _ := io.ReadAll(r.Body)
-	data := r.Body.(*nbhttp.BodyReader).RawBody()
+func onEcho(ctx *fasthttp.RequestCtx) {
+	data := ctx.PostBody()
 	if len(data) > 0 {
-		w.Write(data)
+		ctx.Write(data)
 	} else {
-		w.Write([]byte(time.Now().Format("20060102 15:04:05")))
+		ctx.Write([]byte(time.Now().Format("20060102 15:04:05")))
 	}
 	atomic.AddUint64(&qps, 1)
 }
@@ -35,28 +33,17 @@ func main() {
 		}
 	}()
 
-	router := httprouter.New()
-	router.POST("/echo", onEcho)
-	svr := nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   addrs,
-		MaxLoad: 1000000,
-		NPoller: runtime.NumCPU() * 2,
-	}, router, nil)
-
-	err := svr.Start()
-	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
-		return
+	for _, addr := range addrs {
+		server := &fasthttp.Server{Handler: onEcho}
+		go server.ListenAndServe(addr)
 	}
-	defer svr.Stop()
 
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {
 		<-ticker.C
 		n := atomic.SwapUint64(&qps, 0)
 		total += n
-		fmt.Printf("running for %v seconds, online: %v, NumGoroutine: %v, qps: %v, total: %v\n", i, svr.State().Online, runtime.NumGoroutine(), n, total)
+		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
 	}
 }
 

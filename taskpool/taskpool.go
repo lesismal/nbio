@@ -6,13 +6,9 @@ package taskpool
 
 import (
 	"errors"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unsafe"
-
-	"github.com/lesismal/nbio/loging"
 )
 
 var (
@@ -25,32 +21,20 @@ type runner struct {
 	parent *TaskPool
 }
 
-func (r *runner) call(f func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			const size = 64 << 10
-			buf := make([]byte, size)
-			buf = buf[:runtime.Stack(buf, false)]
-			loging.Error("taskpool runner call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-		}
-	}()
-	f()
-}
-
 func (r *runner) taskLoop(maxIdleTime time.Duration, chTask <-chan func(), chClose <-chan struct{}, f func()) {
 	defer func() {
 		r.parent.wg.Done()
 		<-r.parent.chRunner
 	}()
 
-	r.call(f)
+	call(f)
 
 	timer := time.NewTimer(maxIdleTime)
 	defer timer.Stop()
 	for r.parent.running {
 		select {
 		case f := <-chTask:
-			r.call(f)
+			call(f)
 			timer.Reset(maxIdleTime)
 		case <-timer.C:
 			return
@@ -110,7 +94,7 @@ func New(size int, maxIdleTime time.Duration) *TaskPool {
 	tp := &TaskPool{
 		wg:          &sync.WaitGroup{},
 		running:     true,
-		chTask:      make(chan func()),
+		chTask:      make(chan func(), 1024),
 		chRunner:    make(chan struct{}, size),
 		chClose:     make(chan struct{}),
 		maxIdleTime: maxIdleTime,

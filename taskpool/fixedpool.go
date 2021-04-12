@@ -5,12 +5,8 @@
 package taskpool
 
 import (
-	"runtime"
 	"sync"
 	"sync/atomic"
-	"unsafe"
-
-	"github.com/lesismal/nbio/loging"
 )
 
 // fixedRunner .
@@ -22,18 +18,6 @@ type fixedRunner struct {
 	chClose  chan struct{}
 }
 
-func (r *fixedRunner) call(f func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			const size = 64 << 10
-			buf := make([]byte, size)
-			buf = buf[:runtime.Stack(buf, false)]
-			loging.Error("taskpool fixedRunner call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-		}
-	}()
-	f()
-}
-
 func (r *fixedRunner) taskLoop() {
 	defer r.wg.Done()
 
@@ -42,9 +26,9 @@ func (r *fixedRunner) taskLoop() {
 		for {
 			select {
 			case f := <-r.chTaskBy:
-				r.call(f)
+				call(f)
 			case f := <-r.chTask:
-				r.call(f)
+				call(f)
 			default:
 				return
 			}
@@ -54,9 +38,9 @@ func (r *fixedRunner) taskLoop() {
 	for {
 		select {
 		case f := <-r.chTaskBy:
-			r.call(f)
+			call(f)
 		case f := <-r.chTask:
-			r.call(f)
+			call(f)
 		case <-r.chClose:
 			return
 		}
@@ -85,30 +69,30 @@ func (tp *FixedPool) push(f func()) error {
 	return nil
 }
 
-func (tp *FixedPool) pushByIndex(index int, f func()) error {
+func (tp *FixedPool) pushByIndex(index int, f func()) {
 	r := tp.runners[uint32(index)%uint32(len(tp.runners))]
 	select {
 	case r.chTaskBy <- f:
 	case <-tp.chClose:
-		return ErrStopped
+		return
 	}
-	return nil
+	return
 }
 
 // Go .
-func (tp *FixedPool) Go(f func()) error {
+func (tp *FixedPool) Go(f func()) {
 	if atomic.LoadInt32(&tp.stopped) == 1 {
-		return ErrStopped
+		return
 	}
-	return tp.push(f)
+	tp.push(f)
 }
 
 // GoByIndex .
-func (tp *FixedPool) GoByIndex(index int, f func()) error {
+func (tp *FixedPool) GoByIndex(index int, f func()) {
 	if atomic.LoadInt32(&tp.stopped) == 1 {
-		return ErrStopped
+		return
 	}
-	return tp.pushByIndex(index, f)
+	tp.pushByIndex(index, f)
 }
 
 // Stop .
