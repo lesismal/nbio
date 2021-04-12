@@ -304,6 +304,7 @@ func (c *Conn) resetRead() {
 		c.isWAdded = false
 		p := c.g.pollers[c.Hash()%len(c.g.pollers)]
 		p.deleteEvent(c.fd)
+		p.addRead(c.fd)
 	}
 }
 
