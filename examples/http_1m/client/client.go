@@ -64,7 +64,7 @@ func loop(addr string, connNum int) {
 
 func post(conn net.Conn, addr string) {
 	reqData := []byte(fmt.Sprintf("POST /echo HTTP/1.1\r\nHost: %v\r\n Connection: close \r\nContent-Length :  5 \r\nAccept-Encoding : gzip \r\n\r\nhello", addr))
-	resData := make([]byte, 121)
+	resData := make([]byte, 1024)
 	n, err := conn.Write(reqData)
 	if err != nil || n < len(reqData) {
 		atomic.AddUint64(&failed, 1)
@@ -73,7 +73,7 @@ func post(conn net.Conn, addr string) {
 	}
 	time.Sleep(time.Second / 10)
 	n, err = io.ReadFull(conn, resData)
-	if err != nil || n < len(resData) || string(resData[len(resData)-5:]) != "hello" {
+	if err != nil || string(resData[n-5:n]) != "hello" {
 		atomic.AddUint64(&failed, 1)
 		fmt.Println("read failed:", n, err)
 	}
