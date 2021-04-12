@@ -177,7 +177,6 @@ func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
 			}
 			b := mempool.Malloc(l)[:len(data)]
 			copy(b, data)
-			// mempool.Free(data)
 			data = b
 		}
 		p.request.Body = NewBodyReader(data)
