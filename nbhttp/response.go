@@ -101,7 +101,8 @@ func (res *Response) flush(conn net.Conn) error {
 	statusCode := res.statusCode
 	status := res.status
 
-	// res.header.Add("Poweredby", "https://github.com/lesismal/nbio")
+	// hs := res.header ["Poweredby"]
+	// res.header ["Poweredby"] = append(hs, "https://github.com/lesismal/nbio")
 
 	chunked := false
 	encodingFound := false
@@ -120,11 +121,13 @@ func (res *Response) flush(conn net.Conn) error {
 	}
 	if chunked {
 		if !encodingFound {
-			res.header.Add("Transfer-Encoding", "chunked")
+			hs := res.header["Transfer-Encoding"]
+			res.header["Transfer-Encoding"] = append(hs, "chunked")
 		}
-		res.header.Del("Content-Length")
+		delete(res.header, "Content-Length")
 	} else if res.bodySize > 0 {
-		res.header.Add("Content-Length", strconv.Itoa(res.bodySize))
+		hs := res.header["Content-Length"]
+		res.header["Content-Length"] = append(hs, strconv.Itoa(res.bodySize))
 	}
 
 	size := res.bodySize + 1024

@@ -193,9 +193,12 @@ func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
 // OnTrailerHeader .
 func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 	if p.request.Trailer == nil {
-		p.request.Trailer = http.Header{}
+		p.request.Trailer = http.Header{key: []string{value}}
+	} else {
+		hs := p.request.Trailer[key]
+		p.request.Trailer[key] = append(hs, value)
 	}
-	p.request.Trailer.Add(key, value)
+	// p.request.Trailer.Add(key, value)
 }
 
 // OnComplete .
@@ -467,7 +470,9 @@ func (p *ClientProcessor) OnStatus(code int, status string) {
 
 // OnHeader .
 func (p *ClientProcessor) OnHeader(key, value string) {
-	p.response.Header.Add(key, value)
+	// p.response.Header.Add(key, value)
+	hs := p.response.Header[key]
+	p.response.Header[key] = append(hs, value)
 }
 
 // OnContentLength .
@@ -488,9 +493,12 @@ func (p *ClientProcessor) OnBody(data []byte, needRelease bool) {
 // OnTrailerHeader .
 func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 	if p.response.Trailer == nil {
-		p.response.Trailer = http.Header{}
+		p.response.Trailer = http.Header{key: []string{value}}
+	} else {
+		hs := p.response.Trailer[key]
+		p.response.Trailer[key] = append(hs, value)
 	}
-	p.response.Trailer.Add(key, value)
+	// p.response.Trailer.Add(key, value)
 }
 
 // OnComplete .
