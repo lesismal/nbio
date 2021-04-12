@@ -328,12 +328,9 @@ UPGRADER:
 				switch p.headerKey {
 				case "Transfer-Encoding", "Trailer", "Content-Length":
 					if p.header == nil {
-						p.header = http.Header{p.headerKey: []string{p.headerValue}}
-					} else {
-						hs := p.header[p.headerKey]
-						p.header[p.headerKey] = append(hs, p.headerValue)
-						// p.header.Add(p.headerKey, p.headerValue)
+						p.header = http.Header{}
 					}
+					p.header.Add(p.headerKey, p.headerValue)
 				default:
 				}
 
@@ -361,12 +358,9 @@ UPGRADER:
 				switch p.headerKey {
 				case "Transfer-Encoding", "Trailer", "Content-Length":
 					if p.header == nil {
-						p.header = http.Header{p.headerKey: []string{p.headerValue}}
-					} else {
-						hs := p.header[p.headerKey]
-						p.header[p.headerKey] = append(hs, p.headerValue)
-						// p.header.Add(p.headerKey, p.headerValue)
+						p.header = http.Header{}
 					}
+					p.header.Add(p.headerKey, p.headerValue)
 				default:
 				}
 

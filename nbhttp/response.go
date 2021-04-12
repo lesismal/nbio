@@ -101,9 +101,6 @@ func (res *Response) flush(conn net.Conn) error {
 	statusCode := res.statusCode
 	status := res.status
 
-	// hs := res.header ["Poweredby"]
-	// res.header ["Poweredby"] = append(hs, "https://github.com/lesismal/nbio")
-
 	chunked := false
 	encodingFound := false
 	if res.request.ProtoAtLeast(1, 1) {
@@ -311,7 +308,7 @@ func NewResponse(processor Processor, request *http.Request, sequence uint64) *R
 	response.processor = processor
 	response.request = request
 	response.sequence = sequence
-	response.header = http.Header{}
+	response.header = http.Header{"Server": []string{"nbio"}}
 	return response
 }
 

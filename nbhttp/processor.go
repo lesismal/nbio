@@ -58,7 +58,6 @@ type Processor interface {
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
 	HandleExecute(executor func(f func()))
-	// WriteResponse(w http.ResponseWriter)
 	Clear()
 }
 
@@ -193,12 +192,9 @@ func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
 // OnTrailerHeader .
 func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 	if p.request.Trailer == nil {
-		p.request.Trailer = http.Header{key: []string{value}}
-	} else {
-		hs := p.request.Trailer[key]
-		p.request.Trailer[key] = append(hs, value)
+		p.request.Trailer = http.Header{}
 	}
-	// p.request.Trailer.Add(key, value)
+	p.request.Trailer.Add(key, value)
 }
 
 // OnComplete .
@@ -260,7 +256,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 				f := func() {
 					for {
 						p.handler.ServeHTTP(res, res.request)
-						p.WriteResponse(res)
+						p.writeResponse(res)
 
 						p.mux.Lock()
 						p.resQueue = p.resQueue[1:]
@@ -278,12 +274,12 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		} else {
 			p.executor(func() {
 				p.handler.ServeHTTP(res, request)
-				p.WriteResponse(res)
+				p.writeResponse(res)
 			})
 		}
 	} else {
 		p.handler.ServeHTTP(res, request)
-		p.WriteResponse(res)
+		p.writeResponse(res)
 	}
 }
 
@@ -294,7 +290,7 @@ func (p *ServerProcessor) HandleExecute(executor func(f func())) {
 	}
 }
 
-func (p *ServerProcessor) WriteResponse(res *Response) {
+func (p *ServerProcessor) writeResponse(res *Response) {
 	if !p.outOfOrderExecution {
 		p.writeResponseInOrder(res)
 	} else {
@@ -309,11 +305,6 @@ func (p *ServerProcessor) writeResponseInOrder(res *Response) {
 			p.conn.Close()
 			return
 		}
-		// if req.Body != nil {
-		// 	br := req.Body.(*BodyReader)
-		// 	br.close()
-		// 	bodyReaderPool.Put(br)
-		// }
 		if req.Close {
 			// the data may still in the send queue
 			p.conn.Close()
@@ -346,11 +337,6 @@ func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
 			heap.Remove(&p.resQueue, res.index)
 			p.responsedSeq++
 			releaseResponse(res)
-			// if req.Body != nil {
-			// 	br := req.Body.(*BodyReader)
-			// 	br.close()
-			//	bodyReaderPool.Put(br)
-			// }
 			if req.Close {
 				// the data may still in the send queue
 				if p.conn != nil {
@@ -470,9 +456,7 @@ func (p *ClientProcessor) OnStatus(code int, status string) {
 
 // OnHeader .
 func (p *ClientProcessor) OnHeader(key, value string) {
-	// p.response.Header.Add(key, value)
-	hs := p.response.Header[key]
-	p.response.Header[key] = append(hs, value)
+	p.response.Header.Add(key, value)
 }
 
 // OnContentLength .
@@ -493,12 +477,9 @@ func (p *ClientProcessor) OnBody(data []byte, needRelease bool) {
 // OnTrailerHeader .
 func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 	if p.response.Trailer == nil {
-		p.response.Trailer = http.Header{key: []string{value}}
-	} else {
-		hs := p.response.Trailer[key]
-		p.response.Trailer[key] = append(hs, value)
+		p.response.Trailer = http.Header{}
 	}
-	// p.response.Trailer.Add(key, value)
+	p.response.Trailer.Add(key, value)
 }
 
 // OnComplete .
@@ -511,11 +492,6 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 func (p *ClientProcessor) HandleExecute(executor func(f func())) {
 
 }
-
-// WriteResponse .
-// func (p *ClientProcessor) WriteResponse(response http.ResponseWriter) {
-
-// }
 
 // Clear .
 func (p *ClientProcessor) Clear() {
@@ -598,11 +574,6 @@ func (p *EmptyProcessor) HandleExecute(executor func(f func())) {
 
 }
 
-// WriteResponse .
-// func (p *EmptyProcessor) WriteResponse(response http.ResponseWriter) {
-
-// }
-
 // Clear .
 func (p *EmptyProcessor) Clear() {
 
@@ -615,8 +586,5 @@ func (p *EmptyProcessor) HandleMessage(handler http.Handler) {
 
 // NewEmptyProcessor .
 func NewEmptyProcessor() Processor {
-	return &EmptyProcessor{
-		// Allocator: &Allocator{},
-		// TaskPool:  NewTaskPool(20000),
-	}
+	return &EmptyProcessor{}
 }
