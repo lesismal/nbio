@@ -38,6 +38,9 @@ var (
 
 	// DefaultKeepaliveTime .
 	DefaultKeepaliveTime = time.Second * 120
+
+	// DefaultTLSHandshakeTimeout .
+	DefaultTLSHandshakeTimeout = time.Second * 10
 )
 
 // Config .
@@ -91,6 +94,9 @@ type Config struct {
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
+
+	// TLSHandshakeTimeout .
+	TLSHandshakeTimeout time.Duration
 
 	// HTTP1xOutOfOrderExecution represents whether to process the request sequentially.
 	HTTP1xOutOfOrderExecution bool
@@ -192,7 +198,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	svr := &Server{
 		Gopher:                 g,
-		_onOpen:                func(c *nbio.Conn) { c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime)) },
+		_onOpen:                func(c *nbio.Conn) {},
 		_onClose:               func(c *nbio.Conn, err error) {},
 		_onStop:                func() {},
 		ParserExecutor:         parserExecutor,
@@ -205,6 +211,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
+		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
@@ -218,16 +225,16 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			loging.Error("nil parser")
-			c.Close()
 			return
 		}
 		parserExecutor(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
 				loging.Debug("parser.Read failed: %v", err)
-				c.Close()
+				c.CloseWithError(err)
 			}
 		})
+		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 
 	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
@@ -268,6 +275,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	if conf.KeepaliveTime <= 0 {
 		conf.KeepaliveTime = DefaultKeepaliveTime
+	}
+	if conf.TLSHandshakeTimeout <= 0 {
+		conf.TLSHandshakeTimeout = DefaultTLSHandshakeTimeout
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
@@ -324,7 +334,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 
 	svr := &Server{
 		Gopher:                 g,
-		_onOpen:                func(c *nbio.Conn) { c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime)) },
+		_onOpen:                func(c *nbio.Conn) {},
 		_onClose:               func(c *nbio.Conn, err error) {},
 		_onStop:                func() {},
 		ParserExecutor:         parserExecutor,
@@ -340,6 +350,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
+		c.SetReadDeadline(time.Now().Add(conf.TLSHandshakeTimeout))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
@@ -371,7 +382,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 						err := parser.Read(buffer[:n])
 						if err != nil {
 							loging.Debug("parser.Read failed: %v", err)
-							c.Close()
+							c.CloseWithError(err)
 						}
 					}
 					if n < len(buffer) {
@@ -379,6 +390,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 					}
 				}
 			})
+			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 		}
 	})
 	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
