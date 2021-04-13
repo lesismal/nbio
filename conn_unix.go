@@ -326,25 +326,25 @@ func (c *Conn) write(b []byte) (int, error) {
 	if len(c.writeBuffer) == 0 {
 		for {
 			n, err := syscall.Write(int(c.fd), b[nwrite:])
+			if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+				return nwrite, err
+			}
+
 			if n > 0 {
 				nwrite += n
-				size := len(b) - nwrite
-				if size > 0 {
-					if size < c.g.minConnCacheSize {
-						c.writeBuffer = mempool.Malloc(c.g.minConnCacheSize)[:size]
-					} else {
-						c.writeBuffer = mempool.Malloc(size)
-					}
-					copy(c.writeBuffer, b[nwrite:])
-					c.g.onWriteBufferFree(c, b)
-					return nwrite, err
-				}
 			}
-			if err == syscall.EINTR || err == syscall.EAGAIN {
-				continue
+			left := len(b) - nwrite
+			if left > 0 {
+				if left < c.g.minConnCacheSize {
+					c.writeBuffer = mempool.Malloc(c.g.minConnCacheSize)[:left]
+				} else {
+					c.writeBuffer = mempool.Malloc(left)
+				}
+				copy(c.writeBuffer, b[nwrite:])
+				c.modWrite()
 			}
 			c.g.onWriteBufferFree(c, b)
-			return nwrite, err
+			return len(b), nil
 		}
 	}
 	need := len(c.writeBuffer) + len(b)
@@ -356,7 +356,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	copy(c.writeBuffer[len(c.writeBuffer)-len(b):], b)
 	c.g.onWriteBufferFree(c, b)
 
-	return nwrite, err
+	return len(b), err
 }
 
 func (c *Conn) flush() error {
