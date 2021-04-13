@@ -353,6 +353,8 @@ func (c *Conn) write(b []byte) (int, error) {
 				}
 				c.writeBuffers = append(c.writeBuffers, leftData)
 				c.modWrite()
+			} else {
+				c.g.onWriteBufferFree(c, b)
 			}
 			return len(b), nil
 		}

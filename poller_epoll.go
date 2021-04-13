@@ -50,34 +50,29 @@ func (p *poller) decrease() {
 	atomic.AddInt64(&p.currLoad, -1)
 }
 
-func (p *poller) accept(lfd int) error {
-	fd, saddr, err := syscall.Accept(lfd)
-	if err != nil {
-		return err
-	}
-
+func (p *poller) accept(fd int, saddr syscall.Sockaddr) {
 	if !p.acceptable(fd) {
 		syscall.Close(fd)
-		return nil
+		return
 	}
 
-	err = syscall.SetNonblock(fd, true)
+	err := syscall.SetNonblock(fd, true)
 	if err != nil {
 		syscall.Close(fd)
-		return nil
+		return
 	}
 
 	laddr, err := syscall.Getsockname(fd)
 	if err != nil {
 		syscall.Close(fd)
-		return nil
+		return
 	}
 
 	c := newConn(int(fd), sockaddrToAddr(laddr), sockaddrToAddr(saddr))
 	o := p.g.pollers[int(fd)%len(p.g.pollers)]
 	o.addConn(c)
 
-	return nil
+	return
 }
 
 func (p *poller) acceptable(fd int) bool {
@@ -122,10 +117,7 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) start() {
-	if p.g.lockThread {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-	}
+
 	defer p.g.Done()
 
 	loging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
@@ -143,11 +135,31 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	fd := 0
 	msec := -1
 	events := make([]syscall.EpollEvent, 1024)
 
 	p.shutdown = false
+
+	type fdEvent struct {
+		fd    int
+		saddr syscall.Sockaddr
+	}
+
+	chEvent := make(chan fdEvent, 1024*8)
+	defer close(chEvent)
+
+	go func() {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		for evt := range chEvent {
+			p.accept(evt.fd, evt.saddr)
+		}
+	}()
 
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
@@ -167,15 +179,16 @@ func (p *poller) acceptorLoop() {
 			switch fd {
 			case p.evtfd:
 			default:
-				err = p.accept(fd)
-				if err != nil {
-					if err == syscall.EAGAIN {
-						loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
-						time.Sleep(time.Second / 20)
-					} else {
-						loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
-						break
-					}
+				// (nfd int, sa Sockaddr, err error)
+				fd, saddr, err := syscall.Accept(fd)
+				if err == nil {
+					chEvent <- fdEvent{fd, saddr}
+				} else if err == syscall.EAGAIN {
+					loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+					time.Sleep(time.Second / 20)
+				} else {
+					loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+					break
 				}
 			}
 		}
@@ -183,6 +196,11 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
+	if p.g.lockThread {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
+
 	fd := 0
 	msec := -1
 	events := make([]syscall.EpollEvent, 1024)

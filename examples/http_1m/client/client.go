@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"net"
 	"runtime"
 	"sync/atomic"
@@ -71,8 +70,9 @@ func post(conn net.Conn, addr string) {
 		fmt.Println("write failed:", n, err)
 		return
 	}
-	time.Sleep(time.Second / 10)
-	n, err = io.ReadFull(conn, resData)
+	// time.Sleep(time.Second / 10)
+	// n, err = io.ReadFull(conn, resData)
+	n, err = conn.Read(resData)
 	if err != nil || string(resData[n-5:n]) != "hello" {
 		atomic.AddUint64(&failed, 1)
 		fmt.Println("read failed:", n, err)
