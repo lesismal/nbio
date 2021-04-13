@@ -63,7 +63,6 @@ func (p *Parser) onClose(err error) {
 	if p.cache != nil {
 		mempool.Free(p.cache)
 	}
-	p.Processor.Clear()
 }
 
 // Read .
