@@ -25,7 +25,7 @@ var (
 	DefaultMinBufferSize = 1024 * 2
 
 	// DefaultHTTPReadBufferSize .
-	DefaultHTTPReadBufferSize = 1024 * 2
+	DefaultHTTPReadBufferSize = 1024 * 8
 
 	// DefaultHTTPWriteBufferSize .
 	DefaultHTTPWriteBufferSize = 1024 * 2
@@ -230,9 +230,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		})
 	})
 
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
+	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+		return mempool.Malloc(int(conf.ReadBufferSize))
+	})
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
@@ -381,9 +381,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			})
 		}
 	})
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
+	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+		return mempool.Malloc(int(conf.ReadBufferSize))
+	})
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
