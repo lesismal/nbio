@@ -362,11 +362,12 @@ func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
 
 // Clear .
 func (p *ServerProcessor) Clear() {
-	p.mux.Lock()
-	defer p.mux.Unlock()
+	// p.mux.Lock()
+	// defer p.mux.Unlock()
 	for _, res := range p.resQueue {
 		releaseRequest(res.request)
 		releaseResponse(res)
+		p.responsedSeq++
 	}
 	p.resQueue = nil
 }
