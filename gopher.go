@@ -32,7 +32,7 @@ const (
 
 var (
 	// MaxOpenFiles .
-	MaxOpenFiles = 1024*1024 + 4096
+	MaxOpenFiles = 1024 * 1024
 )
 
 // Config Of Gopher
@@ -125,7 +125,7 @@ type Gopher struct {
 	onData            func(c *Conn, data []byte)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
-	onWriteBufferFree       func(c *Conn, buffer []byte)
+	onWriteBufferFree func(c *Conn, buffer []byte)
 	beforeRead        func(c *Conn)
 	afterRead         func(c *Conn)
 	beforeWrite       func(c *Conn)
