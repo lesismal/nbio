@@ -94,6 +94,14 @@ func (c *Conn) Close() error {
 	return nil
 }
 
+// CloseWithError .
+func (c *Conn) CloseWithError(err error) error {
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+	return c.Close()
+}
+
 // LocalAddr wraps net.Conn.LocalAddr
 func (c *Conn) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
