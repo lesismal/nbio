@@ -325,13 +325,13 @@ func (p *ServerProcessor) writeResponseInOrder(res *Response) {
 func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
 	if p.conn != nil {
 		p.mux.Lock()
+		defer p.mux.Unlock()
 		heap.Push(&p.resQueue, res)
 		clear := false
 	RESQUEUE:
 		for len(p.resQueue) > 0 {
 			res = p.resQueue[0]
 			if res.sequence != (p.responsedSeq + 1) {
-				p.mux.Unlock()
 				return
 			}
 			req := res.request
@@ -354,7 +354,6 @@ func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
 			}
 			releaseRequest(req)
 		}
-		p.mux.Unlock()
 		if clear {
 			p.Clear()
 		}
@@ -368,10 +367,6 @@ func (p *ServerProcessor) Clear() {
 	for _, res := range p.resQueue {
 		releaseRequest(res.request)
 		releaseResponse(res)
-	}
-	if p.request != nil {
-		releaseRequest(p.request)
-		p.request = nil
 	}
 	p.resQueue = nil
 }
