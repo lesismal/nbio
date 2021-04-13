@@ -25,8 +25,6 @@ type BodyReader struct {
 	buffer []byte
 }
 
-var mux = sync.Mutex{}
-
 // Read implements io.Reader
 func (br *BodyReader) Read(p []byte) (int, error) {
 	need := len(p)
