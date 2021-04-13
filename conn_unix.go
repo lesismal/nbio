@@ -146,6 +146,11 @@ func (c *Conn) Close() error {
 	return c.closeWithError(nil)
 }
 
+// CloseWithError .
+func (c *Conn) CloseWithError(err error) error {
+	return c.closeWithError(err)
+}
+
 // LocalAddr implements LocalAddr
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
