@@ -345,16 +345,12 @@ func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
 			releaseResponse(res)
 			if req.Close {
 				// the data may still in the send queue
-				if p.conn != nil {
-					p.conn.Close()
-					clear = true
-					releaseRequest(req)
-					break
-				}
+				p.conn.Close()
+				clear = true
+				releaseRequest(req)
+				break
 			} else {
-				if p.conn != nil {
-					p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
-				}
+				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 			}
 			releaseRequest(req)
 		}
