@@ -63,6 +63,7 @@ func (p *Parser) onClose(err error) {
 	if p.cache != nil {
 		mempool.Free(p.cache)
 	}
+	p.Processor.Clear()
 }
 
 // Read .
@@ -80,14 +81,15 @@ func (p *Parser) Read(data []byte) error {
 		}
 		p.cache = mempool.Realloc(p.cache, offset+len(data))
 		copy(p.cache[offset:], data)
+		mempool.Free(data)
 		data = p.cache
 		p.cache = nil
-		defer func() {
-			if data != nil {
-				mempool.Free(data)
-			}
-		}()
 	}
+	defer func() {
+		if data != nil {
+			mempool.Free(data)
+		}
+	}()
 
 UPGRADER:
 	if p.Upgrader != nil {
@@ -391,20 +393,15 @@ UPGRADER:
 			cl := p.contentLength
 			left := len(data) - start
 			if left == cl {
-				var body []byte
-				body = mempool.Malloc(cl)
-				copy(body, data[start:start+cl])
-				p.Processor.OnBody(body, true)
+				if start == 0 {
+					p.Processor.OnBody(data, true)
+				} else {
+					p.Processor.OnBody(data[start:], false)
+				}
 				p.handleMessage()
 				return nil
 			} else if left > cl {
-				left = cl
-				if left < p.minBufferSize {
-					left = p.minBufferSize
-				}
-				body := mempool.Malloc(left)[:cl]
-				copy(body, data[start:start+cl])
-				p.Processor.OnBody(body, true)
+				p.Processor.OnBody(data[start:start+cl], false)
 				p.handleMessage()
 				start += cl
 				i = start - 1
@@ -483,13 +480,7 @@ UPGRADER:
 			cl := p.chunkSize
 			left := len(data) - start
 			if left > cl {
-				left = cl
-				if cl < p.minBufferSize {
-					left = p.minBufferSize
-				}
-				body := mempool.Malloc(left)[:cl]
-				copy(body, data[start:start+cl])
-				p.Processor.OnBody(body, true)
+				p.Processor.OnBody(data[start:start+cl], false)
 				start += cl
 				i = start - 1
 				p.nextState(stateBodyChunkDataCR)
@@ -507,10 +498,10 @@ UPGRADER:
 					data = nil
 					return nil
 				}
-				if left < p.minBufferSize {
+				if cl < p.minBufferSize {
 					p.cache = mempool.Malloc(p.minBufferSize)[:left]
 				} else {
-					p.cache = mempool.Malloc(left)
+					p.cache = mempool.Malloc(cl)[:left]
 				}
 				copy(p.cache, data[start:])
 				return nil
