@@ -29,8 +29,8 @@ type Conn struct {
 	rTimer *htimer
 	wTimer *htimer
 
-	leftSize    int
-	writeBuffer []byte
+	leftSize     int
+	writeBuffers [][]byte
 
 	closed   bool
 	isWAdded bool
@@ -90,7 +90,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 		return n, err
 	}
 
-	if len(c.writeBuffer) == 0 {
+	if len(c.writeBuffers) == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -127,7 +127,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
-	if len(c.writeBuffer) == 0 {
+	if len(c.writeBuffers) == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -323,7 +323,7 @@ func (c *Conn) write(b []byte) (int, error) {
 		nwrite int
 	)
 
-	if len(c.writeBuffer) == 0 {
+	if len(c.writeBuffers) == 0 {
 		for {
 			n, err := syscall.Write(int(c.fd), b[nwrite:])
 			if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
@@ -335,26 +335,25 @@ func (c *Conn) write(b []byte) (int, error) {
 			}
 			left := len(b) - nwrite
 			if left > 0 {
-				if left < c.g.minConnCacheSize {
-					c.writeBuffer = mempool.Malloc(c.g.minConnCacheSize)[:left]
-				} else {
-					c.writeBuffer = mempool.Malloc(left)
+				c.leftSize += left
+				leftData := b
+				if nwrite > 0 {
+					if left < c.g.minConnCacheSize {
+						leftData = mempool.Malloc(c.g.minConnCacheSize)[:left]
+					} else {
+						leftData = mempool.Malloc(left)
+					}
+					copy(leftData, b[nwrite:])
+					c.g.onWriteBufferFree(c, b)
 				}
-				copy(c.writeBuffer, b[nwrite:])
+				c.writeBuffers = append(c.writeBuffers, leftData)
 				c.modWrite()
 			}
-			c.g.onWriteBufferFree(c, b)
 			return len(b), nil
 		}
 	}
-	need := len(c.writeBuffer) + len(b)
-	if need < c.g.minConnCacheSize {
-		c.writeBuffer = mempool.Realloc(c.writeBuffer, c.g.minConnCacheSize)[:need]
-	} else {
-		c.writeBuffer = mempool.Realloc(c.writeBuffer, need)
-	}
-	copy(c.writeBuffer[len(c.writeBuffer)-len(b):], b)
-	c.g.onWriteBufferFree(c, b)
+	c.leftSize += len(b)
+	c.writeBuffers = append(c.writeBuffers, b)
 
 	return len(b), err
 }
@@ -366,9 +365,15 @@ func (c *Conn) flush() error {
 		return errClosed
 	}
 
-	buffer := c.writeBuffer
-	c.writeBuffer = nil
-	_, err := c.write(buffer)
+	buffers := c.writeBuffers
+	c.writeBuffers = nil
+	var err error
+	switch len(buffers) {
+	case 1:
+		_, err = c.write(buffers[0])
+	default:
+		_, err = c.writev(buffers)
+	}
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
 		c.mux.Unlock()
@@ -378,7 +383,7 @@ func (c *Conn) flush() error {
 		c.closeWithErrorWithoutLock(err)
 		return err
 	}
-	if len(c.writeBuffer) == 0 {
+	if len(c.writeBuffers) == 0 {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -388,7 +393,7 @@ func (c *Conn) flush() error {
 	}
 
 	c.mux.Unlock()
-	return err
+	return nil
 }
 
 func (c *Conn) writev(in [][]byte) (int, error) {
@@ -402,35 +407,45 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		}
 		return -1, syscall.EINVAL
 	}
-	left := len(c.writeBuffer)
-	if left > 0 {
-		c.writeBuffer = mempool.Realloc(c.writeBuffer, left+size)
-		copied := left
+	if len(c.writeBuffers) > 0 {
+		c.writeBuffers = append(c.writeBuffers, in...)
+		return size, nil
+	}
+
+	if len(in) > 1 && size <= 16384 {
+		var b []byte
+		if size < c.g.minConnCacheSize {
+			b = mempool.Malloc(c.g.minConnCacheSize)[:size]
+		} else {
+			b = mempool.Malloc(size)
+		}
+		copied := 0
 		for _, v := range in {
-			copy(c.writeBuffer[copied:], v)
+			copy(b[copied:], v)
 			copied += len(v)
 			c.g.onWriteBufferFree(c, v)
 		}
-		return 0, nil
+		return c.write(b)
 	}
 
-	var b []byte
-	if size < c.g.minConnCacheSize {
-		b = mempool.Malloc(c.g.minConnCacheSize)[:size]
-	} else {
-		b = mempool.Malloc(size)
+	nwrite := 0
+	for i, b := range in {
+		n, err := c.write(b)
+		if n > 0 {
+			nwrite += n
+		}
+		if err != nil {
+			for j := i + 1; j < len(in); j++ {
+				c.g.onWriteBufferFree(c, in[j])
+			}
+			return nwrite, err
+		}
 	}
-	copied := 0
-	for _, v := range in {
-		copy(b[copied:], v)
-		copied += len(v)
-		c.g.onWriteBufferFree(c, v)
-	}
-	return c.write(b)
+	return nwrite, nil
 }
 
 func (c *Conn) overflow(n int) bool {
-	return c.g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > int(c.g.maxWriteBufferSize))
+	return c.g.maxWriteBufferSize > 0 && (c.leftSize+n > int(c.g.maxWriteBufferSize))
 }
 
 func (c *Conn) closeWithError(err error) error {
@@ -446,10 +461,7 @@ func (c *Conn) closeWithError(err error) error {
 			c.rTimer.Stop()
 			c.rTimer = nil
 		}
-		if c.writeBuffer != nil {
-			mempool.Free(c.writeBuffer)
-			c.writeBuffer = nil
-		}
+
 		return c.closeWithErrorWithoutLock(err)
 	}
 	c.mux.Unlock()
@@ -457,13 +469,16 @@ func (c *Conn) closeWithError(err error) error {
 }
 
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
-	fd := c.fd
 	c.closeErr = err
 	if c.g != nil {
 		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
 	}
+	for _, b := range c.writeBuffers {
+		mempool.Free(b)
+	}
+	c.writeBuffers = nil
 
-	return syscall.Close(fd)
+	return syscall.Close(c.fd)
 }
 
 func dupStdConn(conn net.Conn) (*Conn, error) {
