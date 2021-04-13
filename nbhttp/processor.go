@@ -198,8 +198,15 @@ func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ServerProcessor) OnComplete(parser *Parser) {
+	// clear guard
+	p.mux.Lock()
 	request := p.request
 	p.request = nil
+	p.mux.Unlock()
+
+	if request == nil {
+		return
+	}
 
 	if p.conn != nil {
 		request.RemoteAddr = p.conn.RemoteAddr().String()
@@ -365,6 +372,10 @@ func (p *ServerProcessor) Clear() {
 	for _, res := range p.resQueue {
 		releaseRequest(res.request)
 		releaseResponse(res)
+	}
+	if p.request != nil {
+		releaseRequest(p.request)
+		p.request = nil
 	}
 	p.resQueue = nil
 }
