@@ -244,6 +244,11 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 			c.closeWithError(io.EOF)
 			return
 		}
+
+		if ev.Events&syscall.EPOLLOUT != 0 {
+			c.flush()
+		}
+
 		if ev.Events&syscall.EPOLLIN != 0 {
 			buffer := p.g.borrow(c)
 			b, err := p.g.onRead(c, buffer)
@@ -256,10 +261,6 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 				}
 			}
 			p.g.payback(c, buffer)
-		}
-
-		if ev.Events&syscall.EPOLLOUT != 0 {
-			c.flush()
 		}
 	} else {
 		syscall.Close(fd)
