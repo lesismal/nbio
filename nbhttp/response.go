@@ -76,13 +76,13 @@ func (res *Response) Write(data []byte) (int, error) {
 	res.WriteHeader(http.StatusOK)
 	n := len(data)
 	if n > 0 {
-		if n <= 4096 {
+		if n <= 8192 {
 			res.bodyList = append(res.bodyList, data)
 			res.bodySize += len(data)
 		} else {
 			res.bodySize += len(data)
 
-			n = 4096
+			n = 8192
 			for len(data) > 0 {
 				if len(data) < n {
 					n = len(data)
