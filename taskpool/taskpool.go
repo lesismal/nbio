@@ -91,6 +91,9 @@ func (tp *TaskPool) Stop() {
 
 // New .
 func New(size int, maxIdleTime time.Duration) *TaskPool {
+	if maxIdleTime <= time.Second {
+		maxIdleTime = time.Second * 60
+	}
 	tp := &TaskPool{
 		wg:          &sync.WaitGroup{},
 		running:     true,
