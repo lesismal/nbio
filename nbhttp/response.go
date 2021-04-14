@@ -73,25 +73,31 @@ func (res *Response) WriteHeader(statusCode int) {
 
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
-	res.WriteHeader(http.StatusOK)
-	n := len(data)
-	if n > 0 {
-		if n <= 8192 {
-			res.bodyList = append(res.bodyList, data)
-			res.bodySize += len(data)
-		} else {
-			res.bodySize += len(data)
-
-			n = 8192
-			for len(data) > 0 {
-				if len(data) < n {
-					n = len(data)
-				}
-				res.bodyList = append(res.bodyList, data[:n])
-				data = data[n:]
-			}
-		}
+	if len(data) == 0 {
+		return 0, nil
 	}
+	res.WriteHeader(http.StatusOK)
+	res.bodyList = append(res.bodyList, data)
+	res.bodySize += len(data)
+	// res.WriteHeader(http.StatusOK)
+	// n := len(data)
+	// if n > 0 {
+	// 	if n <= 8192 {
+	// 		res.bodyList = append(res.bodyList, data)
+	// 		res.bodySize += len(data)
+	// 	} else {
+	// 		res.bodySize += len(data)
+
+	// 		n = 8192
+	// 		for len(data) > 0 {
+	// 			if len(data) < n {
+	// 				n = len(data)
+	// 			}
+	// 			res.bodyList = append(res.bodyList, data[:n])
+	// 			data = data[n:]
+	// 		}
+	// 	}
+	// }
 	return len(data), nil
 }
 
@@ -218,32 +224,41 @@ func (res *Response) flush(conn net.Conn) error {
 	i += 2
 
 	if !chunked {
-		if res.bodySize == 0 {
+		switch res.bodySize {
+		case 0:
 			_, err := conn.Write(data)
 			return err
-		}
-		if i+res.bodySize <= 8192 {
-			data = mempool.Realloc(data, i+res.bodySize)
-			for _, v := range res.bodyList {
-				copy(data[i:], v)
-				i += len(v)
-			}
-			_, err := conn.Write(data)
-			return err
-		} else {
-			data = mempool.Realloc(data, i+len(res.bodyList[0]))
-			copy(data[i:], res.bodyList[0])
-			_, err := conn.Write(data)
-			if err != nil {
+		default:
+			if i+res.bodySize <= 8192 {
+				data = mempool.Realloc(data, i+res.bodySize)
+				for _, v := range res.bodyList {
+					copy(data[i:], v)
+					i += len(v)
+				}
+				_, err := conn.Write(data)
 				return err
-			}
-			for i := 1; i < len(res.bodyList); i++ {
-				v := res.bodyList[i]
-				data = mempool.Malloc(len(v))
-				copy(data, v)
-				_, err = conn.Write(data)
-				if err != nil {
-					return err
+			} else {
+				switch len(res.bodyList) {
+				case 1:
+					data = mempool.Realloc(data, i+len(res.bodyList[0]))
+					copy(data[i:], res.bodyList[0])
+					_, err := conn.Write(data)
+					if err != nil {
+						return err
+					}
+				default:
+					_, err := conn.Write(data)
+					if err != nil {
+						return err
+					}
+					for _, v := range res.bodyList {
+						data = mempool.Malloc(len(v))
+						copy(data, v)
+						_, err = conn.Write(data)
+						if err != nil {
+							return err
+						}
+					}
 				}
 			}
 		}
