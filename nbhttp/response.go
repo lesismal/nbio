@@ -38,13 +38,18 @@ type Response struct {
 	sequence uint64
 	request  *http.Request // request for this response
 
-	statusCode int // status code passed to WriteHeader
 	status     string
-	header     http.Header
-	trailers   http.Header
+	statusCode int // status code passed to WriteHeader
 
-	bodySize int
-	bodyList [][]byte
+	header        http.Header
+	trailer       map[string]string
+	trailerSize   int
+	contentLength int
+
+	buffer       []byte
+	chunked      bool
+	chunkChecked bool
+	headFlushed  bool
 }
 
 // Hijack .
@@ -73,73 +78,111 @@ func (res *Response) WriteHeader(statusCode int) {
 
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
-	if len(data) == 0 {
+	l := len(data)
+	conn := res.processor.Conn()
+	if l == 0 || conn == nil {
 		return 0, nil
 	}
-	res.WriteHeader(http.StatusOK)
-	res.bodyList = append(res.bodyList, data)
-	res.bodySize += len(data)
-	// res.WriteHeader(http.StatusOK)
-	// n := len(data)
-	// if n > 0 {
-	// 	if n <= 8192 {
-	// 		res.bodyList = append(res.bodyList, data)
-	// 		res.bodySize += len(data)
-	// 	} else {
-	// 		res.bodySize += len(data)
 
-	// 		n = 8192
-	// 		for len(data) > 0 {
-	// 			if len(data) < n {
-	// 				n = len(data)
-	// 			}
-	// 			res.bodyList = append(res.bodyList, data[:n])
-	// 			data = data[n:]
-	// 		}
-	// 	}
-	// }
-	return len(data), nil
+	res.checkChunked()
+	if !res.chunked {
+		if res.contentLength == 0 {
+			res.header["Content-Length"] = []string{strconv.FormatInt(int64(l), 10)}
+			res.contentLength = l
+		}
+		res.flushHead()
+		if res.buffer != nil {
+			buf := res.buffer
+			res.buffer = nil
+			hl := len(buf)
+			if hl+l <= 8192 {
+				buf = mempool.Realloc(buf, hl+l)
+				copy(buf[hl:], data)
+			} else {
+				_, err := conn.Write(buf)
+				if err != nil {
+					return 0, err
+				}
+				buf = mempool.Malloc(l)
+				copy(buf, data)
+			}
+			return conn.Write(buf)
+		}
+		return conn.Write(data)
+	}
+	res.flushHead()
+	if res.buffer != nil {
+		buf := res.buffer
+		res.buffer = nil
+		hl := len(buf)
+		lenStr := strconv.FormatInt(int64(l), 16)
+		if buf == nil {
+			buf = mempool.Malloc(len(lenStr) + l + 4)
+		} else {
+			buf = mempool.Realloc(buf, hl+len(lenStr)+l+4)
+		}
+		copy(buf[hl:], lenStr)
+		hl += len(lenStr)
+		copy(buf[hl:], "\r\n")
+		hl += 2
+		copy(buf[hl:], data)
+		hl += l
+		copy(buf[hl:], "\r\n")
+		return conn.Write(buf)
+	}
+	return conn.Write(data)
 }
 
-// flush .
-func (res *Response) flush(conn net.Conn) error {
-	res.WriteHeader(http.StatusOK)
-	statusCode := res.statusCode
-	status := res.status
+// checkChunked .
+func (res *Response) checkChunked() error {
+	if res.chunkChecked {
+		return nil
+	}
 
-	chunked := false
-	encodingFound := false
 	if res.request.ProtoAtLeast(1, 1) {
 		for _, v := range res.header["Transfer-Encoding"] {
 			if v == "chunked" {
-				chunked = true
-				encodingFound = true
+				res.chunked = true
 			}
 		}
-		if !chunked {
+		if !res.chunked {
 			if len(res.header["Trailer"]) > 0 {
-				chunked = true
+				res.chunked = true
+				hs := res.header["Transfer-Encoding"]
+				res.header["Transfer-Encoding"] = append(hs, "chunked")
 			}
 		}
 	}
-	if chunked {
-		if !encodingFound {
-			hs := res.header["Transfer-Encoding"]
-			res.header["Transfer-Encoding"] = append(hs, "chunked")
-		}
+	if res.chunked {
 		delete(res.header, "Content-Length")
-	} else if res.bodySize > 0 {
-		hs := res.header["Content-Length"]
-		res.header["Content-Length"] = append(hs, strconv.Itoa(res.bodySize))
+	} else {
+		vv := res.header["Content-Length"]
+		if len(vv) > 0 {
+			l, err := strconv.ParseInt(vv[0], 10, 63)
+			if err != nil {
+				return err
+			}
+			res.contentLength = int(l)
+		}
 	}
 
-	size := res.bodySize + 1024
+	res.chunkChecked = true
 
-	if size < 2048 {
-		size = 2048
+	return nil
+}
+
+// flush .
+func (res *Response) flushHead() {
+	if res.headFlushed {
+		return
 	}
 
-	data := mempool.Malloc(size)
+	res.WriteHeader(http.StatusOK)
+
+	status := res.status
+	statusCode := res.statusCode
+
+	data := mempool.Malloc(4096)
 
 	proto := res.request.Proto
 	i := 0
@@ -163,17 +206,19 @@ func (res *Response) flush(conn net.Conn) error {
 	data[i] = '\n'
 	i++
 
-	trailer := map[string]string{}
+	res.trailer = map[string]string{}
 	for k, vv := range res.header {
 		if strings.HasPrefix(k, "Trailer-") {
 			if len(vv) > 0 {
-				trailer[k] = vv[0]
+				k = k[8:]
+				res.trailer[k] = vv[0]
+				res.trailerSize += (len(k) + len(vv[0]) + 4)
 			}
 			continue
 		}
 		for _, value := range vv {
 			// value := strings.Join(vv, ",")
-			data = mempool.Realloc(data, i+len(k)+len(value)+4+res.bodySize)
+			data = mempool.Realloc(data, i+len(k)+len(value)+4)
 			copy(data[i:], k)
 			i += len(k)
 			data[i] = ':'
@@ -221,76 +266,31 @@ func (res *Response) flush(conn net.Conn) error {
 
 	data = mempool.Realloc(data, i+2)
 	copy(data[i:], "\r\n")
-	i += 2
 
-	if !chunked {
-		switch res.bodySize {
-		case 0:
-			_, err := conn.Write(data)
-			return err
-		default:
-			if i+res.bodySize <= 8192 {
-				data = mempool.Realloc(data, i+res.bodySize)
-				for _, v := range res.bodyList {
-					copy(data[i:], v)
-					i += len(v)
-				}
-				_, err := conn.Write(data)
-				return err
-			} else {
-				switch len(res.bodyList) {
-				case 1:
-					data = mempool.Realloc(data, i+len(res.bodyList[0]))
-					copy(data[i:], res.bodyList[0])
-					_, err := conn.Write(data)
-					if err != nil {
-						return err
-					}
-				default:
-					_, err := conn.Write(data)
-					if err != nil {
-						return err
-					}
-					for _, v := range res.bodyList {
-						data = mempool.Malloc(len(v))
-						copy(data, v)
-						_, err = conn.Write(data)
-						if err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-	} else {
-		for _, v := range res.bodyList {
-			lenStr := strconv.FormatInt(int64(len(v)), 16)
-			data = mempool.Realloc(data, i+len(lenStr)+len(v)+4)
-			copy(data[i:], lenStr)
-			i += len(lenStr)
-			copy(data[i:], "\r\n")
-			i += 2
-			copy(data[i:], v)
-			i += len(v)
-			copy(data[i:], "\r\n")
-			i += 2
-			if len(data) > 4096 {
-				_, err := conn.Write(data)
-				if err != nil {
-					return err
-				}
-				data = mempool.Malloc(4096)[0:0]
-				i = 0
-			}
-		}
-		data = mempool.Realloc(data, i+5)
-		if len(trailer) == 0 {
-			copy(data[i:], "0\r\n\r\n")
+	res.headFlushed = true
+
+	res.buffer = data
+	return
+	// i += 2
+	// _, err := conn.Write(data)
+	// return err
+}
+
+func (res *Response) flushTrailer(conn net.Conn) error {
+	if res.chunked {
+		data := res.buffer
+		res.buffer = nil
+		if data == nil {
+			data = mempool.Malloc(res.trailerSize + 5)
 		} else {
-			copy(data[i:], "0\r\n")
-			i += 3
-
-			for k, v := range trailer {
+			data = mempool.Realloc(data, len(data)+res.trailerSize+5)
+		}
+		if len(res.trailer) == 0 {
+			copy(data, "0\r\n\r\n")
+		} else {
+			copy(data, "0\r\n")
+			i := 3
+			for k, v := range res.trailer {
 				data = mempool.Realloc(data, i+len(k)+len(v)+4)
 				copy(data[i:], k)
 				i += len(k)
@@ -314,6 +314,13 @@ func (res *Response) flush(conn net.Conn) error {
 		}
 	}
 
+	data := res.buffer
+	if data != nil {
+		_, err := conn.Write(data)
+		return err
+	} else {
+		res.buffer = nil
+	}
 	return nil
 }
 
