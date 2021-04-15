@@ -5,7 +5,6 @@
 package nbhttp
 
 import (
-	"container/heap"
 	"errors"
 	"fmt"
 	"net"
@@ -131,37 +130,6 @@ func (p *ServerProcessor) OnHeader(key, value string) {
 	p.isUpgrade = (key == "Connection" && value == "upgrade")
 }
 
-// OnHeader .
-// func (p *ServerProcessor) OnHeader(key, value string) {
-// 	values := p.request.Header[key]
-// 	i, j := 0, 0
-// 	for i < len(value) && j < len(value) {
-// 		for i < len(value) {
-// 			c := value[i]
-// 			if c != ' ' && c != ',' {
-// 				break
-// 			}
-// 			i++
-// 		}
-// 		j = i + 1
-// 		for j < len(value) {
-// 			c := value[j]
-// 			if c == ' ' || c == ',' {
-// 				break
-// 			}
-// 			j++
-// 		}
-// 		if j <= len(value) {
-// 			values = append(values, value[i:j])
-// 		}
-// 		i = j + 1
-// 	}
-// 	if len(values) == 0 {
-// 		values = append(values, "")
-// 	}
-// 	p.request.Header[key] = values
-// }
-
 // OnContentLength .
 func (p *ServerProcessor) OnContentLength(contentLength int) {
 	p.request.ContentLength = int64(contentLength)
@@ -251,41 +219,34 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	res := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
 
 	if !p.isUpgrade {
-		if !p.outOfOrderExecution {
-			var executing bool
-			p.mux.Lock()
-			p.resQueue = append(p.resQueue, res)
-			executing = (p.resQueue[0] != res)
-			p.mux.Unlock()
+		var executing bool
+		p.mux.Lock()
+		p.resQueue = append(p.resQueue, res)
+		executing = (p.resQueue[0] != res)
+		p.mux.Unlock()
 
-			if !executing {
-				f := func() {
-					for {
-						p.handler.ServeHTTP(res, res.request)
-						p.writeResponse(res)
+		if !executing {
+			f := func() {
+				for {
+					p.handler.ServeHTTP(res, res.request)
+					p.flushResponse(res)
 
-						p.mux.Lock()
-						p.resQueue = p.resQueue[1:]
-						if len(p.resQueue) == 0 {
-							p.resQueue = nil
-							p.mux.Unlock()
-							return
-						}
-						res = p.resQueue[0]
+					p.mux.Lock()
+					p.resQueue = p.resQueue[1:]
+					if len(p.resQueue) == 0 {
+						p.resQueue = nil
 						p.mux.Unlock()
+						return
 					}
+					res = p.resQueue[0]
+					p.mux.Unlock()
 				}
-				p.executor(f)
 			}
-		} else {
-			p.executor(func() {
-				p.handler.ServeHTTP(res, request)
-				p.writeResponse(res)
-			})
+			p.executor(f)
 		}
 	} else {
 		p.handler.ServeHTTP(res, request)
-		p.writeResponse(res)
+		p.flushResponse(res)
 	}
 }
 
@@ -296,18 +257,11 @@ func (p *ServerProcessor) HandleExecute(executor func(f func())) {
 	}
 }
 
-func (p *ServerProcessor) writeResponse(res *Response) {
-	if !p.outOfOrderExecution {
-		p.writeResponseInOrder(res)
-	} else {
-		p.writeResponseOutofOrder(res)
-	}
-}
-
-func (p *ServerProcessor) writeResponseInOrder(res *Response) {
+func (p *ServerProcessor) flushResponse(res *Response) {
 	if p.conn != nil {
 		req := res.request
-		if err := res.flush(p.conn); err != nil {
+		res.flushHead()
+		if err := res.flushTrailer(p.conn); err != nil {
 			p.conn.Close()
 			return
 		}
@@ -319,44 +273,6 @@ func (p *ServerProcessor) writeResponseInOrder(res *Response) {
 		}
 		releaseRequest(req)
 		releaseResponse(res)
-	}
-}
-
-func (p *ServerProcessor) writeResponseOutofOrder(res *Response) {
-	if p.conn != nil {
-		p.mux.Lock()
-		defer p.mux.Unlock()
-		heap.Push(&p.resQueue, res)
-		clear := false
-	RESQUEUE:
-		for len(p.resQueue) > 0 {
-			res = p.resQueue[0]
-			if res.sequence != (p.responsedSeq + 1) {
-				return
-			}
-			req := res.request
-			if err := res.flush(p.conn); err != nil {
-				p.conn.Close()
-				clear = true
-				break RESQUEUE
-			}
-			heap.Remove(&p.resQueue, res.index)
-			p.responsedSeq++
-			releaseResponse(res)
-			if req.Close {
-				// the data may still in the send queue
-				p.conn.Close()
-				clear = true
-				releaseRequest(req)
-				break
-			} else {
-				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
-			}
-			releaseRequest(req)
-		}
-		if clear {
-			p.Clear()
-		}
 	}
 }
 
