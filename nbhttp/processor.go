@@ -69,13 +69,12 @@ type ServerProcessor struct {
 	handler  http.Handler
 	executor func(f func())
 
-	resQueue            responseQueue
-	sequence            uint64
-	responsedSeq        uint64
-	minBufferSize       int
-	keepaliveTime       time.Duration
-	isUpgrade           bool
-	outOfOrderExecution bool
+	resQueue      responseQueue
+	sequence      uint64
+	responsedSeq  uint64
+	minBufferSize int
+	keepaliveTime time.Duration
+	isUpgrade     bool
 }
 
 // Conn .
@@ -306,7 +305,7 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration, outOfOrderExecution bool) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
@@ -317,12 +316,11 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f fun
 		minBufferSize = DefaultMinBufferSize
 	}
 	return &ServerProcessor{
-		conn:                conn,
-		handler:             handler,
-		executor:            executor,
-		minBufferSize:       minBufferSize,
-		keepaliveTime:       keepaliveTime,
-		outOfOrderExecution: outOfOrderExecution,
+		conn:          conn,
+		handler:       handler,
+		executor:      executor,
+		minBufferSize: minBufferSize,
+		keepaliveTime: keepaliveTime,
 	}
 }
 

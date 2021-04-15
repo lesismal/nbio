@@ -24,9 +24,6 @@ var (
 	// DefaultMinBufferSize .
 	DefaultMinBufferSize = 1024 * 2
 
-	// DefaultHTTPReadBufferSize .
-	DefaultHTTPReadBufferSize = 1024 * 8
-
 	// DefaultHTTPWriteBufferSize .
 	DefaultHTTPWriteBufferSize = 1024 * 2
 
@@ -94,12 +91,6 @@ type Config struct {
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
-
-	// TLSHandshakeTimeout .
-	TLSHandshakeTimeout time.Duration
-
-	// HTTP1xOutOfOrderExecution represents whether to process the request sequentially.
-	HTTP1xOutOfOrderExecution bool
 }
 
 // Server .
@@ -140,9 +131,6 @@ func (s *Server) OnStop(h func()) {
 
 // NewServer .
 func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f func())) *Server {
-	if conf.ReadBufferSize == 0 {
-		conf.ReadBufferSize = DefaultHTTPReadBufferSize
-	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU()
 	}
@@ -157,6 +145,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 	}
 	if conf.KeepaliveTime <= 0 {
 		conf.KeepaliveTime = DefaultKeepaliveTime
+	}
+	if conf.ReadBufferSize <= 0 {
+		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
 
 	var messageHandlerExecutePool *taskpool.MixedPool
@@ -207,7 +198,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.HTTP1xOutOfOrderExecution)
+		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -258,9 +249,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 // NewServerTLS .
 func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
-	if conf.ReadBufferSize == 0 {
-		conf.ReadBufferSize = DefaultHTTPReadBufferSize
-	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU()
 	}
@@ -275,9 +263,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	if conf.KeepaliveTime <= 0 {
 		conf.KeepaliveTime = DefaultKeepaliveTime
-	}
-	if conf.TLSHandshakeTimeout <= 0 {
-		conf.TLSHandshakeTimeout = DefaultTLSHandshakeTimeout
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
@@ -346,11 +331,11 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
-		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.HTTP1xOutOfOrderExecution)
+		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.TLSHandshakeTimeout))
+		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)

@@ -45,9 +45,6 @@ func main() {
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
-		// NPoller: 32,
-		MessageHandlerPoolSize:    2048,
-		HTTP1xOutOfOrderExecution: true,
 	}, router, nil) // pool.Go)
 
 	err := svr.Start()
