@@ -18,8 +18,7 @@ var (
 )
 
 func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	// data, _ := io.ReadAll(r.Body)
-	data := r.Body.(*nbhttp.BodyReader).RawBody()
+	data := r.Body.(*nbhttp.BodyReader).TakeOver()
 	if len(data) > 0 {
 		w.Write(data)
 	} else {
@@ -30,7 +29,7 @@ func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 func main() {
 	go func() {
-		if err := http.ListenAndServe(":6060", nil); err != nil {
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
 			panic(err)
 		}
 	}()

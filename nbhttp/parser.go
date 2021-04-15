@@ -394,6 +394,7 @@ UPGRADER:
 			if left == cl {
 				if start == 0 {
 					p.Processor.OnBody(data, true)
+					data = nil
 				} else {
 					p.Processor.OnBody(data[start:], false)
 				}
@@ -486,6 +487,7 @@ UPGRADER:
 			} else if left == cl {
 				if start == 0 {
 					p.Processor.OnBody(data, true)
+					data = nil
 				} else {
 					p.Processor.OnBody(data[start:], false)
 				}

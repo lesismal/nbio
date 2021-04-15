@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -49,7 +48,8 @@ type Response struct {
 	buffer       []byte
 	chunked      bool
 	chunkChecked bool
-	headFlushed  bool
+	headEncoded  bool
+	hasBody      bool
 }
 
 // Hijack .
@@ -84,50 +84,54 @@ func (res *Response) Write(data []byte) (int, error) {
 		return 0, nil
 	}
 
+	res.hasBody = true
+
 	res.checkChunked()
-	if !res.chunked {
-		if res.contentLength == 0 {
-			res.header["Content-Length"] = []string{strconv.FormatInt(int64(l), 10)}
-			res.contentLength = l
-		}
+
+	if res.chunked {
 		res.flushHead()
 		if res.buffer != nil {
 			buf := res.buffer
 			res.buffer = nil
 			hl := len(buf)
-			if hl+l <= 8192 {
-				buf = mempool.Realloc(buf, hl+l)
-				copy(buf[hl:], data)
+			lenStr := strconv.FormatInt(int64(l), 16)
+			if buf == nil {
+				buf = mempool.Malloc(len(lenStr) + l + 4)
 			} else {
-				_, err := conn.Write(buf)
-				if err != nil {
-					return 0, err
-				}
-				buf = mempool.Malloc(l)
-				copy(buf, data)
+				buf = mempool.Realloc(buf, hl+len(lenStr)+l+4)
 			}
+			copy(buf[hl:], lenStr)
+			hl += len(lenStr)
+			copy(buf[hl:], "\r\n")
+			hl += 2
+			copy(buf[hl:], data)
+			hl += l
+			copy(buf[hl:], "\r\n")
 			return conn.Write(buf)
 		}
 		return conn.Write(data)
+	}
+
+	if len(res.header["Content-Length"]) == 0 {
+		res.header["Content-Length"] = []string{strconv.FormatInt(int64(l), 10)}
+		res.contentLength = l
 	}
 	res.flushHead()
 	if res.buffer != nil {
 		buf := res.buffer
 		res.buffer = nil
 		hl := len(buf)
-		lenStr := strconv.FormatInt(int64(l), 16)
-		if buf == nil {
-			buf = mempool.Malloc(len(lenStr) + l + 4)
+		if hl+l <= 8192 {
+			buf = mempool.Realloc(buf, hl+l)
+			copy(buf[hl:], data)
 		} else {
-			buf = mempool.Realloc(buf, hl+len(lenStr)+l+4)
+			_, err := conn.Write(buf)
+			if err != nil {
+				return 0, err
+			}
+			buf = mempool.Malloc(l)
+			copy(buf, data)
 		}
-		copy(buf[hl:], lenStr)
-		hl += len(lenStr)
-		copy(buf[hl:], "\r\n")
-		hl += 2
-		copy(buf[hl:], data)
-		hl += l
-		copy(buf[hl:], "\r\n")
 		return conn.Write(buf)
 	}
 	return conn.Write(data)
@@ -138,6 +142,8 @@ func (res *Response) checkChunked() error {
 	if res.chunkChecked {
 		return nil
 	}
+
+	res.WriteHeader(http.StatusOK)
 
 	if res.request.ProtoAtLeast(1, 1) {
 		for _, v := range res.header["Transfer-Encoding"] {
@@ -155,15 +161,6 @@ func (res *Response) checkChunked() error {
 	}
 	if res.chunked {
 		delete(res.header, "Content-Length")
-	} else {
-		vv := res.header["Content-Length"]
-		if len(vv) > 0 {
-			l, err := strconv.ParseInt(vv[0], 10, 63)
-			if err != nil {
-				return err
-			}
-			res.contentLength = int(l)
-		}
 	}
 
 	res.chunkChecked = true
@@ -173,11 +170,11 @@ func (res *Response) checkChunked() error {
 
 // flush .
 func (res *Response) flushHead() {
-	if res.headFlushed {
+	if res.headEncoded {
 		return
 	}
 
-	res.WriteHeader(http.StatusOK)
+	res.checkChunked()
 
 	status := res.status
 	statusCode := res.statusCode
@@ -207,30 +204,30 @@ func (res *Response) flushHead() {
 	i++
 
 	res.trailer = map[string]string{}
+	trailers := res.header["Trailer"]
+	for _, k := range trailers {
+		res.trailer[k] = ""
+	}
 	for k, vv := range res.header {
-		if strings.HasPrefix(k, "Trailer-") {
-			if len(vv) > 0 {
-				k = k[8:]
-				res.trailer[k] = vv[0]
-				res.trailerSize += (len(k) + len(vv[0]) + 4)
+		if k != "Trailer" {
+			if _, ok := res.trailer[k]; !ok {
+				for _, value := range vv {
+					// value := strings.Join(vv, ",")
+					data = mempool.Realloc(data, i+len(k)+len(value)+4)
+					copy(data[i:], k)
+					i += len(k)
+					data[i] = ':'
+					i++
+					data[i] = ' '
+					i++
+					copy(data[i:], value)
+					i += len(value)
+					data[i] = '\r'
+					i++
+					data[i] = '\n'
+					i++
+				}
 			}
-			continue
-		}
-		for _, value := range vv {
-			// value := strings.Join(vv, ",")
-			data = mempool.Realloc(data, i+len(k)+len(value)+4)
-			copy(data[i:], k)
-			i += len(k)
-			data[i] = ':'
-			i++
-			data[i] = ' '
-			i++
-			copy(data[i:], value)
-			i += len(value)
-			data[i] = '\r'
-			i++
-			data[i] = '\n'
-			i++
 		}
 	}
 
@@ -239,6 +236,14 @@ func (res *Response) flushHead() {
 		data = mempool.Realloc(data, i+len(contentType))
 		copy(data[i:], contentType)
 		i += len(contentType)
+	}
+	if !res.chunked {
+		if !res.hasBody {
+			const contentLenthZero = "Content-Length: 0\r\n"
+			data = mempool.Realloc(data, i+len(contentLenthZero))
+			copy(data[i:], contentLenthZero)
+			i += len(contentLenthZero)
+		}
 	}
 
 	if len(res.header["Date"]) == 0 {
@@ -267,61 +272,59 @@ func (res *Response) flushHead() {
 	data = mempool.Realloc(data, i+2)
 	copy(data[i:], "\r\n")
 
-	res.headFlushed = true
-
 	res.buffer = data
-	return
-	// i += 2
-	// _, err := conn.Write(data)
-	// return err
+
+	res.headEncoded = true
 }
 
 func (res *Response) flushTrailer(conn net.Conn) error {
-	if res.chunked {
+	if !res.chunked {
+		if !res.hasBody {
+			res.header["Content-Length"] = []string{"0"}
+		}
+
 		data := res.buffer
 		res.buffer = nil
-		if data == nil {
-			data = mempool.Malloc(res.trailerSize + 5)
-		} else {
-			data = mempool.Realloc(data, len(data)+res.trailerSize+5)
-		}
-		if len(res.trailer) == 0 {
-			copy(data, "0\r\n\r\n")
-		} else {
-			copy(data, "0\r\n")
-			i := 3
-			for k, v := range res.trailer {
-				data = mempool.Realloc(data, i+len(k)+len(v)+4)
-				copy(data[i:], k)
-				i += len(k)
-				data[i] = ':'
-				i++
-				data[i] = ' '
-				i++
-				copy(data[i:], v)
-				i += len(v)
-				data[i] = '\r'
-				i++
-				data[i] = '\n'
-				i++
-			}
-			data = mempool.Realloc(data, i+2)
-			copy(data[i:], "\r\n")
-		}
-		_, err := conn.Write(data)
-		if err != nil {
+		if data != nil {
+			_, err := conn.Write(data)
 			return err
 		}
+		return nil
 	}
 
 	data := res.buffer
-	if data != nil {
-		_, err := conn.Write(data)
-		return err
+	res.buffer = nil
+	if data == nil {
+		data = mempool.Malloc(res.trailerSize + 5)
 	} else {
-		res.buffer = nil
+		data = mempool.Realloc(data, len(data)+res.trailerSize+5)
 	}
-	return nil
+	if len(res.trailer) == 0 {
+		copy(data, "0\r\n\r\n")
+	} else {
+		copy(data, "0\r\n")
+		i := 3
+		for k, v := range res.trailer {
+			v = res.header.Get(k)
+			data = mempool.Realloc(data, i+len(k)+len(v)+4)
+			copy(data[i:], k)
+			i += len(k)
+			data[i] = ':'
+			i++
+			data[i] = ' '
+			i++
+			copy(data[i:], v)
+			i += len(v)
+			data[i] = '\r'
+			i++
+			data[i] = '\n'
+			i++
+		}
+		data = mempool.Realloc(data, i+2)
+		copy(data[i:], "\r\n")
+	}
+	_, err := conn.Write(data)
+	return err
 }
 
 // NewResponse .
