@@ -259,7 +259,7 @@ func (p *ServerProcessor) HandleExecute(executor func(f func())) {
 func (p *ServerProcessor) flushResponse(res *Response) {
 	if p.conn != nil {
 		req := res.request
-		res.flushHead()
+		res.eoncodeHead()
 		if err := res.flushTrailer(p.conn); err != nil {
 			p.conn.Close()
 			return
