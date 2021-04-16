@@ -13,7 +13,6 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/nbio/loging"
@@ -69,7 +68,7 @@ type ServerProcessor struct {
 	handler  http.Handler
 	executor func(f func())
 
-	resQueue      responseQueue
+	resQueue      []*Response
 	sequence      uint64
 	responsedSeq  uint64
 	minBufferSize int
@@ -215,7 +214,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = NewBodyReader(nil)
 	}
 
-	res := NewResponse(p, request, atomic.AddUint64(&p.sequence, 1))
+	res := NewResponse(p, request)
 
 	if !p.isUpgrade {
 		var executing bool

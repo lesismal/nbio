@@ -32,9 +32,7 @@ var (
 type Response struct {
 	processor Processor
 
-	index    int
-	sequence uint64
-	request  *http.Request // request for this response
+	request *http.Request // request for this response
 
 	status     string
 	statusCode int // status code passed to WriteHeader
@@ -42,14 +40,14 @@ type Response struct {
 	header      http.Header
 	trailer     map[string]string
 	trailerSize int
-	// contentLength int
 
 	buffer       []byte
+	intFormatBuf [16]byte
+
 	chunked      bool
 	chunkChecked bool
 	headEncoded  bool
 	hasBody      bool
-	intFormatBuf [16]byte
 }
 
 // Hijack .
@@ -367,35 +365,10 @@ func (res *Response) formatInt(n int, base int) string {
 }
 
 // NewResponse .
-func NewResponse(processor Processor, request *http.Request, sequence uint64) *Response {
+func NewResponse(processor Processor, request *http.Request) *Response {
 	response := responsePool.Get().(*Response)
 	response.processor = processor
 	response.request = request
-	response.sequence = sequence
 	response.header = http.Header{"Server": []string{"nbio"}}
 	return response
-}
-
-type responseQueue []*Response
-
-func (h responseQueue) Len() int           { return len(h) }
-func (h responseQueue) Less(i, j int) bool { return h[i].sequence < h[j].sequence }
-func (h responseQueue) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-	h[i].index = i
-	h[j].index = j
-}
-
-func (h *responseQueue) Push(x interface{}) {
-	*h = append(*h, x.(*Response))
-	n := len(*h)
-	(*h)[n-1].index = n - 1
-}
-func (h *responseQueue) Pop() interface{} {
-	old := *h
-	n := len(old)
-	x := old[n-1]
-	old[n-1] = nil // avoid memory leak
-	*h = old[0 : n-1]
-	return x
 }
