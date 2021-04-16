@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 
@@ -50,6 +49,7 @@ type Response struct {
 	chunkChecked bool
 	headEncoded  bool
 	hasBody      bool
+	intFormatBuf [16]byte
 }
 
 // Hijack .
@@ -95,7 +95,7 @@ func (res *Response) Write(data []byte) (int, error) {
 		buf := res.buffer
 		hl := len(buf)
 		res.buffer = nil
-		lenStr := strconv.FormatInt(int64(l), 16)
+		lenStr := res.formatInt(l)
 		size := hl + len(lenStr) + l + 4
 		if size < maxPacketSize {
 			if buf == nil {
@@ -133,7 +133,7 @@ func (res *Response) Write(data []byte) (int, error) {
 	}
 
 	if len(res.header["Content-Length"]) == 0 {
-		res.header["Content-Length"] = []string{strconv.FormatInt(int64(l), 10)}
+		res.header["Content-Length"] = []string{res.formatInt(l)}
 	}
 
 	res.eoncodeHead()
@@ -347,6 +347,23 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 	}
 	_, err = conn.Write(data)
 	return err
+}
+
+func (res *Response) formatInt(n int) string {
+	if n < 0 {
+		return ""
+	}
+	buf := res.intFormatBuf[:]
+	i := len(buf)
+	for {
+		i--
+		buf[i] = '0' + byte((n % 10))
+		n /= 10
+		if n <= 0 {
+			break
+		}
+	}
+	return string(buf[i:])
 }
 
 // NewResponse .
