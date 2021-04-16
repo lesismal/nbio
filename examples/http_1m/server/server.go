@@ -18,7 +18,7 @@ var (
 )
 
 func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-	data := r.Body.(*nbhttp.BodyReader).TakeOver()
+	data := r.Body.(*nbhttp.BodyReader).RawBody()
 	if len(data) > 0 {
 		w.Write(data)
 	} else {
