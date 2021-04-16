@@ -95,7 +95,7 @@ func (res *Response) Write(data []byte) (int, error) {
 		buf := res.buffer
 		hl := len(buf)
 		res.buffer = nil
-		lenStr := res.formatInt(l)
+		lenStr := res.formatInt(l, 16)
 		size := hl + len(lenStr) + l + 4
 		if size < maxPacketSize {
 			if buf == nil {
@@ -133,7 +133,7 @@ func (res *Response) Write(data []byte) (int, error) {
 	}
 
 	if len(res.header["Content-Length"]) == 0 {
-		res.header["Content-Length"] = []string{res.formatInt(l)}
+		res.header["Content-Length"] = []string{res.formatInt(l, 10)}
 	}
 
 	res.eoncodeHead()
@@ -227,7 +227,6 @@ func (res *Response) eoncodeHead() {
 		res.trailer[k] = ""
 	}
 	for k, vv := range res.header {
-		// if k != "Trailer" {
 		if _, ok := res.trailer[k]; !ok {
 			for _, v := range vv {
 				// v := strings.Join(vv, ",")
@@ -250,10 +249,9 @@ func (res *Response) eoncodeHead() {
 			res.trailer[k] = v
 			res.trailerSize += (len(k) + len(v) + 4)
 		}
-		// }
 	}
 
-	if len(res.header["Content-Type"]) == 0 {
+	if res.hasBody && len(res.header["Content-Type"]) == 0 {
 		const contentType = "Content-Type: text/plain; charset=utf-8\r\n"
 		data = mempool.Realloc(data, i+len(contentType))
 		copy(data[i:], contentType)
@@ -266,6 +264,12 @@ func (res *Response) eoncodeHead() {
 			copy(data[i:], contentLenthZero)
 			i += len(contentLenthZero)
 		}
+	}
+	if res.request.Close && len(res.header["Connection"]) == 0 {
+		const connection = "Connection: close\r\n"
+		data = mempool.Realloc(data, i+len(connection))
+		copy(data[i:], connection)
+		i += len(connection)
 	}
 
 	if len(res.header["Date"]) == 0 {
@@ -303,10 +307,6 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 	var err error
 
 	if !res.chunked {
-		if !res.hasBody {
-			res.header["Content-Length"] = []string{"0"}
-		}
-
 		if res.buffer != nil {
 			_, err = conn.Write(res.buffer)
 			res.buffer = nil
@@ -349,16 +349,19 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 	return err
 }
 
-func (res *Response) formatInt(n int) string {
+var numMap = []byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'}
+
+func (res *Response) formatInt(n int, base int) string {
 	if n < 0 {
 		return ""
 	}
+
 	buf := res.intFormatBuf[:]
 	i := len(buf)
 	for {
 		i--
-		buf[i] = '0' + byte((n % 10))
-		n /= 10
+		buf[i] = numMap[n%base]
+		n /= base
 		if n <= 0 {
 			break
 		}
