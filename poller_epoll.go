@@ -17,7 +17,12 @@ import (
 	"github.com/lesismal/nbio/loging"
 )
 
-const stopFd int = 1
+const (
+	epoollEventsRead      = syscall.EPOLLPRI | syscall.EPOLLIN
+	epoollEventsWrite     = syscall.EPOLLOUT
+	epoollEventsReadWrite = syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT
+	epoollEventsError     = syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP
+)
 
 type poller struct {
 	g *Gopher
@@ -242,15 +247,15 @@ func (p *poller) stop() {
 }
 
 func (p *poller) addRead(fd int) error {
-	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLIN | syscall.EPOLLPRI})
+	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: epoollEventsRead})
 }
 
-func (p *poller) addWrite(fd int) error {
-	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLOUT})
-}
+// func (p *poller) addWrite(fd int) error {
+// 	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLOUT})
+// }
 
 func (p *poller) modWrite(fd int) error {
-	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLIN | syscall.EPOLLPRI | syscall.EPOLLOUT})
+	return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: epoollEventsReadWrite})
 }
 
 func (p *poller) deleteEvent(fd int) error {
@@ -261,23 +266,26 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 	fd := int(ev.Fd)
 	c := p.getConn(fd)
 	if c != nil {
-		if ev.Events&(syscall.EPOLLERR|syscall.EPOLLHUP|syscall.EPOLLRDHUP) != 0 {
+		if ev.Events&epoollEventsError != 0 {
 			c.closeWithError(io.EOF)
 			return
 		}
 
-		if ev.Events&syscall.EPOLLOUT != 0 {
+		if ev.Events&epoollEventsWrite != 0 {
 			c.flush()
 		}
 
-		if ev.Events&syscall.EPOLLIN != 0 {
+		if ev.Events&epoollEventsRead != 0 {
 			buffer := p.g.borrow(c)
-			b, err := p.g.onRead(c, buffer)
-			if err == nil {
-				p.g.onData(c, b)
+			n, err := c.Read(buffer)
+			if n > 0 {
+				p.g.onData(c, buffer[:n])
 			}
 			p.g.payback(c, buffer)
-			if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+			if err == syscall.EINTR || err == syscall.EAGAIN {
+				return
+			}
+			if err != nil || n == 0 {
 				c.closeWithError(err)
 			}
 		}

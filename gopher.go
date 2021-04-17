@@ -119,9 +119,9 @@ type Gopher struct {
 	listeners []*poller
 	pollers   []*poller
 
-	onOpen            func(c *Conn)
-	onClose           func(c *Conn, err error)
-	onRead            func(c *Conn, b []byte) ([]byte, error)
+	onOpen  func(c *Conn)
+	onClose func(c *Conn, err error)
+	// onRead            func(c *Conn, b []byte) ([]byte, error)
 	onData            func(c *Conn, data []byte)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
@@ -203,12 +203,12 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 }
 
 // OnRead registers callback for read
-func (g *Gopher) OnRead(h func(c *Conn, b []byte) ([]byte, error)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.onRead = h
-}
+// func (g *Gopher) OnRead(h func(c *Conn, b []byte) ([]byte, error)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.onRead = h
+// }
 
 // OnData registers callback for data
 func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
@@ -414,13 +414,13 @@ func (g *Gopher) PollerBuffer(c *Conn) []byte {
 func (g *Gopher) initHandlers() {
 	g.OnOpen(func(c *Conn) {})
 	g.OnClose(func(c *Conn, err error) {})
-	g.OnRead(func(c *Conn, b []byte) ([]byte, error) {
-		n, err := c.Read(b)
-		if n > 0 {
-			return b[:n], err
-		}
-		return nil, err
-	})
+	// g.OnRead(func(c *Conn, b []byte) ([]byte, error) {
+	// 	n, err := c.Read(b)
+	// 	if n > 0 {
+	// 		return b[:n], err
+	// 	}
+	// 	return nil, err
+	// })
 	g.OnData(func(c *Conn, data []byte) {})
 	g.OnReadBufferAlloc(g.PollerBuffer)
 	g.OnReadBufferFree(func(c *Conn, buffer []byte) {})
