@@ -179,7 +179,15 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		if conf.MessageHandlerTaskIdleTime <= 0 {
 			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
 		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MaxLoad, conf.NPoller, 1024)
+		nativeSize := conf.MaxLoad / 8
+		if nativeSize <= 0 {
+			nativeSize = 1024
+		}
+		bufferSize := conf.MaxLoad - nativeSize + 1
+		if bufferSize <= 0 {
+			bufferSize = 1024
+		}
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
@@ -299,7 +307,15 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		if conf.MessageHandlerTaskIdleTime <= 0 {
 			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
 		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MaxLoad, conf.NPoller, 1024)
+		nativeSize := conf.MaxLoad / 8
+		if nativeSize <= 0 {
+			nativeSize = 1024
+		}
+		bufferSize := conf.MaxLoad - nativeSize + 1
+		if bufferSize <= 0 {
+			bufferSize = 1024
+		}
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 

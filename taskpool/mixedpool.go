@@ -14,8 +14,8 @@ import (
 
 type MixedPool struct {
 	*FixedNoOrderPool
-	cuncurrent    int32
-	maxCuncurrent int32
+	cuncurrent int32
+	nativeSize int32
 }
 
 func (mp *MixedPool) call(f func()) {
@@ -33,7 +33,7 @@ func (mp *MixedPool) call(f func()) {
 
 // Go .
 func (mp *MixedPool) Go(f func()) {
-	if atomic.AddInt32(&mp.cuncurrent, 1) <= mp.maxCuncurrent {
+	if atomic.AddInt32(&mp.cuncurrent, 1) <= mp.nativeSize {
 		go mp.call(f)
 		return
 	}
@@ -47,10 +47,10 @@ func (mp *MixedPool) Stop() {
 }
 
 // NewMixedPool .
-func NewMixedPool(totalSize int, fixedSize int, bufferSize int) *MixedPool {
+func NewMixedPool(nativeSize int, fixedSize int, bufferSize int) *MixedPool {
 	mp := &MixedPool{
 		FixedNoOrderPool: NewFixedNoOrderPool(fixedSize, bufferSize),
-		maxCuncurrent:    int32(totalSize),
+		nativeSize:       int32(nativeSize),
 	}
 
 	return mp

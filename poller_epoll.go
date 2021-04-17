@@ -276,17 +276,23 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 		}
 
 		if ev.Events&epoollEventsRead != 0 {
-			buffer := p.g.borrow(c)
-			n, err := c.Read(buffer)
-			if n > 0 {
-				p.g.onData(c, buffer[:n])
-			}
-			p.g.payback(c, buffer)
-			if err == syscall.EINTR || err == syscall.EAGAIN {
+			for {
+				buffer := p.g.borrow(c)
+				n, err := c.Read(buffer)
+				if n > 0 {
+					p.g.onData(c, buffer[:n])
+				}
+				p.g.payback(c, buffer)
+				if err == syscall.EINTR {
+					continue
+				}
+				if err == syscall.EINTR {
+					return
+				}
+				if err != nil || n == 0 {
+					c.closeWithError(err)
+				}
 				return
-			}
-			if err != nil || n == 0 {
-				c.closeWithError(err)
 			}
 		}
 	} else {
