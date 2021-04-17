@@ -8,7 +8,6 @@ package nbio
 
 import (
 	"io"
-	"os"
 	"runtime"
 	"sync/atomic"
 	"syscall"

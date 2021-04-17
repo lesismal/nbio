@@ -18,6 +18,9 @@ import (
 )
 
 var (
+	// DefaultMaxLoad .
+	DefaultMaxLoad = 1024 * 500
+
 	// DefaultHTTPReadLimit .
 	DefaultHTTPReadLimit = 1024 * 1024 * 64
 
@@ -134,6 +137,9 @@ func (s *Server) OnStop(h func()) {
 
 // NewServer .
 func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f func())) *Server {
+	if conf.MaxLoad <= 0 {
+		conf.MaxLoad = DefaultMaxLoad
+	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU()
 	}
@@ -173,7 +179,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		if conf.MessageHandlerTaskIdleTime <= 0 {
 			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
 		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MessageHandlerPoolSize, conf.NPoller, 1024)
+		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MaxLoad, conf.NPoller, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
@@ -252,6 +258,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 // NewServerTLS .
 func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
+	if conf.MaxLoad <= 0 {
+		conf.MaxLoad = DefaultMaxLoad
+	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU()
 	}
@@ -290,7 +299,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		if conf.MessageHandlerTaskIdleTime <= 0 {
 			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
 		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MessageHandlerPoolSize, conf.NPoller, 1024)
+		messageHandlerExecutePool = taskpool.NewMixedPool(conf.MaxLoad, conf.NPoller, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
