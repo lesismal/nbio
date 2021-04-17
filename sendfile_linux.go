@@ -68,16 +68,15 @@ func (c *Conn) SendFile(f *os.File, remain int64) (int64, error) {
 			}
 			c.mux.Unlock()
 			<-c.chWaitWrite
+			c.chWaitWrite = nil
 			if c.closed {
-				c.chWaitWrite = nil
 				return total - remain, err
 			}
 			c.mux.Lock()
 			continue
 		}
 		if err != nil {
-			c.closed = true
-			c.chWaitWrite = nil
+			c.closeWithErrorWithoutLock(err)
 			c.mux.Unlock()
 			return total - remain, err
 		}

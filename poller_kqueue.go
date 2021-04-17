@@ -116,10 +116,13 @@ func (p *poller) getConn(fd int) *Conn {
 }
 
 func (p *poller) deleteConn(c *Conn) {
-	p.g.connsUnix[c.fd] = nil
-	p.decrease()
-	p.g.decrease()
-	p.g.onClose(c, c.closeErr)
+	if c == p.g.connsUnix[c.fd] {
+		p.g.connsUnix[c.fd] = nil
+		p.decrease()
+		p.g.decrease()
+		p.deleteEvent(c.fd)
+		p.g.onClose(c, c.closeErr)
+	}
 }
 
 func (p *poller) trigger() {

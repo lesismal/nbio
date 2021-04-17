@@ -80,11 +80,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 	n, err := c.write(b)
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-		c.closed = true
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
-		c.closeWithErrorWithoutLock(errInvalidData)
+		c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
 		return n, err
 	}
@@ -123,10 +119,6 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		n, err = c.writev(in)
 	}
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-		c.closed = true
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
 		c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
 		return n, err
@@ -370,10 +362,6 @@ func (c *Conn) flush() error {
 		_, err = c.writev(buffers)
 	}
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-		c.closed = true
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-		}
 		c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
 		return err
@@ -452,16 +440,6 @@ func (c *Conn) overflow(n int) bool {
 func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
 	if !c.closed {
-		c.closed = true
-		if c.wTimer != nil {
-			c.wTimer.Stop()
-			c.wTimer = nil
-		}
-		if c.rTimer != nil {
-			c.rTimer.Stop()
-			c.rTimer = nil
-		}
-
 		err = c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
 		return err
@@ -471,20 +449,35 @@ func (c *Conn) closeWithError(err error) error {
 }
 
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
+	c.closed = true
+
 	c.closeErr = err
-	if c.g != nil {
-		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+
+	if c.wTimer != nil {
+		c.wTimer.Stop()
+		c.wTimer = nil
 	}
+	if c.rTimer != nil {
+		c.rTimer.Stop()
+		c.rTimer = nil
+	}
+
 	for _, b := range c.writeBuffers {
 		mempool.Free(b)
 	}
 	c.writeBuffers = nil
+
 	if c.chWaitWrite != nil {
 		select {
 		case c.chWaitWrite <- struct{}{}:
 		default:
 		}
 	}
+
+	if c.g != nil {
+		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+	}
+
 	return syscall.Close(c.fd)
 }
 
