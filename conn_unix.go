@@ -9,6 +9,7 @@ package nbio
 import (
 	"errors"
 	"net"
+	"os"
 	"sync"
 	"syscall"
 	"time"
@@ -24,8 +25,6 @@ type Conn struct {
 
 	fd int
 
-	// rIndex int
-	// wIndex int
 	rTimer *htimer
 	wTimer *htimer
 
@@ -42,6 +41,8 @@ type Conn struct {
 	ReadBuffer []byte
 
 	session interface{}
+
+	chWaitWrite chan struct{}
 }
 
 // Hash returns a hash code
@@ -82,11 +83,11 @@ func (c *Conn) Write(b []byte) (int, error) {
 	n, err := c.write(b)
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
-		c.mux.Unlock()
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
 		c.closeWithErrorWithoutLock(errInvalidData)
+		c.mux.Unlock()
 		return n, err
 	}
 
@@ -115,16 +116,21 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 
 	c.g.beforeWrite(c)
 
-	n, err := c.writev(in)
+	var n int
+	var err error
+	switch len(in) {
+	case 1:
+		n, err = c.write(in[0])
+	default:
+		n, err = c.writev(in)
+	}
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
-		c.mux.Unlock()
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		// tw.delete(c, &c.wIndex)
 		c.closeWithErrorWithoutLock(err)
+		c.mux.Unlock()
 		return n, err
 	}
 	if len(c.writeBuffers) == 0 {
@@ -139,6 +145,76 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 
 	c.mux.Unlock()
 	return n, err
+}
+
+const maxSendfileSize int = 4 << 20
+
+// SendFile .
+func (c *Conn) SendFile(f *os.File, remain int) (int, error) {
+	if f == nil {
+		return 0, nil
+	}
+	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+		return -1, errClosed
+	}
+
+	c.g.beforeWrite(c)
+
+	var (
+		err   error
+		n     int
+		src   = int(f.Fd())
+		dst   = c.fd
+		total = remain
+	)
+
+	for remain > 0 {
+		n = maxSendfileSize
+		if n > remain {
+			n = remain
+		}
+		n, err = syscall.Sendfile(dst, src, nil, n)
+		if n > 0 {
+			remain -= n
+		} else if n == 0 && err == nil {
+			break
+		}
+		if err == syscall.EINTR {
+			continue
+		}
+		if err == syscall.EAGAIN {
+			if c.chWaitWrite == nil {
+				c.chWaitWrite = make(chan struct{}, 1)
+			}
+			c.mux.Unlock()
+			timer := time.NewTimer(time.Second * 2)
+			select {
+			case <-c.chWaitWrite:
+				c.mux.Lock()
+				timer.Stop()
+				continue
+			case <-timer.C:
+				c.mux.Lock()
+				c.closed = true
+				c.closeWithErrorWithoutLock(errTimeout)
+				c.chWaitWrite = nil
+				c.mux.Unlock()
+				return total - remain, errTimeout
+			}
+		}
+		if err != nil {
+			c.closed = true
+			c.chWaitWrite = nil
+			c.mux.Unlock()
+			return total - remain, err
+		}
+	}
+
+	c.chWaitWrite = nil
+	c.mux.Unlock()
+	return total - remain, err
 }
 
 // Close implements Close
@@ -369,11 +445,11 @@ func (c *Conn) flush() error {
 	}
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closed = true
-		c.mux.Unlock()
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
 		c.closeWithErrorWithoutLock(err)
+		c.mux.Unlock()
 		return err
 	}
 	if len(c.writeBuffers) == 0 {
@@ -381,6 +457,12 @@ func (c *Conn) flush() error {
 			c.wTimer.Stop()
 		}
 		c.resetRead()
+		if c.chWaitWrite != nil {
+			select {
+			case c.chWaitWrite <- struct{}{}:
+			default:
+			}
+		}
 	} else {
 		c.modWrite()
 	}
@@ -445,7 +527,6 @@ func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
 	if !c.closed {
 		c.closed = true
-		c.mux.Unlock()
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 			c.wTimer = nil
@@ -455,7 +536,9 @@ func (c *Conn) closeWithError(err error) error {
 			c.rTimer = nil
 		}
 
-		return c.closeWithErrorWithoutLock(err)
+		err = c.closeWithErrorWithoutLock(err)
+		c.mux.Unlock()
+		return err
 	}
 	c.mux.Unlock()
 	return nil
