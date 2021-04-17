@@ -272,13 +272,11 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 			b, err := p.g.onRead(c, buffer)
 			if err == nil {
 				p.g.onData(c, b)
-			} else {
-				if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-					c.closeWithError(err)
-					return
-				}
 			}
 			p.g.payback(c, buffer)
+			if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+				c.closeWithError(err)
+			}
 		}
 	} else {
 		syscall.Close(fd)

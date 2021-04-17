@@ -416,10 +416,10 @@ func (g *Gopher) initHandlers() {
 	g.OnClose(func(c *Conn, err error) {})
 	g.OnRead(func(c *Conn, b []byte) ([]byte, error) {
 		n, err := c.Read(b)
-		if err != nil {
-			return nil, err
+		if n > 0 {
+			return b[:n], err
 		}
-		return b[:n], err
+		return nil, err
 	})
 	g.OnData(func(c *Conn, data []byte) {})
 	g.OnReadBufferAlloc(g.PollerBuffer)
