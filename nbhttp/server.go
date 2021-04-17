@@ -91,6 +91,9 @@ type Config struct {
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
+
+	// EnableSendfile .
+	EnableSendfile bool
 }
 
 // Server .
@@ -198,7 +201,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
+		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -331,7 +334,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	g.OnOpen(func(c *nbio.Conn) {
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
-		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime)
+		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)

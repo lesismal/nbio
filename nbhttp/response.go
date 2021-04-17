@@ -6,8 +6,10 @@ package nbhttp
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -42,12 +44,13 @@ type Response struct {
 	trailerSize int
 
 	buffer       []byte
-	intFormatBuf [16]byte
+	intFormatBuf [10]byte
 
-	chunked      bool
-	chunkChecked bool
-	headEncoded  bool
-	hasBody      bool
+	chunked        bool
+	chunkChecked   bool
+	headEncoded    bool
+	hasBody        bool
+	enableSendfile bool
 }
 
 // Hijack .
@@ -151,6 +154,43 @@ func (res *Response) Write(data []byte) (int, error) {
 	}
 	copy(buf[hl:], data)
 	return conn.Write(buf)
+}
+
+func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
+	c := res.processor.Conn()
+	if c == nil {
+		return 0, nil
+	}
+
+	res.hasBody = true
+	res.eoncodeHead()
+	_, err = c.Write(res.buffer)
+	if err != nil {
+		return 0, err
+	}
+
+	if res.enableSendfile {
+		lr, ok := r.(*io.LimitedReader)
+		if ok {
+			n, r = lr.N, lr.R
+			if n <= 0 {
+				return 0, nil
+			}
+		}
+
+		f, ok := r.(*os.File)
+		if ok {
+			nc, ok := c.(interface {
+				SendFile(f *os.File, remain int64) (int64, error)
+			})
+			if ok {
+				ns, err := nc.SendFile(f, lr.N)
+				return int64(ns), err
+			}
+		}
+	}
+
+	return io.Copy(c, r)
 }
 
 // checkChunked .
@@ -347,7 +387,7 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 var numMap = []byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'}
 
 func (res *Response) formatInt(n int, base int) string {
-	if n < 0 {
+	if n < 0 || n > 0x7FFFFFFF {
 		return ""
 	}
 
@@ -365,10 +405,11 @@ func (res *Response) formatInt(n int, base int) string {
 }
 
 // NewResponse .
-func NewResponse(processor Processor, request *http.Request) *Response {
-	response := responsePool.Get().(*Response)
-	response.processor = processor
-	response.request = request
-	response.header = http.Header{"Server": []string{"nbio"}}
-	return response
+func NewResponse(processor Processor, request *http.Request, enableSendfile bool) *Response {
+	res := responsePool.Get().(*Response)
+	res.processor = processor
+	res.request = request
+	res.header = http.Header{"Server": []string{"nbio"}}
+	res.enableSendfile = enableSendfile
+	return res
 }

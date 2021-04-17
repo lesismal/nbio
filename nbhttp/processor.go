@@ -68,12 +68,13 @@ type ServerProcessor struct {
 	handler  http.Handler
 	executor func(f func())
 
-	resQueue      []*Response
-	sequence      uint64
-	responsedSeq  uint64
-	minBufferSize int
-	keepaliveTime time.Duration
-	isUpgrade     bool
+	resQueue       []*Response
+	sequence       uint64
+	responsedSeq   uint64
+	minBufferSize  int
+	keepaliveTime  time.Duration
+	enableSendfile bool
+	isUpgrade      bool
 }
 
 // Conn .
@@ -214,7 +215,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = NewBodyReader(nil)
 	}
 
-	res := NewResponse(p, request)
+	res := NewResponse(p, request, p.enableSendfile)
 
 	if !p.isUpgrade {
 		var executing bool
@@ -304,7 +305,7 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration, enableSendfile bool) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
@@ -315,11 +316,12 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f fun
 		minBufferSize = DefaultMinBufferSize
 	}
 	return &ServerProcessor{
-		conn:          conn,
-		handler:       handler,
-		executor:      executor,
-		minBufferSize: minBufferSize,
-		keepaliveTime: keepaliveTime,
+		conn:           conn,
+		handler:        handler,
+		executor:       executor,
+		minBufferSize:  minBufferSize,
+		keepaliveTime:  keepaliveTime,
+		enableSendfile: enableSendfile,
 	}
 }
 

@@ -9,7 +9,6 @@ package nbio
 import (
 	"errors"
 	"net"
-	"os"
 	"sync"
 	"syscall"
 	"time"
@@ -70,7 +69,6 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write implements Write
 func (c *Conn) Write(b []byte) (int, error) {
-	// use lock to prevent multiple conn data confusion when fd is reused on unix
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -137,84 +135,12 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
-		// tw := c.g.pollers[c.fd%len(c.g.pollers)].twWrite
-		// tw.delete(c, &c.wIndex)
 	} else {
 		c.modWrite()
 	}
 
 	c.mux.Unlock()
 	return n, err
-}
-
-const maxSendfileSize int = 4 << 20
-
-// SendFile .
-func (c *Conn) SendFile(f *os.File, remain int) (int, error) {
-	if f == nil {
-		return 0, nil
-	}
-	c.mux.Lock()
-	if c.closed {
-		c.mux.Unlock()
-		return -1, errClosed
-	}
-
-	c.g.beforeWrite(c)
-
-	var (
-		err   error
-		n     int
-		src   = int(f.Fd())
-		dst   = c.fd
-		total = remain
-	)
-
-	for remain > 0 {
-		n = maxSendfileSize
-		if n > remain {
-			n = remain
-		}
-		n, err = syscall.Sendfile(dst, src, nil, n)
-		if n > 0 {
-			remain -= n
-		} else if n == 0 && err == nil {
-			break
-		}
-		if err == syscall.EINTR {
-			continue
-		}
-		if err == syscall.EAGAIN {
-			if c.chWaitWrite == nil {
-				c.chWaitWrite = make(chan struct{}, 1)
-			}
-			c.mux.Unlock()
-			timer := time.NewTimer(time.Second * 2)
-			select {
-			case <-c.chWaitWrite:
-				c.mux.Lock()
-				timer.Stop()
-				continue
-			case <-timer.C:
-				c.mux.Lock()
-				c.closed = true
-				c.closeWithErrorWithoutLock(errTimeout)
-				c.chWaitWrite = nil
-				c.mux.Unlock()
-				return total - remain, errTimeout
-			}
-		}
-		if err != nil {
-			c.closed = true
-			c.chWaitWrite = nil
-			c.mux.Unlock()
-			return total - remain, err
-		}
-	}
-
-	c.chWaitWrite = nil
-	c.mux.Unlock()
-	return total - remain, err
 }
 
 // Close implements Close
@@ -553,7 +479,12 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 		mempool.Free(b)
 	}
 	c.writeBuffers = nil
-
+	if c.chWaitWrite != nil {
+		select {
+		case c.chWaitWrite <- struct{}{}:
+		default:
+		}
+	}
 	return syscall.Close(c.fd)
 }
 
