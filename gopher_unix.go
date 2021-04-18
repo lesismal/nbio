@@ -123,7 +123,7 @@ func NewGopher(conf Config) *Gopher {
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
-		listeners:          make([]*poller, 1),
+		listeners:          make([]*poller, len(conf.Addrs)),
 		pollers:            make([]*poller, conf.NPoller),
 		connsUnix:          make([]*Conn, MaxOpenFiles),
 
