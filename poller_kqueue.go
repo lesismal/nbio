@@ -115,7 +115,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter&syscall.EVFILT_READ != 0 {
-			for {
+			for i := 0; i < 3; i++ {
 				buffer := p.g.borrow(c)
 				n, err := c.Read(buffer)
 				if n > 0 {
@@ -125,7 +125,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 				if err == syscall.EINTR {
 					continue
 				}
-				if err == syscall.EINTR {
+				if err == syscall.EAGAIN {
 					return
 				}
 				if err != nil || n == 0 {
