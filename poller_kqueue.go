@@ -249,6 +249,7 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 					{Ident: uint64(lfd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
 				}, nil, nil)
 				if err != nil {
+					syscall.Close(fd)
 					return nil, err
 				}
 			}
