@@ -7,14 +7,6 @@ package mempool
 import (
 	"errors"
 	"sync"
-	"sync/atomic"
-)
-
-var (
-	mallocCnt     int64
-	mallocCntSize int64
-	freeCnt       int64
-	freeCntSize   int64
 )
 
 var defaultMemPool = New(1024 * 1024 * 1024)
@@ -68,10 +60,6 @@ func (pool *MemPool) Malloc(size int) []byte {
 		allocSize = 64
 	}
 	buf := pool.buffers[pool.maxBits(allocSize)].Get().([]byte)[:size]
-	atomic.AddInt64(&mallocCnt, 1)
-	atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
-	// fmt.Println("+++ Malloc:", cap(buf))
-	// debug.PrintStack()
 	return buf
 }
 
@@ -93,11 +81,6 @@ func (pool *MemPool) Free(buf []byte) error {
 	if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
 		return errors.New("MemPool Put() incorrect buffer size")
 	}
-	atomic.AddInt64(&freeCnt, 1)
-	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
-	pool.buffers[bits].Put(buf)
-	// fmt.Println("--- Free:", cap(buf))
-	// debug.PrintStack()
 	return nil
 }
 
@@ -121,8 +104,4 @@ func New(maxSize int) *MemPool {
 	pool := &MemPool{}
 	pool.init(maxSize)
 	return pool
-}
-
-func State() (int64, int64, int64, int64) {
-	return atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
 }
