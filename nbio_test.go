@@ -111,51 +111,51 @@ func TestEcho(t *testing.T) {
 	<-done
 }
 
-func Test10k(t *testing.T) {
-	g := NewGopher(Config{NPoller: 2})
-	err := g.Start()
-	if err != nil {
-		log.Panicf("Start failed: %v\n", err)
-	}
-	defer g.Stop()
+// func Test10k(t *testing.T) {
+// 	g := NewGopher(Config{NPoller: 2})
+// 	err := g.Start()
+// 	if err != nil {
+// 		log.Panicf("Start failed: %v\n", err)
+// 	}
+// 	defer g.Stop()
 
-	var total int64 = 0
-	var clientNum int64 = 1024 * 10
-	var done = make(chan int)
+// 	var total int64 = 0
+// 	var clientNum int64 = 1024 * 10
+// 	var done = make(chan int)
 
-	if runtime.GOOS != "linux" {
-		clientNum = 100
-	}
+// 	if runtime.GOOS != "linux" {
+// 		clientNum = 100
+// 	}
 
-	t.Log("testing concurrent:", clientNum, "connections")
+// 	t.Log("testing concurrent:", clientNum, "connections")
 
-	g.OnOpen(func(c *Conn) {
-		c.Close()
-		c.Write([]byte{1})
-		if atomic.AddInt64(&total, 1) == clientNum {
-			close(done)
-		}
-	})
+// 	g.OnOpen(func(c *Conn) {
+// 		c.Close()
+// 		c.Write([]byte{1})
+// 		if atomic.AddInt64(&total, 1) == clientNum {
+// 			close(done)
+// 		}
+// 	})
 
-	one := func() {
-		c, err := Dial("tcp", addr)
-		if err != nil {
-			log.Panicf("Dial failed: %v", err)
-		}
-		g.AddConn(c)
-	}
-	go func() {
-		for i := 0; i < int(clientNum); i++ {
-			if runtime.GOOS == "linux" {
-				one()
-			} else {
-				go one()
-			}
-		}
-	}()
+// 	one := func() {
+// 		c, err := Dial("tcp", addr)
+// 		if err != nil {
+// 			log.Panicf("Dial failed: %v", err)
+// 		}
+// 		g.AddConn(c)
+// 	}
+// 	go func() {
+// 		for i := 0; i < int(clientNum); i++ {
+// 			if runtime.GOOS == "linux" {
+// 				one()
+// 			} else {
+// 				go one()
+// 			}
+// 		}
+// 	}()
 
-	<-done
-}
+// 	<-done
+// }
 
 func TestTimeout(t *testing.T) {
 	g := NewGopher(Config{})
