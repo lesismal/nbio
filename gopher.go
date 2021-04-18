@@ -6,20 +6,15 @@ package nbio
 
 import (
 	"container/heap"
-	"fmt"
 	"net"
 	"runtime/debug"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/nbio/loging"
 )
 
 const (
-	// DefaultMaxLoad .
-	DefaultMaxLoad = 1024 * 100
-
 	// DefaultReadBufferSize .
 	DefaultReadBufferSize = 1024 * 16
 
@@ -49,14 +44,11 @@ type Config struct {
 	// if it is empty, no listener created, then the Gopher is used for client by default.
 	Addrs []string
 
-	// MaxLoad represents the max online num, it's set to 10k by default.
-	MaxLoad int
-
-	// NListener represents the listener goroutine num on *nix, it's set to 1 by default.
-	NListener int
-
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
+
+	// Backlog represents backlog arg for syscall.Listen
+	Backlog int
 
 	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
 	ReadBufferSize int
@@ -73,25 +65,6 @@ type Config struct {
 	LockThread bool
 }
 
-// State of Gopher
-type State struct {
-	// Name .
-	Name string
-	// Online .
-	Online int
-	// Pollers .
-	Pollers []struct{ Online int }
-}
-
-// String returns Gopher's State Info
-func (state *State) String() string {
-	str := fmt.Sprintf("Gopher[%v] Total Online: %v\n", state.Name, state.Online)
-	for i := 0; i < len(state.Pollers); i++ {
-		str += fmt.Sprintf("  Poller[%v] Online: %v\n", i, state.Pollers[i].Online)
-	}
-	return str
-}
-
 // Gopher is a manager of poller
 type Gopher struct {
 	sync.WaitGroup
@@ -102,16 +75,14 @@ type Gopher struct {
 
 	network            string
 	addrs              []string
-	listenerNum        int
 	pollerNum          int
+	backlogSize        int
 	readBufferSize     int
 	maxWriteBufferSize int
 	minConnCacheSize   int
 	lockThread         bool
 
-	lfds     []int
-	currLoad int64
-	maxLoad  int64
+	lfds []int
 
 	connsStd  map[*Conn]struct{}
 	connsUnix []*Conn
@@ -119,9 +90,8 @@ type Gopher struct {
 	listeners []*poller
 	pollers   []*poller
 
-	onOpen  func(c *Conn)
-	onClose func(c *Conn, err error)
-	// onRead            func(c *Conn, b []byte) ([]byte, error)
+	onOpen            func(c *Conn)
+	onClose           func(c *Conn, err error)
 	onData            func(c *Conn, data []byte)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
@@ -143,8 +113,8 @@ func (g *Gopher) Stop() {
 	g.trigger.Stop()
 	close(g.chTimer)
 
-	for i := 0; i < g.listenerNum; i++ {
-		g.listeners[i].stop()
+	for _, l := range g.listeners {
+		l.stop()
 	}
 	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i].stop()
@@ -153,7 +123,6 @@ func (g *Gopher) Stop() {
 	conns := g.connsStd
 	g.connsStd = map[*Conn]struct{}{}
 	connsUnix := g.connsUnix
-	g.connsUnix = make([]*Conn, len(connsUnix))
 	g.mux.Unlock()
 
 	for c := range conns {
@@ -176,14 +145,9 @@ func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	g.increase()
+	// g.increase()
 	g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
 	return c, nil
-}
-
-// Online returns Gopher's total online
-func (g *Gopher) Online() int64 {
-	return atomic.LoadInt64(&g.currLoad)
 }
 
 // OnOpen registers callback for new connection
@@ -201,14 +165,6 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 	}
 	g.onClose = h
 }
-
-// OnRead registers callback for read
-// func (g *Gopher) OnRead(h func(c *Conn, b []byte) ([]byte, error)) {
-// 	if h == nil {
-// 		panic("invalid nil handler")
-// 	}
-// 	g.onRead = h
-// }
 
 // OnData registers callback for data
 func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
@@ -275,21 +231,6 @@ func (g *Gopher) OnStop(h func()) {
 		panic("invalid nil handler")
 	}
 	g.onStop = h
-}
-
-// State returns Gopher's state info
-func (g *Gopher) State() *State {
-	state := &State{
-		Name:    g.Name,
-		Online:  int(g.Online()),
-		Pollers: make([]struct{ Online int }, len(g.pollers)),
-	}
-
-	for i := 0; i < len(g.pollers); i++ {
-		state.Pollers[i].Online = int(g.pollers[i].online())
-	}
-
-	return state
 }
 
 // After used as time.After
@@ -437,12 +378,4 @@ func (g *Gopher) borrow(c *Conn) []byte {
 
 func (g *Gopher) payback(c *Conn, buffer []byte) {
 	g.onReadBufferFree(c, buffer)
-}
-
-func (g *Gopher) increase() {
-	atomic.AddInt64(&g.currLoad, 1)
-}
-
-func (g *Gopher) decrease() {
-	atomic.AddInt64(&g.currLoad, -1)
 }

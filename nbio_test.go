@@ -19,9 +19,7 @@ func init() {
 	g := NewGopher(Config{
 		Network: "tcp",
 		Addrs:   addrs,
-		MaxLoad: 10,
 	})
-	g.maxLoad = 1024 * 100
 
 	g.OnOpen(func(c *Conn) {
 		c.SetReadDeadline(time.Now().Add(time.Second * 10))
@@ -315,8 +313,6 @@ LOOP_RECV:
 }
 
 func TestFuzz(t *testing.T) {
-	maxLoad := gopher.maxLoad
-	gopher.maxLoad = 10
 	wg := sync.WaitGroup{}
 	for i := 0; i < 100; i++ {
 		wg.Add(1)
@@ -347,7 +343,6 @@ func TestFuzz(t *testing.T) {
 		log.Fatalf("Start failed: %v", err)
 	}
 
-	gopher.maxLoad = maxLoad
 	c, err := Dial("tcp", addr)
 	if err == nil {
 		log.Printf("Dial tcp6: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
@@ -379,6 +374,5 @@ func TestFuzz(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	log.Println(gopher.State().String())
 	gopher.Stop()
 }

@@ -26,8 +26,6 @@ type poller struct {
 
 	index int
 
-	currLoad int64
-
 	shutdown bool
 
 	isListener bool
@@ -39,27 +37,14 @@ type poller struct {
 	eventList []syscall.Kevent_t
 }
 
-func (p *poller) online() int64 {
-	return atomic.LoadInt64(&p.currLoad)
-}
-
-func (p *poller) increase() {
-	atomic.AddInt64(&p.currLoad, 1)
-}
-
-func (p *poller) decrease() {
-	atomic.AddInt64(&p.currLoad, -1)
-}
-
 func (p *poller) accept(lfd int) error {
 	fd, saddr, err := syscall.Accept(lfd)
 	if err != nil {
 		return err
 	}
 
-	if !p.acceptable(fd) {
-		syscall.Close(fd)
-		return nil
+	if fd < 0 {
+		return
 	}
 
 	err = syscall.SetNonblock(fd, true)
@@ -81,34 +66,11 @@ func (p *poller) accept(lfd int) error {
 	return nil
 }
 
-func (p *poller) acceptable(fd int) bool {
-	if fd < 0 {
-		return false
-	}
-
-	if atomic.AddInt64(&p.g.currLoad, 1) > p.g.maxLoad {
-		atomic.AddInt64(&p.g.currLoad, -1)
-		return false
-	}
-
-	if fd >= len(p.g.connsUnix) {
-		atomic.AddInt64(&p.g.currLoad, -1)
-		return false
-	}
-
-	return true
-}
-
 func (p *poller) addConn(c *Conn) {
 	c.g = p.g
-
 	p.g.onOpen(c)
-
-	fd := c.fd
+	p.addRead(c.fd)
 	p.g.connsUnix[fd] = c
-	p.addRead(fd)
-
-	p.increase()
 }
 
 func (p *poller) getConn(fd int) *Conn {
@@ -116,13 +78,15 @@ func (p *poller) getConn(fd int) *Conn {
 }
 
 func (p *poller) deleteConn(c *Conn) {
-	if c == p.g.connsUnix[c.fd] {
-		p.g.connsUnix[c.fd] = nil
-		p.decrease()
-		p.g.decrease()
-		p.deleteEvent(c.fd)
-		p.g.onClose(c, c.closeErr)
+	if c == nil {
+		return
 	}
+	fd := c.fd
+	if c == p.g.connsUnix[fd] {
+		p.g.connsUnix[fd] = nil
+		p.deleteEvent(fd)
+	}
+	p.g.onClose(c, c.closeErr)
 }
 
 func (p *poller) trigger() {

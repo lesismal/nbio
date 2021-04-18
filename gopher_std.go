@@ -85,12 +85,6 @@ func NewGopher(conf Config) *Gopher {
 	if conf.Name == "" {
 		conf.Name = "NB"
 	}
-	if conf.MaxLoad <= 0 {
-		conf.MaxLoad = DefaultMaxLoad
-	}
-	if len(conf.Addrs) > 0 && conf.NListener <= 0 {
-		conf.NListener = 1
-	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = cpuNum
 	}
@@ -105,13 +99,11 @@ func NewGopher(conf Config) *Gopher {
 		Name:               conf.Name,
 		network:            conf.Network,
 		addrs:              conf.Addrs,
-		maxLoad:            int64(conf.MaxLoad),
-		listenerNum:        conf.NListener,
 		pollerNum:          conf.NPoller,
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
-		listeners:          make([]*poller, conf.NListener),
+		listeners:          make([]*poller, len(conf.Addrs)),
 		pollers:            make([]*poller, conf.NPoller),
 		connsStd:           map[*Conn]struct{}{},
 		trigger:            time.NewTimer(timeForever),

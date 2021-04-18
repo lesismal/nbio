@@ -37,10 +37,6 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/echo", onEcho)
 
-	// router := httprouter.New()
-	// router.POST("/echo", onEcho)
-
-	// pool := taskpool.NewFastPool(4096)
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
@@ -58,6 +54,6 @@ func main() {
 		<-ticker.C
 		n := atomic.SwapUint64(&qps, 0)
 		total += n
-		fmt.Printf("running for %v seconds, online: %v, NumGoroutine: %v, qps: %v, total: %v\n", i, svr.State().Online, runtime.NumGoroutine(), n, total)
+		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
 	}
 }

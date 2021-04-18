@@ -24,7 +24,7 @@ func (g *Gopher) Start() error {
 	g.lfds = []int{}
 
 	for _, addr := range g.addrs {
-		fd, err := listen(g.network, addr, g.maxLoad)
+		fd, err := listen(g.network, addr, int64(g.backlogSize))
 		if err != nil {
 			return err
 		}
@@ -32,7 +32,7 @@ func (g *Gopher) Start() error {
 		g.lfds = append(g.lfds, fd)
 	}
 
-	for i := 0; i < g.listenerNum; i++ {
+	for i := 0; i < len(g.listeners); i++ {
 		g.listeners[i], err = newPoller(g, true, int(i))
 		if err != nil {
 			for j := 0; j < int(i); j++ {
@@ -101,14 +101,11 @@ func NewGopher(conf Config) *Gopher {
 	if conf.Name == "" {
 		conf.Name = "NB"
 	}
-	if conf.MaxLoad <= 0 {
-		conf.MaxLoad = DefaultMaxLoad
-	}
-	if len(conf.Addrs) > 0 {
-		conf.NListener = 1
-	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = cpuNum
+	}
+	if conf.Backlog <= 0 {
+		conf.Backlog = 1024 * 64
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
@@ -121,13 +118,12 @@ func NewGopher(conf Config) *Gopher {
 		Name:               conf.Name,
 		network:            conf.Network,
 		addrs:              conf.Addrs,
-		maxLoad:            int64(conf.MaxLoad),
-		listenerNum:        conf.NListener,
 		pollerNum:          conf.NPoller,
+		backlogSize:        conf.Backlog,
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
-		listeners:          make([]*poller, conf.NListener),
+		listeners:          make([]*poller, 1),
 		pollers:            make([]*poller, conf.NPoller),
 		connsUnix:          make([]*Conn, MaxOpenFiles),
 

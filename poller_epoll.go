@@ -9,7 +9,6 @@ package nbio
 import (
 	"io"
 	"runtime"
-	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
@@ -32,8 +31,6 @@ type poller struct {
 
 	index int
 
-	currLoad int64
-
 	shutdown bool
 
 	isListener bool
@@ -43,71 +40,42 @@ type poller struct {
 	pollType string
 }
 
-func (p *poller) online() int64 {
-	return atomic.LoadInt64(&p.currLoad)
-}
-
-func (p *poller) increase() {
-	atomic.AddInt64(&p.currLoad, 1)
-}
-
-func (p *poller) decrease() {
-	atomic.AddInt64(&p.currLoad, -1)
-}
-
-func (p *poller) accept(fd int, saddr syscall.Sockaddr) {
-	if !p.acceptable(fd) {
-		syscall.Close(fd)
-		return
+func (p *poller) accept(lfd int) error {
+	fd, saddr, err := syscall.Accept(lfd)
+	if err != nil {
+		return err
 	}
 
-	err := syscall.SetNonblock(fd, true)
+	err = syscall.SetNonblock(fd, true)
 	if err != nil {
 		syscall.Close(fd)
-		return
+		return err
 	}
 
 	laddr, err := syscall.Getsockname(fd)
 	if err != nil {
 		syscall.Close(fd)
-		return
+		return err
 	}
 
 	c := newConn(int(fd), sockaddrToAddr(laddr), sockaddrToAddr(saddr))
 	o := p.g.pollers[int(fd)%len(p.g.pollers)]
 	o.addConn(c)
 
-	return
-}
-
-func (p *poller) acceptable(fd int) bool {
-	if fd < 0 {
-		return false
-	}
-
-	if atomic.AddInt64(&p.g.currLoad, 1) > p.g.maxLoad {
-		atomic.AddInt64(&p.g.currLoad, -1)
-		return false
-	}
-
-	if fd >= len(p.g.connsUnix) {
-		atomic.AddInt64(&p.g.currLoad, -1)
-		return false
-	}
-
-	return true
+	return err
 }
 
 func (p *poller) addConn(c *Conn) {
 	c.g = p.g
-
 	p.g.onOpen(c)
-
 	fd := c.fd
+	err := p.addRead(fd)
+	if err != nil {
+		c.closeWithError(err)
+		loging.Error("[%v] add read event failed: %v", c.fd, err)
+		return
+	}
 	p.g.connsUnix[fd] = c
-	p.addRead(fd)
-
-	p.increase()
 }
 
 func (p *poller) getConn(fd int) *Conn {
@@ -115,17 +83,18 @@ func (p *poller) getConn(fd int) *Conn {
 }
 
 func (p *poller) deleteConn(c *Conn) {
-	if c == p.g.connsUnix[c.fd] {
-		p.g.connsUnix[c.fd] = nil
-		p.decrease()
-		p.g.decrease()
-		p.deleteEvent(c.fd)
-		p.g.onClose(c, c.closeErr)
+	if c == nil {
+		return
 	}
+	fd := c.fd
+	if c == p.g.connsUnix[fd] {
+		p.g.connsUnix[fd] = nil
+		p.deleteEvent(fd)
+	}
+	p.g.onClose(c, c.closeErr)
 }
 
 func (p *poller) start() {
-
 	defer p.g.Done()
 
 	loging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
@@ -152,23 +121,6 @@ func (p *poller) acceptorLoop() {
 
 	p.shutdown = false
 
-	type fdEvent struct {
-		fd    int
-		saddr syscall.Sockaddr
-	}
-
-	chEvent := make(chan fdEvent, 1024*8)
-	defer close(chEvent)
-
-	go func() {
-		runtime.LockOSThread()
-		defer runtime.UnlockOSThread()
-
-		for evt := range chEvent {
-			p.accept(evt.fd, evt.saddr)
-		}
-	}()
-
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && err != syscall.EINTR {
@@ -184,19 +136,19 @@ func (p *poller) acceptorLoop() {
 
 		for i := 0; i < n; i++ {
 			fd = int(events[i].Fd)
+
 			switch fd {
 			case p.evtfd:
 			default:
-				// (nfd int, sa Sockaddr, err error)
-				fd, saddr, err := syscall.Accept(fd)
-				if err == nil {
-					chEvent <- fdEvent{fd, saddr}
-				} else if err == syscall.EAGAIN {
-					loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
-					time.Sleep(time.Second / 20)
-				} else {
-					loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
-					break
+				err = p.accept(fd)
+				if err != nil {
+					if err == syscall.EAGAIN {
+						loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
+						time.Sleep(time.Second / 20)
+					} else {
+						loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+						break
+					}
 				}
 			}
 		}

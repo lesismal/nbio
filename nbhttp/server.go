@@ -7,6 +7,7 @@ package nbhttp
 import (
 	"net/http"
 	"runtime"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -60,9 +61,6 @@ type Config struct {
 	// MaxLoad represents the max online num, it's set to 10k by default.
 	MaxLoad int
 
-	// NListener represents the listener goroutine num on *nix, it's set to 1 by default.
-	// NListener int
-
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
@@ -103,12 +101,16 @@ type Config struct {
 type Server struct {
 	*nbio.Gopher
 
+	MaxLoad  int
 	_onOpen  func(c *nbio.Conn)
 	_onClose func(c *nbio.Conn, err error)
 	_onStop  func()
 
 	ParserExecutor         func(index int, f func())
 	MessageHandlerExecutor func(f func())
+
+	mux   sync.Mutex
+	conns map[*nbio.Conn]struct{}
 }
 
 // OnOpen registers callback for new connection
@@ -133,6 +135,10 @@ func (s *Server) OnStop(h func()) {
 		panic("invalid nil handler")
 	}
 	s._onStop = h
+}
+
+func (s *Server) Online() int {
+	return len(s.conns)
 }
 
 // NewServer .
@@ -192,11 +198,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 	}
 
 	gopherConf := nbio.Config{
-		Name:    conf.Name,
-		Network: conf.Network,
-		Addrs:   conf.Addrs,
-		MaxLoad: conf.MaxLoad,
-		// NListener:          conf.NListener,
+		Name:               conf.Name,
+		Network:            conf.Network,
+		Addrs:              conf.Addrs,
 		NPoller:            conf.NPoller,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
@@ -209,11 +213,21 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		_onOpen:                func(c *nbio.Conn) {},
 		_onClose:               func(c *nbio.Conn, err error) {},
 		_onStop:                func() {},
+		MaxLoad:                conf.MaxLoad,
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
+		conns:                  map[*nbio.Conn]struct{}{},
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
+		svr.mux.Lock()
+		if len(svr.conns) >= svr.MaxLoad {
+			svr.mux.Unlock()
+			c.Close()
+			return
+		}
+		svr.conns[c] = struct{}{}
+		svr.mux.Unlock()
 		svr._onOpen(c)
 		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
@@ -228,6 +242,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		}
 		parser.onClose(err)
 		svr._onClose(c, err)
+		svr.mux.Lock()
+		delete(svr.conns, c)
+		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
@@ -333,11 +350,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 
 	gopherConf := nbio.Config{
-		Name:    conf.Name,
-		Network: conf.Network,
-		Addrs:   conf.Addrs,
-		MaxLoad: conf.MaxLoad,
-		// NListener:          conf.NListener,
+		Name:               conf.Name,
+		Network:            conf.Network,
+		Addrs:              conf.Addrs,
 		NPoller:            conf.NPoller,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
@@ -350,13 +365,23 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		_onOpen:                func(c *nbio.Conn) {},
 		_onClose:               func(c *nbio.Conn, err error) {},
 		_onStop:                func() {},
+		MaxLoad:                conf.MaxLoad,
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
+		conns:                  map[*nbio.Conn]struct{}{},
 	}
 
 	isClient := false
 
 	g.OnOpen(func(c *nbio.Conn) {
+		svr.mux.Lock()
+		if len(svr.conns) >= svr.MaxLoad {
+			svr.mux.Unlock()
+			c.Close()
+			return
+		}
+		svr.conns[c] = struct{}{}
+		svr.mux.Unlock()
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
@@ -373,6 +398,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		}
 		parser.onClose(err)
 		svr._onClose(c, err)
+		svr.mux.Lock()
+		delete(svr.conns, c)
+		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)

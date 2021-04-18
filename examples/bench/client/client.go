@@ -54,13 +54,6 @@ func main() {
 
 	go func() {
 		for {
-			time.Sleep(time.Second * 5)
-			fmt.Println(g.State().String())
-		}
-	}()
-
-	go func() {
-		for {
 			time.Sleep(time.Second)
 			fmt.Printf("qps: %v, total read: %.1f M, total write: %.1f M\n", atomic.SwapInt64(&qps, 0), float64(atomic.SwapInt64(&totalRead, 0))/1024/1024, float64(atomic.SwapInt64(&totalWrite, 0))/1024/1024)
 		}

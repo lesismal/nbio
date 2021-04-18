@@ -10,7 +10,6 @@ import (
 	"net"
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/nbio/loging"
@@ -23,8 +22,6 @@ type poller struct {
 
 	index int
 
-	currLoad int64
-
 	ReadBuffer []byte
 
 	pollType   string
@@ -35,27 +32,10 @@ type poller struct {
 	chStop chan struct{}
 }
 
-func (p *poller) online() int64 {
-	return atomic.LoadInt64(&p.currLoad)
-}
-
-func (p *poller) increase() {
-	atomic.AddInt64(&p.currLoad, 1)
-}
-
-func (p *poller) decrease() {
-	atomic.AddInt64(&p.currLoad, -1)
-}
-
 func (p *poller) accept() error {
 	conn, err := p.listener.Accept()
 	if err != nil {
 		return err
-	}
-
-	if !p.acceptable() {
-		conn.Close()
-		return nil
 	}
 
 	c := newConn(conn)
@@ -80,21 +60,11 @@ func (p *poller) readConn(c *Conn) {
 	}
 }
 
-func (p *poller) acceptable() bool {
-	if atomic.AddInt64(&p.g.currLoad, 1) > p.g.maxLoad {
-		atomic.AddInt64(&p.g.currLoad, -1)
-		return false
-	}
-
-	return true
-}
-
 func (p *poller) addConn(c *Conn) error {
 	c.g = p.g
 	p.g.mux.Lock()
 	p.g.connsStd[c] = struct{}{}
 	p.g.mux.Unlock()
-	p.increase()
 	p.g.onOpen(c)
 	go p.readConn(c)
 
@@ -105,8 +75,6 @@ func (p *poller) deleteConn(c *Conn) {
 	p.g.mux.Lock()
 	delete(p.g.connsStd, c)
 	p.g.mux.Unlock()
-	p.decrease()
-	p.g.decrease()
 	p.g.onClose(c, c.closeErr)
 }
 
