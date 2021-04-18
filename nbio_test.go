@@ -31,7 +31,7 @@ func init() {
 
 	err := g.Start()
 	if err != nil {
-		log.Fatalf("Start failed: %v\n", err)
+		log.Panicf("Start failed: %v\n", err)
 	}
 
 	gopher = g
@@ -46,14 +46,14 @@ func TestEcho(t *testing.T) {
 	g := NewGopher(Config{})
 	err := g.Start()
 	if err != nil {
-		log.Fatalf("Start failed: %v\n", err)
+		log.Panicf("Start failed: %v\n", err)
 	}
 	defer g.Stop()
 
 	g.OnOpen(func(c *Conn) {
 		c.SetSession(1)
 		if c.Session() != 1 {
-			log.Fatalf("invalid session: %v", c.Session())
+			log.Panicf("invalid session: %v", c.Session())
 		}
 		c.SetLinger(1, 0)
 		c.SetNoDelay(true)
@@ -84,12 +84,12 @@ func TestEcho(t *testing.T) {
 		if n%2 == 0 {
 			c, err = Dial("tcp", addr)
 			if err != nil {
-				log.Fatalf("Dial failed: %v", err)
+				log.Panicf("Dial failed: %v", err)
 			}
 		} else {
 			c, err = net.Dial("tcp", addr)
 			if err != nil {
-				log.Fatalf("Dial failed: %v", err)
+				log.Panicf("net.Dial failed: %v", err)
 			}
 		}
 		g.AddConn(c)
@@ -115,7 +115,7 @@ func Test10k(t *testing.T) {
 	g := NewGopher(Config{NPoller: 2})
 	err := g.Start()
 	if err != nil {
-		log.Fatalf("Start failed: %v\n", err)
+		log.Panicf("Start failed: %v\n", err)
 	}
 	defer g.Stop()
 
@@ -140,7 +140,7 @@ func Test10k(t *testing.T) {
 	one := func() {
 		c, err := Dial("tcp", addr)
 		if err != nil {
-			log.Fatalf("Dial failed: %v", err)
+			log.Panicf("Dial failed: %v", err)
 		}
 		g.AddConn(c)
 	}
@@ -161,7 +161,7 @@ func TestTimeout(t *testing.T) {
 	g := NewGopher(Config{})
 	err := g.Start()
 	if err != nil {
-		log.Fatalf("Start failed: %v\n", err)
+		log.Panicf("Start failed: %v\n", err)
 	}
 	defer g.Stop()
 
@@ -175,7 +175,7 @@ func TestTimeout(t *testing.T) {
 	g.OnClose(func(c *Conn, err error) {
 		to := time.Since(begin)
 		if to > timeout+time.Second/5 {
-			log.Fatalf("timeout: %v, want: %v", to, timeout)
+			log.Panicf("timeout: %v, want: %v", to, timeout)
 		}
 		close(done)
 	})
@@ -183,7 +183,7 @@ func TestTimeout(t *testing.T) {
 	one := func() {
 		c, err := Dial("tcp", addr)
 		if err != nil {
-			log.Fatalf("Dial failed: %v", err)
+			log.Panicf("Dial failed: %v", err)
 		}
 		g.AddConn(c)
 	}
@@ -214,7 +214,7 @@ func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 	<-ch1
 	to1 := time.Since(t1)
 	if to1 < timeout*4 || to1 > timeout*10 {
-		log.Fatalf("invalid to1: %v", to1)
+		log.Panicf("invalid to1: %v", to1)
 	}
 
 	t2 := time.Now()
@@ -226,7 +226,7 @@ func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 	<-ch2
 	to2 := time.Since(t2)
 	if to2 < timeout*4 || to2 > timeout*10 {
-		log.Fatalf("invalid to2: %v", to2)
+		log.Panicf("invalid to2: %v", to2)
 	}
 
 	ch3 := make(chan int)
@@ -237,7 +237,7 @@ func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 	<-g.After(timeout * 2)
 	select {
 	case <-ch3:
-		log.Fatalf("stop failed")
+		log.Panicf("stop failed")
 	default:
 	}
 }
@@ -266,7 +266,7 @@ func testHeapTimerNormalExecMany(g *Gopher, t *testing.T, timeout time.Duration)
 	for i := 0; i < 5; i++ {
 		n := <-ch4
 		if n != i+1 {
-			log.Fatalf("invalid n: %v, %v", i, n)
+			log.Panicf("invalid n: %v, %v", i, n)
 		}
 	}
 }
@@ -282,17 +282,17 @@ func testHeapTimerExecManyRandtime(g *Gopher, t *testing.T, timeout time.Duratio
 		}))
 	}
 	if len(its) != 100 || g.timers.Len() != 100 {
-		log.Fatalf("invalid timers length: %v, %v", len(its), g.timers.Len())
+		log.Panicf("invalid timers length: %v, %v", len(its), g.timers.Len())
 	}
 	for i := 0; i < 50; i++ {
 		if its[0] == nil {
-			log.Fatalf("invalid its[0]")
+			log.Panicf("invalid its[0]")
 		}
 		its[0].Stop()
 		its = its[1:]
 	}
 	if len(its) != 50 || g.timers.Len() != 50 {
-		log.Fatalf("invalid timers length: %v, %v", len(its), g.timers.Len())
+		log.Panicf("invalid timers length: %v, %v", len(its), g.timers.Len())
 	}
 	recved := 0
 LOOP_RECV:
@@ -305,7 +305,7 @@ LOOP_RECV:
 		}
 	}
 	if recved != 50 {
-		log.Fatalf("invalid recved num: %v", recved)
+		log.Panicf("invalid recved num: %v", recved)
 	}
 
 	it := &htimer{parent: g, index: -1}
@@ -340,7 +340,7 @@ func TestFuzz(t *testing.T) {
 	})
 	err := g.Start()
 	if err != nil {
-		log.Fatalf("Start failed: %v", err)
+		log.Panicf("Start failed: %v", err)
 	}
 
 	c, err := Dial("tcp", addr)
@@ -363,7 +363,7 @@ func TestFuzz(t *testing.T) {
 		c.Close()
 		c.Write([]byte{1})
 	} else {
-		log.Fatalf("Dial tcp6: %v", err)
+		log.Panicf("Dial tcp6: %v", err)
 	}
 
 	gErr := NewGopher(Config{
