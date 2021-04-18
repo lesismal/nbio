@@ -9,7 +9,6 @@ package nbio
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -43,10 +42,6 @@ func (p *poller) accept(lfd int) error {
 		return err
 	}
 
-	if fd < 0 {
-		return
-	}
-
 	err = syscall.SetNonblock(fd, true)
 	if err != nil {
 		syscall.Close(fd)
@@ -69,6 +64,7 @@ func (p *poller) accept(lfd int) error {
 func (p *poller) addConn(c *Conn) {
 	c.g = p.g
 	p.g.onOpen(c)
+	fd := c.fd
 	p.addRead(c.fd)
 	p.g.connsUnix[fd] = c
 }
@@ -119,17 +115,24 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter&syscall.EVFILT_READ != 0 {
-			buffer := p.g.borrow(c)
-			b, err := p.g.onRead(c, buffer)
-			if err == nil {
-				p.g.onData(c, b)
-			} else {
-				if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-					c.closeWithError(err)
+			for {
+				buffer := p.g.borrow(c)
+				n, err := c.Read(buffer)
+				if n > 0 {
+					p.g.onData(c, buffer[:n])
+				}
+				p.g.payback(c, buffer)
+				if err == syscall.EINTR {
+					continue
+				}
+				if err == syscall.EINTR {
 					return
 				}
+				if err != nil || n == 0 {
+					c.closeWithError(err)
+				}
+				return
 			}
-			p.g.payback(c, buffer)
 		}
 
 		if ev.Filter&syscall.EVFILT_WRITE != 0 {
