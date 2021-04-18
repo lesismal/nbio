@@ -181,10 +181,10 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 		f, ok := r.(*os.File)
 		if ok {
 			nc, ok := c.(interface {
-				SendFile(f *os.File, remain int64) (int64, error)
+				Sendfile(f *os.File, remain int64) (int64, error)
 			})
 			if ok {
-				ns, err := nc.SendFile(f, lr.N)
+				ns, err := nc.Sendfile(f, lr.N)
 				return int64(ns), err
 			}
 		}

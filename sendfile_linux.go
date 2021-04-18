@@ -14,7 +14,7 @@ import (
 const maxSendfileSize = 4 << 20
 
 // SendFile .
-func (c *Conn) SendFile(f *os.File, remain int64) (int64, error) {
+func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 	if f == nil {
 		return 0, nil
 	}
@@ -22,6 +22,14 @@ func (c *Conn) SendFile(f *os.File, remain int64) (int64, error) {
 	if c.closed {
 		c.mux.Unlock()
 		return -1, errClosed
+	}
+
+	if remain <= 0 {
+		stat, err := f.Stat()
+		if err != nil {
+			return 0, err
+		}
+		remain = stat.Size()
 	}
 
 	if len(c.writeBuffers) > 0 {
