@@ -7,6 +7,7 @@
 package nbio
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"time"
@@ -229,24 +230,14 @@ func newConn(conn net.Conn, fromClient ...interface{}) *Conn {
 	return c
 }
 
-// Dial wraps net.Dial
-func Dial(network string, address string) (*Conn, error) {
-	conn, err := net.Dial(network, address)
-	if err != nil {
-		return nil, err
+// NBConn converts net.Conn to *Conn
+func NBConn(conn net.Conn) (*Conn, error) {
+	if conn == nil {
+		return nil, errors.New("invalid conn: nil")
 	}
-
-	c := &Conn{
-		conn: conn,
+	c, ok := conn.(*Conn)
+	if !ok {
+		c = newConn(conn, true)
 	}
-
-	addr := conn.LocalAddr().String()
-	for _, ch := range addr {
-		c.hash = 31*c.hash + int(ch)
-	}
-	if c.hash < 0 {
-		c.hash = -c.hash
-	}
-
 	return c, nil
 }

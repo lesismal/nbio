@@ -1,9 +1,12 @@
 package nbio
 
 import (
+	"io"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -12,9 +15,14 @@ import (
 )
 
 var addr = "localhost:8888"
+var testfile = "test_tmp.file"
 var gopher *Gopher
 
 func init() {
+	if err := ioutil.WriteFile(testfile, make([]byte, 1024*100), 0666); err != nil {
+		log.Panicf("write file failed: %v", err)
+	}
+
 	addrs := []string{addr}
 	g := NewGopher(Config{
 		Network: "tcp",
@@ -25,7 +33,22 @@ func init() {
 		c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	})
 	g.OnData(func(c *Conn, data []byte) {
-		c.Write(append([]byte{}, data...))
+		if len(data) == 8 && string(data) == "sendfile" {
+			fd, err := os.Open(testfile)
+			if err != nil {
+				log.Panicf("open file failed: %v", err)
+			}
+
+			if _, err = c.Sendfile(fd, 0); err != nil {
+				panic(err)
+			}
+
+			if err := fd.Close(); err != nil {
+				log.Panicf("close file failed: %v", err)
+			}
+		} else {
+			c.Write(append([]byte{}, data...))
+		}
 	})
 	g.OnClose(func(c *Conn, err error) {})
 
@@ -111,51 +134,24 @@ func TestEcho(t *testing.T) {
 	<-done
 }
 
-// func Test10k(t *testing.T) {
-// 	g := NewGopher(Config{NPoller: 2})
-// 	err := g.Start()
-// 	if err != nil {
-// 		log.Panicf("Start failed: %v\n", err)
-// 	}
-// 	defer g.Stop()
+func TestSendfile(t *testing.T) {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		panic(err)
+	}
 
-// 	var total int64 = 0
-// 	var clientNum int64 = 1024 * 10
-// 	var done = make(chan int)
+	buf := make([]byte, 1024*100)
 
-// 	if runtime.GOOS != "linux" {
-// 		clientNum = 100
-// 	}
+	for i := 0; i < 3; i++ {
+		if _, err := conn.Write([]byte("sendfile")); err != nil {
+			log.Panicf("write 'sendfile' failed: %v", err)
+		}
 
-// 	t.Log("testing concurrent:", clientNum, "connections")
-
-// 	g.OnOpen(func(c *Conn) {
-// 		c.Close()
-// 		c.Write([]byte{1})
-// 		if atomic.AddInt64(&total, 1) == clientNum {
-// 			close(done)
-// 		}
-// 	})
-
-// 	one := func() {
-// 		c, err := Dial("tcp", addr)
-// 		if err != nil {
-// 			log.Panicf("Dial failed: %v", err)
-// 		}
-// 		g.AddConn(c)
-// 	}
-// 	go func() {
-// 		for i := 0; i < int(clientNum); i++ {
-// 			if runtime.GOOS == "linux" {
-// 				one()
-// 			} else {
-// 				go one()
-// 			}
-// 		}
-// 	}()
-
-// 	<-done
-// }
+		if _, err := io.ReadFull(conn, buf); err != nil {
+			log.Panicf("read file failed: %v", err)
+		}
+	}
+}
 
 func TestTimeout(t *testing.T) {
 	g := NewGopher(Config{})
@@ -181,7 +177,7 @@ func TestTimeout(t *testing.T) {
 	})
 
 	one := func() {
-		c, err := Dial("tcp", addr)
+		c, err := DialTimeout("tcp", addr, time.Second)
 		if err != nil {
 			log.Panicf("Dial failed: %v", err)
 		}
@@ -375,4 +371,5 @@ func TestFuzz(t *testing.T) {
 
 func TestStop(t *testing.T) {
 	gopher.Stop()
+	os.Remove(testfile)
 }

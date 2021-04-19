@@ -141,11 +141,10 @@ func (g *Gopher) Stop() {
 
 // AddConn adds conn to a poller
 func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
-	c, err := g.Conn(conn)
+	c, err := NBConn(conn)
 	if err != nil {
 		return nil, err
 	}
-	// g.increase()
 	g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
 	return c, nil
 }

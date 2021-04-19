@@ -114,7 +114,7 @@ func main() {
 				log.Fatalf("Dial failed: %v\n", err)
 			}
 
-			nbConn, err := g.Conn(tlsConn.Conn())
+			nbConn, err := nbio.NBConn(tlsConn.Conn())
 			if err != nil {
 				log.Fatalf("AddConn failed: %v\n", err)
 			}

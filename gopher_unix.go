@@ -7,8 +7,6 @@
 package nbio
 
 import (
-	"errors"
-	"net"
 	"runtime"
 	"strings"
 	"syscall"
@@ -77,22 +75,6 @@ func (g *Gopher) Start() error {
 		loging.Info("Gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
-}
-
-// Conn converts net.Conn to *Conn
-func (g *Gopher) Conn(conn net.Conn) (*Conn, error) {
-	if conn == nil {
-		return nil, errors.New("invalid conn: nil")
-	}
-	c, ok := conn.(*Conn)
-	if !ok {
-		var err error
-		c, err = dupStdConn(conn)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return c, nil
 }
 
 // NewGopher is a factory impl

@@ -56,7 +56,7 @@ func main() {
 	}
 	// step 2:
 	// add tls.Conn.conn to gopher, and get the nbio.Conn. the new nbio.Conn is non-blocking
-	nbConn, err := g.Conn(tlsConn.Conn())
+	nbConn, err := nbio.NBConn(tlsConn.Conn())
 	if err != nil {
 		log.Fatalf("AddConn failed: %v\n", err)
 	}

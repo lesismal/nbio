@@ -527,35 +527,18 @@ func newConn(fd int, lAddr, rAddr net.Addr) *Conn {
 	}
 }
 
-// Dial wraps syscall.Connect
-func Dial(network string, address string) (*Conn, error) {
-	sa, _, err := getSockaddr(network, address)
-	if err != nil {
-		return nil, err
+// NBConn converts net.Conn to *Conn
+func NBConn(conn net.Conn) (*Conn, error) {
+	if conn == nil {
+		return nil, errors.New("invalid conn: nil")
 	}
-
-	fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_STREAM, syscall.IPPROTO_TCP)
-	if err != nil {
-		return nil, err
+	c, ok := conn.(*Conn)
+	if !ok {
+		var err error
+		c, err = dupStdConn(conn)
+		if err != nil {
+			return nil, err
+		}
 	}
-
-	err = syscall.Connect(fd, sa)
-	if err != nil {
-		return nil, err
-	}
-
-	err = syscall.SetNonblock(fd, true)
-	if err != nil {
-		syscall.Close(fd)
-		return nil, err
-	}
-
-	la, err := syscall.Getsockname(fd)
-	if err != nil {
-		return nil, err
-	}
-
-	c := newConn(fd, sockaddrToAddr(la), sockaddrToAddr(sa))
-
 	return c, nil
 }

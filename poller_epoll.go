@@ -8,6 +8,7 @@ package nbio
 
 import (
 	"io"
+	"net"
 	"runtime"
 	"syscall"
 	"time"
@@ -38,6 +39,8 @@ type poller struct {
 	ReadBuffer []byte
 
 	pollType string
+
+	listener net.Listener
 }
 
 func (p *poller) accept(lfd int) error {
