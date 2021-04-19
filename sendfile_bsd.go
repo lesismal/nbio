@@ -2,7 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-// +build windows darwin netbsd freebsd openbsd dragonfly
+// +build darwin netbsd freebsd openbsd dragonfly
 
 package nbio
 
@@ -27,5 +27,5 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = stat.Size()
 	}
 
-	return io.CopyN(c.conn, f, remain)
+	return io.CopyN(c, f, remain)
 }
