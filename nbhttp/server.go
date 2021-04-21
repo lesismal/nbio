@@ -64,6 +64,9 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
+	// NListener represents poller goroutine num, it's set to runtime.NumCPU() by default.
+	NListener int
+
 	// NParser represents parser goroutine num, it's set to NPoller by default.
 	NParser int
 
@@ -202,6 +205,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		Network:            conf.Network,
 		Addrs:              conf.Addrs,
 		NPoller:            conf.NPoller,
+		NListener:          conf.NListener,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
 		LockThread:         conf.LockThread,
@@ -354,6 +358,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		Network:            conf.Network,
 		Addrs:              conf.Addrs,
 		NPoller:            conf.NPoller,
+		NListener:          conf.NListener,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
 		LockThread:         conf.LockThread,
