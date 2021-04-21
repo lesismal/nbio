@@ -281,12 +281,14 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 
 	if isListener {
 		if len(g.lfds) > 0 {
-			for _, lfd := range g.lfds {
-				// EPOLLEXCLUSIVE := (1 << 28)
-				if err := syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, lfd, &syscall.EpollEvent{Fd: int32(lfd), Events: syscall.EPOLLIN | (1 << 28)}); err != nil {
-					syscall.Close(fd)
-					syscall.Close(int(r0))
-					return nil, err
+			for i, lfd := range g.lfds {
+				if i%len(g.listeners) == index {
+					// EPOLLEXCLUSIVE := (1 << 28)
+					if err := syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, lfd, &syscall.EpollEvent{Fd: int32(lfd), Events: syscall.EPOLLIN | (1 << 28)}); err != nil {
+						syscall.Close(fd)
+						syscall.Close(int(r0))
+						return nil, err
+					}
 				}
 			}
 		} else {
