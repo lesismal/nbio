@@ -89,7 +89,7 @@ func NewGopher(conf Config) *Gopher {
 	if conf.NPoller <= 0 {
 		conf.NPoller = cpuNum
 	}
-	if conf.NListener <= 0 {
+	if len(conf.Addrs) > 0 && conf.NListener <= 0 {
 		conf.NListener = 1
 	}
 	if conf.Backlog <= 0 {
