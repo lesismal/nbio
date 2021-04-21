@@ -81,6 +81,7 @@ func (pool *MemPool) Free(buf []byte) error {
 	if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
 		return errors.New("MemPool Put() incorrect buffer size")
 	}
+	pool.buffers[bits].Put(buf)
 	return nil
 }
 
