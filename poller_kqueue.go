@@ -244,13 +244,15 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 
 	if isListener {
 		if len(g.lfds) > 0 {
-			for _, lfd := range g.lfds {
-				_, err := syscall.Kevent(fd, []syscall.Kevent_t{
-					{Ident: uint64(lfd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
-				}, nil, nil)
-				if err != nil {
-					syscall.Close(fd)
-					return nil, err
+			for i, lfd := range g.lfds {
+				if i%len(g.listeners) == index {
+					_, err := syscall.Kevent(fd, []syscall.Kevent_t{
+						{Ident: uint64(lfd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
+					}, nil, nil)
+					if err != nil {
+						syscall.Close(fd)
+						return nil, err
+					}
 				}
 			}
 		} else {
