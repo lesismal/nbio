@@ -47,6 +47,9 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
+	// NListener represents poller goroutine num, it's set to runtime.NumCPU() by default.
+	NListener int
+
 	// Backlog represents backlog arg for syscall.Listen
 	Backlog int
 
