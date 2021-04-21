@@ -46,6 +46,9 @@ func (g *Gopher) Start() error {
 		if err != nil {
 			for j := 0; j < int(len(g.lfds)); j++ {
 				syscall.Close(g.lfds[j])
+			}
+
+			for j := 0; j < int(len(g.listeners)); j++ {
 				g.listeners[j].stop()
 			}
 
@@ -86,6 +89,9 @@ func NewGopher(conf Config) *Gopher {
 	if conf.NPoller <= 0 {
 		conf.NPoller = cpuNum
 	}
+	if conf.NListener <= 0 {
+		conf.NListener = 1
+	}
 	if conf.Backlog <= 0 {
 		conf.Backlog = 1024 * 64
 	}
@@ -105,7 +111,7 @@ func NewGopher(conf Config) *Gopher {
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
-		listeners:          make([]*poller, len(conf.Addrs)),
+		listeners:          make([]*poller, conf.NListener),
 		pollers:            make([]*poller, conf.NPoller),
 		connsUnix:          make([]*Conn, MaxOpenFiles),
 
