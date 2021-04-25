@@ -1,5 +1,7 @@
 # NBIO - NON-BLOCKING IO
 
+[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go#networking)
+
 [![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][11]][12]
 
 [1]: https://godoc.org/github.com/lesismal/nbio?status.svg
