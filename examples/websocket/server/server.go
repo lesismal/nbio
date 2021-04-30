@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
@@ -24,9 +25,10 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		svr.MessageHandlerExecutor(func() {
+			c.SetReadDeadline(time.Now().Add(time.Second * 60))
+
 			// echo
 			c.WriteMessage(messageType, data)
-
 			fmt.Println("OnMessage:", messageType, string(data))
 		})
 	})
