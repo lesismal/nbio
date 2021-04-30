@@ -27,7 +27,8 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		svr.MessageHandlerExecutor(func() {
-			wsConn.WriteMessage(messageType, data)
+			c.SetReadDeadline(time.Now().Add(time.Second * 60))
+			c.WriteMessage(messageType, data)
 			atomic.AddUint64(&qps, 1)
 		})
 	})
