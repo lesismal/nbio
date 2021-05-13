@@ -88,11 +88,11 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	nbc, ok := conn.(*nbio.Conn)
 	if !ok {
-		tlsNbc, ok := conn.(*tls.Conn)
+		tlsConn, ok := conn.(*tls.Conn)
 		if !ok {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
-		nbc, ok = tlsNbc.Conn().(*nbio.Conn)
+		nbc, ok = tlsConn.Conn().(*nbio.Conn)
 		if !ok {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
