@@ -2,9 +2,9 @@ package websocket
 
 import (
 	"encoding/binary"
+	"net"
 	"sync"
 
-	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -24,7 +24,7 @@ const (
 )
 
 type Conn struct {
-	*nbio.Conn
+	net.Conn
 
 	mux sync.Mutex
 
@@ -157,7 +157,7 @@ func (c *Conn) Write(data []byte) (int, error) {
 	return -1, ErrInvalidWriteCalling
 }
 
-func newConn(c *nbio.Conn, compress bool, subprotocol string) *Conn {
+func newConn(c net.Conn, compress bool, subprotocol string) *Conn {
 	conn := &Conn{
 		Conn:           c,
 		subprotocol:    subprotocol,

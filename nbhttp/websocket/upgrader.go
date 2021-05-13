@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
@@ -87,8 +88,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	nbc, ok := conn.(*nbio.Conn)
 	if !ok {
-		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		tlsNbc, ok := conn.(*tls.Conn)
+		if !ok {
+			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		}
+		nbc, ok = tlsNbc.Conn().(*nbio.Conn)
+		if !ok {
+			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		}
 	}
+
 	parser, ok := nbc.Session().(*nbhttp.Parser)
 	if !ok {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
@@ -116,7 +125,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(nbc, false, subprotocol)
+	u.conn = newConn(conn, false, subprotocol)
 	return u.conn, nil
 }
 
@@ -142,18 +151,12 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if bl > 0 {
 				ml := len(u.message)
 				if ml == 0 {
-					if bl < 1024 {
-						u.message = mempool.Malloc(1024)[:bl]
-					} else {
-						u.message = mempool.Malloc(bl)
-					}
+					u.message = make([]byte, bl)
 				} else {
 					rl := ml + len(body)
-					if rl < 1024 {
-						u.message = mempool.Realloc(u.message, 1024)[:rl]
-					} else {
-						u.message = mempool.Realloc(u.message, rl)
-					}
+					buf := make([]byte, rl)
+					copy(buf, u.message)
+					u.message = buf
 				}
 				copy(u.message[ml:], body)
 
@@ -201,7 +204,7 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 
 func (u *Upgrader) handleMessage() {
 	u.conn.handleMessage(u.opcode, u.message)
-	mempool.Free(u.message)
+	// mempool.Free(u.message)
 	u.message = nil
 	u.opcode = 0
 }
