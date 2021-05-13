@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
@@ -85,9 +86,18 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
 
-	nbc, ok := conn.(*nbio.Conn)
+	var nbc *nbio.Conn
+	nbc, ok = conn.(*nbio.Conn)
 	if !ok {
-		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		tlsConn, ok := conn.(*tls.Conn)
+		if !ok {
+			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		}
+		c := tlsConn.Conn()
+		nbc, ok = c.(*nbio.Conn)
+		if !ok {
+			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		}
 	}
 	parser, ok := nbc.Session().(*nbhttp.Parser)
 	if !ok {
