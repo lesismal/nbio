@@ -7,6 +7,8 @@
 package nbio
 
 import (
+	"errors"
+	"net"
 	"runtime"
 	"sync"
 	"syscall"
@@ -23,6 +25,8 @@ type poller struct {
 	kfd   int
 	evtfd int
 
+	listener net.Listener
+
 	index int
 
 	shutdown bool
@@ -36,26 +40,17 @@ type poller struct {
 	eventList []syscall.Kevent_t
 }
 
-func (p *poller) accept(lfd int) error {
-	fd, saddr, err := syscall.Accept(lfd)
+func (p *poller) accept() error {
+	conn, err := p.listener.Accept()
 	if err != nil {
 		return err
 	}
 
-	err = syscall.SetNonblock(fd, true)
+	c, err := NBConn(conn)
 	if err != nil {
-		syscall.Close(fd)
-		return nil
+		return err
 	}
-
-	laddr, err := syscall.Getsockname(fd)
-	if err != nil {
-		syscall.Close(fd)
-		return nil
-	}
-
-	c := newConn(int(fd), sockaddrToAddr(laddr), sockaddrToAddr(saddr))
-	o := p.g.pollers[int(fd)%len(p.g.pollers)]
+	o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
 	o.addConn(c)
 
 	return nil
@@ -163,32 +158,19 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	var events = make([]syscall.Kevent_t, 1024)
-	var changes []syscall.Kevent_t
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 
 	p.shutdown = false
 	for !p.shutdown {
-		n, err := syscall.Kevent(p.kfd, changes, events, nil)
-		if err != nil && err != syscall.EINTR {
-			return
-		}
-
-		fd := 0
-		for i := 0; i < n; i++ {
-			fd = int(events[i].Ident)
-			switch fd {
-			case p.evtfd:
-			default:
-				err = p.accept(fd)
-				if err != nil {
-					if err == syscall.EAGAIN {
-						loging.Error("Poller[%v_%v_%v] Accept failed: EAGAIN, retrying...", p.g.Name, p.pollType, p.index)
-						time.Sleep(time.Second / 20)
-					} else {
-						loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
-						break
-					}
-				}
+		err := p.accept()
+		if err != nil {
+			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				loging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+				time.Sleep(time.Second / 20)
+			} else {
+				loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+				break
 			}
 		}
 	}
@@ -222,10 +204,34 @@ func (p *poller) readWriteLoop() {
 func (p *poller) stop() {
 	loging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
+	if p.listener != nil {
+		p.listener.Close()
+	}
 	p.trigger()
 }
 
 func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
+	if isListener {
+		if len(g.addrs) == 0 {
+			panic("invalid listener num")
+		}
+
+		addr := g.addrs[index%len(g.listeners)]
+		ln, err := net.Listen(g.network, addr)
+		if err != nil {
+			return nil, err
+		}
+
+		p := &poller{
+			g:          g,
+			index:      index,
+			listener:   ln,
+			isListener: isListener,
+			pollType:   "LISTENER",
+		}
+		return p, nil
+	}
+
 	fd, err := syscall.Kqueue()
 	if err != nil {
 		return nil, err
@@ -242,36 +248,45 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 		return nil, err
 	}
 
-	if isListener {
-		if len(g.lfds) > 0 {
-			for i, lfd := range g.lfds {
-				if i%len(g.listeners) == index {
-					_, err := syscall.Kevent(fd, []syscall.Kevent_t{
-						{Ident: uint64(lfd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ},
-					}, nil, nil)
-					if err != nil {
-						syscall.Close(fd)
-						return nil, err
-					}
-				}
-			}
-		} else {
-			panic("invalid listener num")
-		}
-	}
-
 	p := &poller{
 		g:          g,
 		kfd:        fd,
 		index:      index,
 		isListener: isListener,
-	}
-
-	if isListener {
-		p.pollType = "LISTENER"
-	} else {
-		p.pollType = "POLLER"
+		pollType:   "POLLER",
 	}
 
 	return p, nil
+}
+
+func dupStdConn(conn net.Conn) (*Conn, error) {
+	sc, ok := conn.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	})
+	if !ok {
+		return nil, errors.New("RawConn Unsupported")
+	}
+	rc, err := sc.SyscallConn()
+	if err != nil {
+		return nil, errors.New("RawConn Unsupported")
+	}
+
+	var newFd int
+	errCtrl := rc.Control(func(fd uintptr) {
+		newFd, err = syscall.Dup(int(fd))
+	})
+
+	if errCtrl != nil {
+		return nil, errCtrl
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &Conn{
+		fd:    newFd,
+		lAddr: conn.LocalAddr(),
+		rAddr: conn.RemoteAddr(),
+	}, nil
 }
