@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-var addr = "localhost:8888"
+var addr = "127.0.0.1:8888"
 var testfile = "test_tmp.file"
 var gopher *Gopher
 
@@ -317,7 +317,7 @@ func TestFuzz(t *testing.T) {
 			if idx%2 == 0 {
 				Dial("tcp4", addr)
 			} else {
-				Dial("tcp6", addr)
+				Dial("tcp4", addr)
 			}
 		}(i)
 	}
@@ -341,7 +341,7 @@ func TestFuzz(t *testing.T) {
 
 	c, err := Dial("tcp", addr)
 	if err == nil {
-		log.Printf("Dial tcp6: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+		log.Printf("Dial tcp4: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
 		g.AddConn(c)
 		c.SetWriteDeadline(time.Now().Add(time.Second))
 		c.Write([]byte{1})
@@ -359,12 +359,12 @@ func TestFuzz(t *testing.T) {
 		c.Close()
 		c.Write([]byte{1})
 	} else {
-		log.Panicf("Dial tcp6: %v", err)
+		log.Panicf("Dial tcp4: %v", err)
 	}
 
 	gErr := NewGopher(Config{
 		Network: "tcp4",
-		Addrs:   []string{"localhost:8889", "localhost:8889"},
+		Addrs:   []string{"127.0.0.1:8889", "127.0.0.1:8889"},
 	})
 	gErr.Start()
 }
