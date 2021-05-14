@@ -188,6 +188,67 @@ func TestTimeout(t *testing.T) {
 	<-done
 }
 
+func TestFuzz(t *testing.T) {
+	wg := sync.WaitGroup{}
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			if idx%2 == 0 {
+				Dial("tcp4", addr)
+			} else {
+				Dial("tcp4", addr)
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	readed := 0
+	wg2 := sync.WaitGroup{}
+	wg2.Add(1)
+	g := NewGopher(Config{NPoller: 1})
+	g.OnData(func(c *Conn, data []byte) {
+		readed += len(data)
+		if readed == 4 {
+			wg2.Done()
+		}
+	})
+	err := g.Start()
+	if err != nil {
+		log.Panicf("Start failed: %v", err)
+	}
+
+	c, err := Dial("tcp", addr)
+	if err == nil {
+		log.Printf("Dial tcp4: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+		g.AddConn(c)
+		c.SetWriteDeadline(time.Now().Add(time.Second))
+		c.Write([]byte{1})
+
+		time.Sleep(time.Second / 10)
+
+		bs := [][]byte{}
+		bs = append(bs, []byte{2})
+		bs = append(bs, []byte{3})
+		bs = append(bs, []byte{4})
+		c.Writev(bs)
+
+		time.Sleep(time.Second / 10)
+
+		c.Close()
+		c.Write([]byte{1})
+	} else {
+		log.Panicf("Dial tcp4: %v", err)
+	}
+
+	gErr := NewGopher(Config{
+		Network: "tcp4",
+		Addrs:   []string{"127.0.0.1:8889", "127.0.0.1:8889"},
+	})
+	gErr.Start()
+}
+
 func TestHeapTimer(t *testing.T) {
 	g := NewGopher(Config{})
 	g.Start()
@@ -306,67 +367,6 @@ LOOP_RECV:
 
 	it := &htimer{parent: g, index: -1}
 	it.Stop()
-}
-
-func TestFuzz(t *testing.T) {
-	wg := sync.WaitGroup{}
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			if idx%2 == 0 {
-				Dial("tcp4", addr)
-			} else {
-				Dial("tcp4", addr)
-			}
-		}(i)
-	}
-
-	wg.Wait()
-
-	readed := 0
-	wg2 := sync.WaitGroup{}
-	wg2.Add(1)
-	g := NewGopher(Config{NPoller: 1})
-	g.OnData(func(c *Conn, data []byte) {
-		readed += len(data)
-		if readed == 4 {
-			wg2.Done()
-		}
-	})
-	err := g.Start()
-	if err != nil {
-		log.Panicf("Start failed: %v", err)
-	}
-
-	c, err := Dial("tcp", addr)
-	if err == nil {
-		log.Printf("Dial tcp4: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
-		g.AddConn(c)
-		c.SetWriteDeadline(time.Now().Add(time.Second))
-		c.Write([]byte{1})
-
-		time.Sleep(time.Second / 10)
-
-		bs := [][]byte{}
-		bs = append(bs, []byte{2})
-		bs = append(bs, []byte{3})
-		bs = append(bs, []byte{4})
-		c.Writev(bs)
-
-		time.Sleep(time.Second / 10)
-
-		c.Close()
-		c.Write([]byte{1})
-	} else {
-		log.Panicf("Dial tcp4: %v", err)
-	}
-
-	gErr := NewGopher(Config{
-		Network: "tcp4",
-		Addrs:   []string{"127.0.0.1:8889", "127.0.0.1:8889"},
-	})
-	gErr.Start()
 }
 
 func TestStop(t *testing.T) {
