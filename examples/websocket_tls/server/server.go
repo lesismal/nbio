@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
@@ -28,6 +29,8 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 			// echo
 			c.WriteMessage(messageType, data)
 			fmt.Println("OnMessage:", messageType, string(data))
+
+			c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 		})
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
@@ -54,6 +57,10 @@ func main() {
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
 	}, mux, nil, tlsConfig)
+
+	// to improve performance if you need
+	// parserPool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
+	// svr.ParserExecutor = parserPool.GoByIndex
 
 	err = svr.Start()
 	if err != nil {
