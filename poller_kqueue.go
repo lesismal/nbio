@@ -40,22 +40,6 @@ type poller struct {
 	eventList []syscall.Kevent_t
 }
 
-func (p *poller) accept() error {
-	conn, err := p.listener.Accept()
-	if err != nil {
-		return err
-	}
-
-	c, err := NBConn(conn)
-	if err != nil {
-		return err
-	}
-	o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
-	o.addConn(c)
-
-	return nil
-}
-
 func (p *poller) addConn(c *Conn) {
 	c.g = p.g
 	p.g.onOpen(c)
@@ -163,8 +147,16 @@ func (p *poller) acceptorLoop() {
 
 	p.shutdown = false
 	for !p.shutdown {
-		err := p.accept()
-		if err != nil {
+		conn, err := p.listener.Accept()
+		if err == nil {
+			c, err := NBConn(conn)
+			if err != nil {
+				conn.Close()
+				continue
+			}
+			o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
+			o.addConn(c)
+		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				loging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
