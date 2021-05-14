@@ -19,22 +19,10 @@ import (
 func (g *Gopher) Start() error {
 	var err error
 
-	g.lfds = []int{}
-
-	for _, addr := range g.addrs {
-		fd, err := listen(g.network, addr, int64(g.backlogSize))
-		if err != nil {
-			return err
-		}
-
-		g.lfds = append(g.lfds, fd)
-	}
-
-	for i := 0; i < len(g.listeners); i++ {
+	for i := 0; i < len(g.addrs); i++ {
 		g.listeners[i], err = newPoller(g, true, int(i))
 		if err != nil {
 			for j := 0; j < int(i); j++ {
-				syscall.Close(g.lfds[j])
 				g.listeners[j].stop()
 			}
 			return err
@@ -111,7 +99,7 @@ func NewGopher(conf Config) *Gopher {
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
-		listeners:          make([]*poller, conf.NListener),
+		listeners:          make([]*poller, len(conf.Addrs)),
 		pollers:            make([]*poller, conf.NPoller),
 		connsUnix:          make([]*Conn, MaxOpenFiles),
 
