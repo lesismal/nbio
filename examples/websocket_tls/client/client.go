@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log"
 	"net/url"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -24,31 +25,40 @@ func main() {
 	dialer := &websocket.Dialer{
 		TLSClientConfig: tlsConfig,
 	}
-	c, _, err := dialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal("dial:", err)
-	}
-	defer c.Close()
+	waitGroup := sync.WaitGroup{}
 
-	text := "hello world"
-	for {
-		err := c.WriteMessage(websocket.TextMessage, []byte(text))
-		if err != nil {
-			log.Fatalf("write: %v", err)
-			return
-		}
-		log.Println("write:", text)
+	waitGroup.Add(10)
+	for i := 0; i < 100; i++ {
+		go func() {
+			defer waitGroup.Done()
+			c, _, err := dialer.Dial(u.String(), nil)
+			if err != nil {
+				log.Fatal("dial:", err)
+			}
+			defer c.Close()
 
-		_, message, err := c.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			return
-		}
-		if string(message) != text {
-			log.Fatalf("message != text: %v, %v", len(message), string(message))
-		} else {
-			log.Println("read :", string(message))
-		}
-		time.Sleep(time.Second)
+			text := "hello world"
+			for {
+				err := c.WriteMessage(websocket.TextMessage, []byte(text))
+				if err != nil {
+					log.Fatalf("write: %v", err)
+					return
+				}
+				log.Println("write:", text)
+
+				_, message, err := c.ReadMessage()
+				if err != nil {
+					log.Println("read:", err)
+					return
+				}
+				if string(message) != text {
+					log.Fatalf("message != text: %v, %v", len(message), string(message))
+				} else {
+					log.Println("read :", string(message))
+				}
+				time.Sleep(time.Millisecond * 500)
+			}
+		}()
 	}
+	waitGroup.Wait()
 }
