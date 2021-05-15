@@ -51,11 +51,11 @@ func NewUpgrader(isTLS bool) *Upgrader {
 		Realloc: mempool.Realloc,
 		Free:    mempool.Free,
 	}
-	if isTLS {
-		u.Malloc = nativeAllocator.Malloc
-		u.Realloc = nativeAllocator.Realloc
-		u.Free = nativeAllocator.Free
-	}
+	// if isTLS {
+	u.Malloc = nativeAllocator.Malloc
+	u.Realloc = nativeAllocator.Realloc
+	u.Free = nativeAllocator.Free
+	// }
 	return u
 }
 
