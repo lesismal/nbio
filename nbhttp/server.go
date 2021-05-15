@@ -256,7 +256,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 			loging.Error("nil parser")
 			return
 		}
-		parserExecutor(c.Hash(), func() {
+		svr.ParserExecutor(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
 				loging.Debug("parser.Read failed: %v", err)
@@ -276,8 +276,8 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	g.OnStop(func() {
 		svr._onStop()
-		messageHandlerExecutor = func(f func()) {}
-		parserExecutor = func(index int, f func()) {}
+		svr.MessageHandlerExecutor = func(f func()) {}
+		svr.ParserExecutor = func(index int, f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}
@@ -416,7 +416,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
 			tlsConn.Append(data)
-			parserExecutor(c.Hash(), func() {
+			svr.ParserExecutor(c.Hash(), func() {
 				for {
 					buffer := mempool.Malloc(2048)
 					n, err := tlsConn.Read(buffer)
@@ -450,8 +450,8 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 
 	g.OnStop(func() {
 		svr._onStop()
-		messageHandlerExecutor = func(f func()) {}
-		parserExecutor = func(index int, f func()) {}
+		svr.MessageHandlerExecutor = func(f func()) {}
+		svr.ParserExecutor = func(index int, f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}
