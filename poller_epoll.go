@@ -47,13 +47,14 @@ func (p *poller) addConn(c *Conn) {
 	c.g = p.g
 	p.g.onOpen(c)
 	fd := c.fd
+	p.g.connsUnix[fd] = c
 	err := p.addRead(fd)
 	if err != nil {
+		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
 		loging.Error("[%v] add read event failed: %v", c.fd, err)
 		return
 	}
-	p.g.connsUnix[fd] = c
 }
 
 func (p *poller) getConn(fd int) *Conn {
