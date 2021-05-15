@@ -82,7 +82,7 @@ func echo(c *websocket.Conn) {
 	}
 
 	if string(message) != text {
-		fmt.Println("ReadMessage failed 333:", message)
+		fmt.Println("ReadMessage failed 333:", string(message))
 		atomic.AddUint64(&failed, 1)
 	} else {
 		atomic.AddUint64(&success, 1)
