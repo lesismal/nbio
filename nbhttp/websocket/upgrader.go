@@ -46,15 +46,15 @@ var nativeAllocator = &mempool.NativeAllocator{}
 
 // NewUpgrader .
 func NewUpgrader(isTLS bool) *Upgrader {
-	u := &Upgrader{opcode: -1}
+	u := &Upgrader{
+		Malloc:  mempool.Malloc,
+		Realloc: mempool.Realloc,
+		Free:    mempool.Free,
+	}
 	if isTLS {
 		u.Malloc = nativeAllocator.Malloc
 		u.Realloc = nativeAllocator.Realloc
 		u.Free = nativeAllocator.Free
-	} else {
-		u.Malloc = mempool.Malloc
-		u.Realloc = mempool.Realloc
-		u.Free = mempool.Free
 	}
 	return u
 }
