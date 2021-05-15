@@ -5,6 +5,7 @@
 package mempool
 
 import (
+	"errors"
 	"sync"
 )
 
@@ -51,16 +52,15 @@ func (pool *MemPool) init(maxSize int) {
 
 // Malloc borrows []byte from pool
 func (pool *MemPool) Malloc(size int) []byte {
-	return make([]byte, size)
-	// if size <= 0 || size > pool.maxSize {
-	// 	return nil
-	// }
-	// allocSize := size
-	// if size < 64 {
-	// 	allocSize = 64
-	// }
-	// buf := pool.buffers[pool.maxBits(allocSize)].Get().([]byte)[:size]
-	// return buf
+	if size <= 0 || size > pool.maxSize {
+		return nil
+	}
+	allocSize := size
+	if size < 64 {
+		allocSize = 64
+	}
+	buf := pool.buffers[pool.maxBits(allocSize)].Get().([]byte)[:size]
+	return buf
 }
 
 // Realloc returns the buf passed in if it's size <= cap
@@ -69,8 +69,7 @@ func (pool *MemPool) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
 	}
-	// newBuf := pool.Malloc(size)
-	newBuf := make([]byte, size)
+	newBuf := pool.Malloc(size)
 	copy(newBuf, buf)
 	pool.Free(buf)
 	return newBuf
@@ -78,13 +77,12 @@ func (pool *MemPool) Realloc(buf []byte, size int) []byte {
 
 // Free payback []byte to pool
 func (pool *MemPool) Free(buf []byte) error {
+	bits := pool.maxBits(cap(buf))
+	if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
+		return errors.New("MemPool Put() incorrect buffer size")
+	}
+	pool.buffers[bits].Put(buf)
 	return nil
-	// bits := pool.maxBits(cap(buf))
-	// if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
-	// 	return errors.New("MemPool Put() incorrect buffer size")
-	// }
-	// pool.buffers[bits].Put(buf)
-	// return nil
 }
 
 // Malloc exports default package method
@@ -100,6 +98,29 @@ func Realloc(buf []byte, size int) []byte {
 // Free exports default package method
 func Free(buf []byte) error {
 	return defaultMemPool.Free(buf)
+}
+
+// NativeAllocator definition
+type NativeAllocator struct{}
+
+// MallocMallocNative exports default package method
+func (a *NativeAllocator) Malloc(size int) []byte {
+	return make([]byte, size)
+}
+
+// (a*NativeAllocator) Realloc exports default package method
+func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
+	if size <= cap(buf) {
+		return buf[:size]
+	}
+	newBuf := make([]byte, size)
+	copy(newBuf, buf)
+	return newBuf
+}
+
+// (a*NativeAllocator) Free exports default package method
+func (a *NativeAllocator) Free(buf []byte) error {
+	return nil
 }
 
 // New factory

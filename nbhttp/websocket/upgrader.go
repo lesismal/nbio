@@ -36,10 +36,40 @@ type Upgrader struct {
 	opcode  int8
 	buffer  []byte
 	message []byte
+
+	Malloc  func(size int) []byte
+	Realloc func(buf []byte, size int) []byte
+	Free    func(buf []byte) error
+}
+
+var nativeAllocator = &mempool.NativeAllocator{}
+
+// NewUpgrader .
+func NewUpgrader(isTLS bool) *Upgrader {
+	u := &Upgrader{opcode: -1}
+	if isTLS {
+		u.Malloc = nativeAllocator.Malloc
+		u.Realloc = nativeAllocator.Realloc
+		u.Free = nativeAllocator.Free
+	} else {
+		u.Malloc = mempool.Malloc
+		u.Realloc = mempool.Realloc
+		u.Free = mempool.Free
+	}
+	return u
 }
 
 // Upgrade .
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
+	if u.Malloc == nil {
+		u.Malloc = nativeAllocator.Malloc
+	}
+	if u.Realloc == nil {
+		u.Realloc = nativeAllocator.Realloc
+	}
+	if u.Free == nil {
+		u.Free = nativeAllocator.Free
+	}
 	const badHandshake = "websocket: the client is not using the websocket protocol: "
 
 	if !headerContains(r.Header, "Connection", "upgrade") {
@@ -125,7 +155,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(conn, false, subprotocol)
+	wsc := newConn(conn, false, subprotocol)
+	wsc.malloc = u.Malloc
+	wsc.free = u.Free
+	u.conn = wsc
 	return u.conn, nil
 }
 
@@ -137,7 +170,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	if l > 0 {
-		u.buffer = mempool.Realloc(u.buffer, l+len(data))
+		u.buffer = u.Realloc(u.buffer, l+len(data))
 		copy(u.buffer[l:], data)
 	} else {
 		u.buffer = data
@@ -182,14 +215,14 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		if l > 0 {
 			var tmp []byte
 			if l < 2048 {
-				tmp = mempool.Malloc(2048)[:l]
+				tmp = u.Malloc(2048)[:l]
 			} else {
-				tmp = mempool.Malloc(l)
+				tmp = u.Malloc(l)
 			}
 			copy(tmp, u.buffer)
 			u.buffer = tmp
 		}
-		mempool.Free(buffer)
+		u.Free(buffer)
 	}
 
 	return nil
@@ -204,7 +237,7 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 
 func (u *Upgrader) handleMessage() {
 	u.conn.handleMessage(u.opcode, u.message)
-	// mempool.Free(u.message)
+	// u.Free(u.message)
 	u.message = nil
 	u.opcode = 0
 }
@@ -283,12 +316,6 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 		return responseHeader.Get("Sec-Websocket-Protocol")
 	}
 	return ""
-}
-
-func NewUpgrader() *Upgrader {
-	return &Upgrader{
-		opcode: -1,
-	}
 }
 
 func subprotocols(r *http.Request) []string {

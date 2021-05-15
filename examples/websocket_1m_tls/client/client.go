@@ -45,7 +45,7 @@ func main() {
 }
 
 func loop(addr string, connNum int) {
-	u := url.URL{Scheme: "wss", Host: addr, Path: "/ws"}
+	u := url.URL{Scheme: "wss", Host: addr, Path: "/wss"}
 	addr = u.String()
 	conns := make([]*websocket.Conn, connNum)
 	dialer := websocket.DefaultDialer
