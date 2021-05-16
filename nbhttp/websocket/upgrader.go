@@ -13,7 +13,6 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -37,22 +36,11 @@ type Upgrader struct {
 	buffer  []byte
 	message []byte
 
-	Malloc  func(size int) []byte
-	Realloc func(buf []byte, size int) []byte
-	Free    func(buf []byte) error
+	Server *nbhttp.Server
 }
 
 // Upgrade .
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
-	if u.Malloc == nil {
-		u.Malloc = nativeAllocator.Malloc
-	}
-	if u.Realloc == nil {
-		u.Realloc = nativeAllocator.Realloc
-	}
-	if u.Free == nil {
-		u.Free = nativeAllocator.Free
-	}
 	const badHandshake = "websocket: the client is not using the websocket protocol: "
 
 	if !headerContains(r.Header, "Connection", "upgrade") {
@@ -138,10 +126,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	wsc := newConn(conn, false, subprotocol)
-	wsc.malloc = u.Malloc
-	wsc.free = u.Free
-	u.conn = wsc
+	u.conn = newConn(conn, false, subprotocol)
+	u.Server = parser.Server
+	u.conn.Server = parser.Server
 	return u.conn, nil
 }
 
@@ -153,7 +140,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	if bufLen > 0 {
-		u.buffer = u.Realloc(u.buffer, bufLen+len(data))
+		u.buffer = u.Server.Realloc(u.buffer, bufLen+len(data))
 		copy(u.buffer[bufLen:], data)
 	} else {
 		u.buffer = data
@@ -200,14 +187,14 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		if bufLen > 0 {
 			var newBuf []byte
 			if bufLen < 1024 {
-				newBuf = u.Malloc(1024)[:bufLen]
+				newBuf = u.Server.Malloc(1024)[:bufLen]
 			} else {
-				newBuf = u.Malloc(bufLen)
+				newBuf = u.Server.Malloc(bufLen)
 			}
 			copy(newBuf, u.buffer)
 			u.buffer = newBuf
 		}
-		u.Free(buffer)
+		u.Server.Free(buffer)
 	}
 
 	return nil
@@ -301,21 +288,9 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 	return ""
 }
 
-var nativeAllocator = &mempool.NativeAllocator{}
-
 // NewUpgrader .
 func NewUpgrader(isTLS bool) *Upgrader {
-	u := &Upgrader{
-		Malloc:  mempool.Malloc,
-		Realloc: mempool.Realloc,
-		Free:    mempool.Free,
-	}
-	if isTLS {
-		u.Malloc = nativeAllocator.Malloc
-		u.Realloc = nativeAllocator.Realloc
-		u.Free = nativeAllocator.Free
-	}
-	return u
+	return &Upgrader{}
 }
 
 func subprotocols(r *http.Request) []string {

@@ -114,6 +114,10 @@ type Server struct {
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
+
+	Malloc  func(size int) []byte
+	Realloc func(buf []byte, size int) []byte
+	Free    func(buf []byte) error
 }
 
 // OnOpen registers callback for new connection
@@ -221,6 +225,10 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
+
+		Malloc:  mempool.Malloc,
+		Realloc: mempool.Realloc,
+		Free:    mempool.Free,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -235,6 +243,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		svr._onOpen(c)
 		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
@@ -365,6 +374,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	g := nbio.NewGopher(gopherConf)
 
+	nativeAllocator := &mempool.NativeAllocator{}
 	svr := &Server{
 		Gopher:                 g,
 		_onOpen:                func(c *nbio.Conn) {},
@@ -374,6 +384,10 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
+
+		Malloc:  nativeAllocator.Malloc,
+		Realloc: nativeAllocator.Realloc,
+		Free:    nativeAllocator.Free,
 	}
 
 	isClient := false
@@ -391,6 +405,8 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+		parser.Server = svr
+		parser.TLSBuffer = make([]byte, conf.MinBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
@@ -418,7 +434,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			tlsConn.Append(data)
 			svr.ParserExecutor(c.Hash(), func() {
 				for {
-					buffer := mempool.Malloc(2048)
+					buffer := parser.TLSBuffer
 					n, err := tlsConn.Read(buffer)
 					if err != nil {
 						c.CloseWithError(err)

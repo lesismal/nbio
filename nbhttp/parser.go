@@ -11,8 +11,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 // Parser .
@@ -46,6 +44,9 @@ type Parser struct {
 	Processor Processor
 
 	Upgrader Upgrader
+
+	TLSBuffer []byte
+	Server    *Server
 }
 
 func (p *Parser) nextState(state int8) {
@@ -63,7 +64,7 @@ func (p *Parser) onClose(err error) {
 	}
 	runtime.SetFinalizer(p, func(p *Parser) {
 		if p.cache != nil {
-			mempool.Free(p.cache)
+			p.Server.Free(p.cache)
 		}
 	})
 }
@@ -81,9 +82,9 @@ func (p *Parser) Read(data []byte) error {
 		if offset+len(data) > p.readLimit {
 			return ErrTooLong
 		}
-		p.cache = mempool.Realloc(p.cache, offset+len(data))
+		p.cache = p.Server.Realloc(p.cache, offset+len(data))
 		copy(p.cache[offset:], data)
-		mempool.Free(data)
+		p.Server.Free(data)
 		data = p.cache
 		p.cache = nil
 	}
@@ -92,17 +93,19 @@ UPGRADER:
 	if p.Upgrader != nil {
 		udata := data
 		if start > 0 {
-			udata = mempool.Malloc(len(data) - start)
+			udata = p.Server.Malloc(len(data) - start)
 			copy(udata, data[start:])
 		}
 		return p.Upgrader.Read(p, udata)
 	}
 
-	defer func() {
-		if data != nil {
-			mempool.Free(data)
-		}
-	}()
+	if p.TLSBuffer == nil {
+		defer func() {
+			if data != nil {
+				p.Server.Free(data)
+			}
+		}()
+	}
 
 	for i := offset; i < len(data); i++ {
 		if p.Upgrader != nil {
@@ -410,14 +413,15 @@ UPGRADER:
 				start += cl
 				i = start - 1
 			} else {
-				if start == 0 {
-					p.cache = data
-					data = nil
-					return nil
-				}
-				p.cache = mempool.Malloc(cl)[:left]
-				copy(p.cache, data[start:])
-				return nil
+				// if start == 0 {
+				// 	p.cache = data
+				// 	data = nil
+				// 	return nil
+				// }
+				// p.cache = p.Server.Malloc(cl)[:left]
+				// copy(p.cache, data[start:])
+				// return nil
+				goto Exit
 			}
 		case stateBodyChunkSizeBefore:
 			if isHex(c) {
@@ -498,18 +502,19 @@ UPGRADER:
 				p.nextState(stateBodyChunkDataCR)
 				return nil
 			} else {
-				if start == 0 {
-					p.cache = data
-					data = nil
-					return nil
-				}
-				if cl < p.minBufferSize {
-					p.cache = mempool.Malloc(p.minBufferSize)[:left]
-				} else {
-					p.cache = mempool.Malloc(cl)[:left]
-				}
-				copy(p.cache, data[start:])
-				return nil
+				// if start == 0 {
+				// 	p.cache = data
+				// 	data = nil
+				// 	return nil
+				// }
+				// if cl < p.minBufferSize {
+				// 	p.cache = p.Server.Malloc(p.minBufferSize)[:left]
+				// } else {
+				// 	p.cache = p.Server.Malloc(cl)[:left]
+				// }
+				// copy(p.cache, data[start:])
+				// return nil
+				goto Exit
 			}
 		case stateBodyChunkDataCR:
 			if c == '\r' {
@@ -626,6 +631,7 @@ UPGRADER:
 		}
 	}
 
+Exit:
 	left := len(data) - start
 	if left > 0 {
 		if start == 0 && offset > 0 {
@@ -633,9 +639,9 @@ UPGRADER:
 			data = nil
 		} else {
 			if left < p.minBufferSize {
-				p.cache = mempool.Malloc(p.minBufferSize)[:left]
+				p.cache = p.Server.Malloc(p.minBufferSize)[:left]
 			} else {
-				p.cache = mempool.Malloc(left)
+				p.cache = p.Server.Malloc(left)
 			}
 			copy(p.cache, data[start:])
 		}
