@@ -459,10 +459,10 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 		}
 	})
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
-	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
+	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+		return mempool.Malloc(int(conf.ReadBufferSize))
+	})
+	g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 	// 	mempool.Free(buffer)
 	// })
