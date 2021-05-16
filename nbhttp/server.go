@@ -374,7 +374,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	g := nbio.NewGopher(gopherConf)
 
-	nativeAllocator := &mempool.NativeAllocator{}
+	// nativeAllocator := &mempool.NativeAllocator{}
 	svr := &Server{
 		Gopher:                 g,
 		_onOpen:                func(c *nbio.Conn) {},
@@ -385,9 +385,12 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
 
-		Malloc:  nativeAllocator.Malloc,
-		Realloc: nativeAllocator.Realloc,
-		Free:    nativeAllocator.Free,
+		// Malloc:  nativeAllocator.Malloc,
+		// Realloc: nativeAllocator.Realloc,
+		// Free:    nativeAllocator.Free,
+		Malloc:  mempool.Malloc,
+		Realloc: mempool.Realloc,
+		Free:    mempool.Free,
 	}
 
 	isClient := false

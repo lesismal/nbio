@@ -26,13 +26,10 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		svr.MessageHandlerExecutor(func() {
-			// echo
-			c.WriteMessage(messageType, data)
-			fmt.Println("OnMessage:", messageType, string(data))
-
-			c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
-		})
+		// echo
+		c.WriteMessage(messageType, data)
+		fmt.Println("OnMessage:", messageType, string(data))
+		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)

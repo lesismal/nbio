@@ -156,12 +156,10 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if bl > 0 {
 				ml := len(u.message)
 				if ml == 0 {
-					u.message = make([]byte, bl)
+					u.message = u.Server.Malloc(bl)
 				} else {
 					rl := ml + len(body)
-					buf := make([]byte, rl)
-					copy(buf, u.message)
-					u.message = buf
+					u.message = u.Server.Realloc(u.message, rl)
 				}
 				copy(u.message[ml:], body)
 
@@ -248,7 +246,7 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 			}
 			total := headLen + bodyLen
 			if l >= total {
-				body = append([]byte{}, u.buffer[headLen:total]...)
+				body = u.buffer[headLen:total]
 				if masked {
 					mask := u.buffer[headLen-4 : headLen]
 					for i := 0; i < len(body); i++ {

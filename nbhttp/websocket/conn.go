@@ -80,7 +80,12 @@ func (c *Conn) SetPongHandler(h func(*Conn, string)) {
 
 func (c *Conn) OnMessage(h func(*Conn, int8, []byte)) {
 	if h != nil {
-		c.messageHandler = h
+		c.messageHandler = func(c *Conn, messageType int8, data []byte) {
+			c.Server.MessageHandlerExecutor(func() {
+				h(c, messageType, data)
+				c.Server.Free(data)
+			})
+		}
 	}
 }
 
