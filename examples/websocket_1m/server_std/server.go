@@ -44,7 +44,7 @@ func serve(addrs []string) {
 	for _, v := range addrs {
 		go func(addr string) {
 			mux := &http.ServeMux{}
-			mux.HandleFunc("/wss", echo)
+			mux.HandleFunc("/ws", echo)
 			server := http.Server{
 				Addr:    addr,
 				Handler: mux,
