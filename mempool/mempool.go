@@ -165,6 +165,6 @@ func New(maxSize int) *MemPool {
 
 func State() (int64, int64, int64, int64, string) {
 	n1, n2, n3, n4 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
-	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleak times : %v\nleak size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
+	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
 	return n1, n2, n3, n4, s
 }
