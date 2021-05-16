@@ -5,7 +5,17 @@
 package mempool
 
 import (
+	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
+)
+
+var (
+	mallocCnt     int64
+	mallocCntSize int64
+	freeCnt       int64
+	freeCntSize   int64
 )
 
 var defaultMemPool = New(1024 * 1024 * 1024)
@@ -49,18 +59,36 @@ func (pool *MemPool) init(maxSize int) {
 	}
 }
 
+func printStack(s, c int) {
+	// i := 2
+	// str := ""
+	// for ; i < 5; i++ {
+	// 	pc, file, line, ok := runtime.Caller(i)
+	// 	if !ok {
+	// 		break
+	// 	}
+	// 	str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+	// }
+	// println("size:", s, "cap:", c)
+	// println(str)
+}
+
 // Malloc borrows []byte from pool
 func (pool *MemPool) Malloc(size int) []byte {
-	return make([]byte, size)
-	// if size <= 0 || size > pool.maxSize {
-	// 	return nil
-	// }
-	// allocSize := size
-	// if size < 64 {
-	// 	allocSize = 64
-	// }
-	// buf := pool.buffers[pool.maxBits(allocSize)].Get().([]byte)[:size]
-	// return buf
+	if size <= 0 || size > pool.maxSize {
+		return nil
+	}
+	allocSize := size
+	if size < 64 {
+		allocSize = 64
+	}
+	buf := pool.buffers[pool.maxBits(allocSize)].Get().([]byte)[:size]
+	atomic.AddInt64(&mallocCnt, 1)
+	atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
+	// fmt.Println("+++ Malloc:", cap(buf))
+	printStack(size, cap(buf))
+
+	return buf
 }
 
 // Realloc returns the buf passed in if it's size <= cap
@@ -69,8 +97,7 @@ func (pool *MemPool) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
 	}
-	// newBuf := pool.Malloc(size)
-	newBuf := make([]byte, size)
+	newBuf := pool.Malloc(size)
 	copy(newBuf, buf)
 	pool.Free(buf)
 	return newBuf
@@ -78,13 +105,17 @@ func (pool *MemPool) Realloc(buf []byte, size int) []byte {
 
 // Free payback []byte to pool
 func (pool *MemPool) Free(buf []byte) error {
+	bits := pool.maxBits(cap(buf))
+	if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
+		return errors.New("MemPool Put() incorrect buffer size")
+	}
+	printStack(len(buf), cap(buf))
+	atomic.AddInt64(&freeCnt, 1)
+	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
+	pool.buffers[bits].Put(buf)
+	// fmt.Println("--- Free:", cap(buf))
+	// debug.PrintStack()
 	return nil
-	// bits := pool.maxBits(cap(buf))
-	// if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
-	// 	return errors.New("MemPool Put() incorrect buffer size")
-	// }
-	// pool.buffers[bits].Put(buf)
-	// return nil
 }
 
 // Malloc exports default package method
@@ -102,9 +133,38 @@ func Free(buf []byte) error {
 	return defaultMemPool.Free(buf)
 }
 
+// NativeAllocator definition
+type NativeAllocator struct{}
+
+// MallocMallocNative exports default package method
+func (a *NativeAllocator) Malloc(size int) []byte {
+	return make([]byte, size)
+}
+
+// (a*NativeAllocator) Realloc exports default package method
+func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
+	if size <= cap(buf) {
+		return buf[:size]
+	}
+	newBuf := make([]byte, size)
+	copy(newBuf, buf)
+	return newBuf
+}
+
+// (a*NativeAllocator) Free exports default package method
+func (a *NativeAllocator) Free(buf []byte) error {
+	return nil
+}
+
 // New factory
 func New(maxSize int) *MemPool {
 	pool := &MemPool{}
 	pool.init(maxSize)
 	return pool
+}
+
+func State() (int64, int64, int64, int64, string) {
+	n1, n2, n3, n4 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
+	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
+	return n1, n2, n3, n4, s
 }

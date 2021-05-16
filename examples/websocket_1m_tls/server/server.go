@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
@@ -21,18 +22,17 @@ var (
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := &websocket.Upgrader{}
+	isTLS := true
+	upgrader := websocket.NewUpgrader(isTLS)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		svr.MessageHandlerExecutor(func() {
-			c.SetReadDeadline(time.Now().Add(time.Second * 60))
-			c.WriteMessage(messageType, data)
-			atomic.AddUint64(&qps, 1)
-		})
+		c.SetReadDeadline(time.Now().Add(time.Second * 60))
+		c.WriteMessage(messageType, data)
+		atomic.AddUint64(&qps, 1)
 	})
 }
 
@@ -48,13 +48,16 @@ func main() {
 	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/ws", onWebsocket)
+	mux.HandleFunc("/wss", onWebsocket)
 
+	// to improve performance if you need
+	// pool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   addrs,
 		MaxLoad: 1000000,
 	}, mux, nil, tlsConfig)
+	// svr.ParserExecutor = pool.GoByIndex
 
 	err = svr.Start()
 	if err != nil {
@@ -68,7 +71,8 @@ func main() {
 		<-ticker.C
 		n := atomic.SwapUint64(&qps, 0)
 		total += n
-		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
+		_, _, _, _, s := mempool.State()
+		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n--------------------------------\n%v\n", i, runtime.NumGoroutine(), n, total, s)
 	}
 }
 

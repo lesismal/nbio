@@ -5,7 +5,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/lesismal/nbio/mempool"
+	"github.com/lesismal/nbio/nbhttp"
 )
 
 const (
@@ -36,6 +36,7 @@ type Conn struct {
 	closeHandler   func(c *Conn, code int, text string)
 
 	onClose func(c *Conn, err error)
+	Server  *nbhttp.Server
 }
 
 func (c *Conn) handleMessage(opcode int8, data []byte) {
@@ -79,7 +80,12 @@ func (c *Conn) SetPongHandler(h func(*Conn, string)) {
 
 func (c *Conn) OnMessage(h func(*Conn, int8, []byte)) {
 	if h != nil {
-		c.messageHandler = h
+		c.messageHandler = func(c *Conn, messageType int8, data []byte) {
+			c.Server.MessageHandlerExecutor(func() {
+				h(c, messageType, data)
+				c.Server.Free(data)
+			})
+		}
 	}
 }
 
@@ -125,15 +131,15 @@ func (c *Conn) writeMessage(messageType int8, fin bool, data []byte) error {
 		offset  = 2
 	)
 	if bodyLen < 126 {
-		buf = mempool.Malloc(len(data) + 2)
+		buf = c.Server.Malloc(len(data) + 2)
 		buf[1] = byte(bodyLen)
 	} else if bodyLen < 65535 {
-		buf = mempool.Malloc(len(data) + 4)
+		buf = c.Server.Malloc(len(data) + 4)
 		buf[1] = 126
 		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
 		offset = 4
 	} else {
-		buf = mempool.Malloc(len(data) + 10)
+		buf = c.Server.Malloc(len(data) + 10)
 		buf[1] = 127
 		binary.BigEndian.PutUint64(buf[2:10], uint64(bodyLen))
 		offset = 10
@@ -172,11 +178,11 @@ func newConn(c net.Conn, compress bool, subprotocol string) *Conn {
 		if len(text)+2 > maxControlFramePayloadSize {
 			return //ErrInvalidControlFrame
 		}
-		buf := mempool.Malloc(len(text) + 2)
+		buf := c.Server.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
 		conn.WriteMessage(CloseMessage, buf)
-		mempool.Free(buf)
+		c.Server.Free(buf)
 	}
 	return conn
 }

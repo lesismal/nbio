@@ -2,62 +2,65 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"runtime"
 	"sync/atomic"
 	"time"
 
-	"github.com/lesismal/nbio/mempool"
-	"github.com/lesismal/nbio/nbhttp"
-	"github.com/lesismal/nbio/nbhttp/websocket"
+	"github.com/gorilla/websocket"
 )
 
 var (
 	qps   uint64 = 0
 	total uint64 = 0
 
-	svr *nbhttp.Server
+	upgrader = websocket.Upgrader{}
 )
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	isTLS := false
-	upgrader := websocket.NewUpgrader(isTLS)
-	conn, err := upgrader.Upgrade(w, r, nil)
+func echo(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		c.SetReadDeadline(time.Now().Add(time.Second * 60))
-		c.WriteMessage(messageType, data)
-		atomic.AddUint64(&qps, 1)
-	})
-}
-
-func main() {
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/ws", onWebsocket)
-
-	svr = nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   addrs,
-		MaxLoad: 1000000,
-	}, mux, nil)
-
-	err := svr.Start()
-	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
+		log.Print("upgrade:", err)
 		return
 	}
-	defer svr.Stop()
+	defer c.Close()
+	for {
+		mt, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			break
+		}
+		err = c.WriteMessage(mt, message)
+		if err != nil {
+			log.Println("write:", err)
+			break
+		}
+		atomic.AddUint64(&qps, 1)
+	}
+}
 
+func serve(addrs []string) {
+	for _, v := range addrs {
+		go func(addr string) {
+			mux := &http.ServeMux{}
+			mux.HandleFunc("/ws", echo)
+			server := http.Server{
+				Addr:    addr,
+				Handler: mux,
+			}
+			fmt.Println("server exit:", server.ListenAndServe())
+		}(v)
+	}
+}
+func main() {
+	serve(addrs)
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {
 		<-ticker.C
 		n := atomic.SwapUint64(&qps, 0)
 		total += n
-		_, _, _, _, s := mempool.State()
-		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n--------------------------------\n%v\n", i, runtime.NumGoroutine(), n, total, s)
+		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
 	}
 }
 

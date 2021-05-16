@@ -17,20 +17,18 @@ var (
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := &websocket.Upgrader{}
+	isTLS := false
+	upgrader := websocket.NewUpgrader(isTLS)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		svr.MessageHandlerExecutor(func() {
-			c.SetReadDeadline(time.Now().Add(time.Second * 60))
-
-			// echo
-			c.WriteMessage(messageType, data)
-			fmt.Println("OnMessage:", messageType, string(data))
-		})
+		// echo
+		c.WriteMessage(messageType, data)
+		fmt.Println("OnMessage:", messageType, string(data))
+		c.SetReadDeadline(time.Now().Add(time.Second * 60))
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)

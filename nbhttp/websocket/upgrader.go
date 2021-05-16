@@ -13,7 +13,6 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -36,6 +35,8 @@ type Upgrader struct {
 	opcode  int8
 	buffer  []byte
 	message []byte
+
+	Server *nbhttp.Server
 }
 
 // Upgrade .
@@ -126,37 +127,39 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	u.conn = newConn(conn, false, subprotocol)
+	u.Server = parser.Server
+	u.conn.Server = parser.Server
 	return u.conn, nil
 }
 
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
-	l := len(u.buffer)
-	if u.ReadLimit > 0 && (int64(l+len(data)) > u.ReadLimit || int64(l+len(u.message)) > u.ReadLimit) {
+	bufLen := len(u.buffer)
+	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
 		return nbhttp.ErrTooLong
 	}
 
-	if l > 0 {
-		u.buffer = mempool.Realloc(u.buffer, l+len(data))
-		copy(u.buffer[l:], data)
+	if bufLen > 0 {
+		u.buffer = u.Server.Realloc(u.buffer, bufLen+len(data))
+		copy(u.buffer[bufLen:], data)
 	} else {
 		u.buffer = data
 	}
 
 	buffer := u.buffer
-	for {
+	consumed := false
+	for i := 0; true; i++ {
 		opcode, body, ok, fin := u.nextFrame()
 		if ok {
+			consumed = true
 			bl := len(body)
 			if bl > 0 {
 				ml := len(u.message)
 				if ml == 0 {
-					u.message = make([]byte, bl)
+					u.message = u.Server.Malloc(bl)
 				} else {
 					rl := ml + len(body)
-					buf := make([]byte, rl)
-					copy(buf, u.message)
-					u.message = buf
+					u.message = u.Server.Realloc(u.message, rl)
 				}
 				copy(u.message[ml:], body)
 
@@ -177,19 +180,19 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		}
 	}
 
-	l = len(u.buffer)
-	if l != len(buffer) {
-		if l > 0 {
-			var tmp []byte
-			if l < 2048 {
-				tmp = mempool.Malloc(2048)[:l]
+	if consumed && bufLen == 0 {
+		bufLen = len(u.buffer)
+		if bufLen > 0 {
+			var newBuf []byte
+			if bufLen < 1024 {
+				newBuf = u.Server.Malloc(1024)[:bufLen]
 			} else {
-				tmp = mempool.Malloc(l)
+				newBuf = u.Server.Malloc(bufLen)
 			}
-			copy(tmp, u.buffer)
-			u.buffer = tmp
+			copy(newBuf, u.buffer)
+			u.buffer = newBuf
 		}
-		mempool.Free(buffer)
+		u.Server.Free(buffer)
 	}
 
 	return nil
@@ -204,7 +207,7 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 
 func (u *Upgrader) handleMessage() {
 	u.conn.handleMessage(u.opcode, u.message)
-	// mempool.Free(u.message)
+	// u.Free(u.message)
 	u.message = nil
 	u.opcode = 0
 }
@@ -249,13 +252,11 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 					for i := 0; i < len(body); i++ {
 						body[i] ^= mask[i%4]
 					}
-				} else {
-
 				}
 				opcode = int8(u.buffer[0] & 0xF)
 				ok = true
 				fin = ((u.buffer[0] & 0x80) != 0)
-				u.buffer = u.buffer[total:]
+				u.buffer = u.buffer[total:l]
 			}
 		}
 	}
@@ -285,10 +286,9 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 	return ""
 }
 
-func NewUpgrader() *Upgrader {
-	return &Upgrader{
-		opcode: -1,
-	}
+// NewUpgrader .
+func NewUpgrader(isTLS bool) *Upgrader {
+	return &Upgrader{}
 }
 
 func subprotocols(r *http.Request) []string {

@@ -215,7 +215,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = NewBodyReader(nil)
 	}
 
-	res := NewResponse(p, request, p.enableSendfile)
+	res := NewResponse(p.parser, request, p.enableSendfile)
 
 	if !p.isUpgrade {
 		var executing bool

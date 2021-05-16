@@ -27,7 +27,7 @@ func main() {
 	}
 	waitGroup := sync.WaitGroup{}
 
-	waitGroup.Add(10)
+	waitGroup.Add(100)
 	for i := 0; i < 100; i++ {
 		go func() {
 			defer waitGroup.Done()

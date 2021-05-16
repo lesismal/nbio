@@ -2,55 +2,59 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"runtime"
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/lesismal/nbio/mempool"
-	"github.com/lesismal/nbio/nbhttp"
-	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
 var (
 	qps   uint64 = 0
 	total uint64 = 0
 
-	svr *nbhttp.Server
+	upgrader = websocket.Upgrader{}
 )
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	isTLS := false
-	upgrader := websocket.NewUpgrader(isTLS)
-	conn, err := upgrader.Upgrade(w, r, nil)
+func echo(w http.ResponseWriter, r *http.Request) {
+	c, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		c.SetReadDeadline(time.Now().Add(time.Second * 60))
-		c.WriteMessage(messageType, data)
-		atomic.AddUint64(&qps, 1)
-	})
-}
-
-func main() {
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/ws", onWebsocket)
-
-	svr = nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   addrs,
-		MaxLoad: 1000000,
-	}, mux, nil)
-
-	err := svr.Start()
-	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
+		log.Print("upgrade:", err)
 		return
 	}
-	defer svr.Stop()
+	defer c.Close()
+	for {
+		mt, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			break
+		}
+		err = c.WriteMessage(mt, message)
+		if err != nil {
+			log.Println("write:", err)
+			break
+		}
+	}
+}
 
+func serve(addrs []string) {
+	for _, v := range addrs {
+		go func(addr string) {
+			mux := &http.ServeMux{}
+			mux.HandleFunc("/wss", echo)
+			server := http.Server{
+				Addr:    addr,
+				Handler: mux,
+			}
+			server.ListenAndServeTLS("server.crt", "server.key")
+		}(v)
+	}
+}
+func main() {
+	serve(addrs)
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {
 		<-ticker.C

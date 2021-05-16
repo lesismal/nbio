@@ -12,8 +12,6 @@ import (
 	"os"
 	"sync"
 	"time"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -32,7 +30,7 @@ var (
 
 // Response represents the server side of an HTTP response.
 type Response struct {
-	processor Processor
+	parser *Parser
 
 	request *http.Request // request for this response
 
@@ -55,10 +53,10 @@ type Response struct {
 
 // Hijack .
 func (res *Response) Hijack() (net.Conn, error) {
-	if res.processor == nil {
+	if res.parser.Processor == nil {
 		return nil, errors.New("nil Proccessor")
 	}
-	return res.processor.Conn(), nil
+	return res.parser.Processor.Conn(), nil
 }
 
 // Header .
@@ -82,10 +80,13 @@ const maxPacketSize = 32768
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
 	l := len(data)
-	conn := res.processor.Conn()
+	conn := res.parser.Processor.Conn()
 	if l == 0 || conn == nil {
 		return 0, nil
 	}
+
+	malloc := res.parser.Server.Malloc
+	realloc := res.parser.Server.Realloc
 
 	res.hasBody = true
 
@@ -100,9 +101,9 @@ func (res *Response) Write(data []byte) (int, error) {
 		size := hl + len(lenStr) + l + 4
 		if size < maxPacketSize {
 			if buf == nil {
-				buf = mempool.Malloc(size)
+				buf = malloc(size)
 			} else {
-				buf = mempool.Realloc(buf, size)
+				buf = realloc(buf, size)
 			}
 			copy(buf[hl:], lenStr)
 			hl += len(lenStr)
@@ -119,7 +120,7 @@ func (res *Response) Write(data []byte) (int, error) {
 			return 0, err
 		}
 		size -= hl
-		buf = mempool.Malloc(size)
+		buf = malloc(size)
 		copy(buf, lenStr)
 		copy(buf[len(lenStr):], "\r\n")
 		hl = len(lenStr) + 2
@@ -147,17 +148,17 @@ func (res *Response) Write(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		buf = mempool.Malloc(l)
+		buf = malloc(l)
 		hl = 0
 	} else {
-		buf = mempool.Realloc(buf, hl+l)
+		buf = realloc(buf, hl+l)
 	}
 	copy(buf[hl:], data)
 	return conn.Write(buf)
 }
 
 func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
-	c := res.processor.Conn()
+	c := res.parser.Processor.Conn()
 	if c == nil {
 		return 0, nil
 	}
@@ -230,6 +231,9 @@ func (res *Response) eoncodeHead() {
 		return
 	}
 
+	malloc := res.parser.Server.Malloc
+	realloc := res.parser.Server.Realloc
+
 	res.headEncoded = true
 
 	res.checkChunked()
@@ -237,7 +241,7 @@ func (res *Response) eoncodeHead() {
 	status := res.status
 	statusCode := res.statusCode
 
-	data := mempool.Malloc(4096)
+	data := malloc(4096)
 
 	proto := res.request.Proto
 	i := 0
@@ -311,7 +315,7 @@ func (res *Response) eoncodeHead() {
 		if _, ok := res.trailer[k]; !ok {
 			for _, v := range vv {
 				// v := strings.Join(vv, ",")
-				data = mempool.Realloc(data, i+len(k)+len(v)+4)
+				data = realloc(data, i+len(k)+len(v)+4)
 				copy(data[i:], k)
 				i += len(k)
 				data[i] = ':'
@@ -332,7 +336,7 @@ func (res *Response) eoncodeHead() {
 		}
 	}
 
-	data = mempool.Realloc(data, i+2)
+	data = realloc(data, i+2)
 	copy(data[i:], "\r\n")
 
 	res.buffer = data
@@ -350,13 +354,16 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 		return err
 	}
 
+	malloc := res.parser.Server.Malloc
+	realloc := res.parser.Server.Realloc
+
 	data := res.buffer
 	res.buffer = nil
 	i := len(data)
 	if data == nil {
-		data = mempool.Malloc(res.trailerSize + 5)
+		data = malloc(res.trailerSize + 5)
 	} else {
-		data = mempool.Realloc(data, len(data)+res.trailerSize+5)
+		data = realloc(data, len(data)+res.trailerSize+5)
 	}
 	if len(res.trailer) == 0 {
 		copy(data[i:], "0\r\n\r\n")
@@ -377,7 +384,7 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 			data[i] = '\n'
 			i++
 		}
-		data = mempool.Realloc(data, i+2)
+		data = realloc(data, i+2)
 		copy(data[i:], "\r\n")
 	}
 	_, err = conn.Write(data)
@@ -405,9 +412,9 @@ func (res *Response) formatInt(n int, base int) string {
 }
 
 // NewResponse .
-func NewResponse(processor Processor, request *http.Request, enableSendfile bool) *Response {
+func NewResponse(parser *Parser, request *http.Request, enableSendfile bool) *Response {
 	res := responsePool.Get().(*Response)
-	res.processor = processor
+	res.parser = parser
 	res.request = request
 	res.header = http.Header{"Server": []string{"nbio"}}
 	res.enableSendfile = enableSendfile

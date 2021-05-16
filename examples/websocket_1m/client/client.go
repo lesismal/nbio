@@ -39,7 +39,7 @@ func main() {
 		nFailed := atomic.SwapUint64(&failed, 0)
 		totalSuccess += nSuccess
 		totalFailed += nFailed
-		fmt.Printf("running for %v seconds, online: %v, NumGoroutine: %v, success: %v, totalSuccess: %v, failed: %v, totalFailed: %v\n", i, connected, runtime.NumGoroutine(), nSuccess, totalSuccess, failed, totalFailed)
+		fmt.Printf("running for %v seconds, online: %v, NumGoroutine: %v, success: %v, totalSuccess: %v, failed: %v, totalFailed: %v\n", i, connected, runtime.NumGoroutine(), nSuccess, totalSuccess, nFailed, totalFailed)
 	}
 }
 
@@ -61,6 +61,7 @@ func loop(addr string, connNum int) {
 	for {
 		for i := 0; i < connNum; i++ {
 			echo(conns[i])
+			// return
 		}
 	}
 }
@@ -69,17 +70,20 @@ func echo(c *websocket.Conn) {
 	text := "hello world"
 	err := c.WriteMessage(websocket.TextMessage, []byte(text))
 	if err != nil {
+		fmt.Println("WriteMessage failed 111:", err)
 		atomic.AddUint64(&failed, 1)
 		return
 	}
 
 	_, message, err := c.ReadMessage()
 	if err != nil {
+		fmt.Println("ReadMessage failed 222:", err)
 		atomic.AddUint64(&failed, 1)
 		return
 	}
 
 	if string(message) != text {
+		fmt.Println("ReadMessage failed 333:", string(message))
 		atomic.AddUint64(&failed, 1)
 	} else {
 		atomic.AddUint64(&success, 1)
