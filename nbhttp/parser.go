@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/textproto"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -60,9 +61,11 @@ func (p *Parser) onClose(err error) {
 	if p.Upgrader != nil {
 		p.Upgrader.Close(p, err)
 	}
-	if p.cache != nil {
-		mempool.Free(p.cache)
-	}
+	runtime.SetFinalizer(p, func(p *Parser) {
+		if p.cache != nil {
+			mempool.Free(p.cache)
+		}
+	})
 }
 
 // Read .
@@ -84,11 +87,6 @@ func (p *Parser) Read(data []byte) error {
 		data = p.cache
 		p.cache = nil
 	}
-	defer func() {
-		if data != nil {
-			mempool.Free(data)
-		}
-	}()
 
 UPGRADER:
 	if p.Upgrader != nil {
@@ -99,6 +97,12 @@ UPGRADER:
 		}
 		return p.Upgrader.Read(p, udata)
 	}
+
+	defer func() {
+		if data != nil {
+			mempool.Free(data)
+		}
+	}()
 
 	for i := offset; i < len(data); i++ {
 		if p.Upgrader != nil {

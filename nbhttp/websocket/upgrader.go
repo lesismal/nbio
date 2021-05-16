@@ -42,23 +42,6 @@ type Upgrader struct {
 	Free    func(buf []byte) error
 }
 
-var nativeAllocator = &mempool.NativeAllocator{}
-
-// NewUpgrader .
-func NewUpgrader(isTLS bool) *Upgrader {
-	u := &Upgrader{
-		Malloc:  mempool.Malloc,
-		Realloc: mempool.Realloc,
-		Free:    mempool.Free,
-	}
-	// if isTLS {
-	u.Malloc = nativeAllocator.Malloc
-	u.Realloc = nativeAllocator.Realloc
-	u.Free = nativeAllocator.Free
-	// }
-	return u
-}
-
 // Upgrade .
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
 	if u.Malloc == nil {
@@ -164,22 +147,24 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
-	l := len(u.buffer)
-	if u.ReadLimit > 0 && (int64(l+len(data)) > u.ReadLimit || int64(l+len(u.message)) > u.ReadLimit) {
+	bufLen := len(u.buffer)
+	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
 		return nbhttp.ErrTooLong
 	}
 
-	if l > 0 {
-		u.buffer = u.Realloc(u.buffer, l+len(data))
-		copy(u.buffer[l:], data)
+	if bufLen > 0 {
+		u.buffer = u.Realloc(u.buffer, bufLen+len(data))
+		copy(u.buffer[bufLen:], data)
 	} else {
 		u.buffer = data
 	}
 
 	buffer := u.buffer
-	for {
+	consumed := false
+	for i := 0; true; i++ {
 		opcode, body, ok, fin := u.nextFrame()
 		if ok {
+			consumed = true
 			bl := len(body)
 			if bl > 0 {
 				ml := len(u.message)
@@ -210,17 +195,17 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		}
 	}
 
-	l = len(u.buffer)
-	if l != len(buffer) {
-		if l > 0 {
-			var tmp []byte
-			if l < 2048 {
-				tmp = u.Malloc(2048)[:l]
+	if consumed && bufLen == 0 {
+		bufLen = len(u.buffer)
+		if bufLen > 0 {
+			var newBuf []byte
+			if bufLen < 1024 {
+				newBuf = u.Malloc(1024)[:bufLen]
 			} else {
-				tmp = u.Malloc(l)
+				newBuf = u.Malloc(bufLen)
 			}
-			copy(tmp, u.buffer)
-			u.buffer = tmp
+			copy(newBuf, u.buffer)
+			u.buffer = newBuf
 		}
 		u.Free(buffer)
 	}
@@ -276,19 +261,17 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 			}
 			total := headLen + bodyLen
 			if l >= total {
-				body = u.buffer[headLen:total]
+				body = append([]byte{}, u.buffer[headLen:total]...)
 				if masked {
 					mask := u.buffer[headLen-4 : headLen]
 					for i := 0; i < len(body); i++ {
 						body[i] ^= mask[i%4]
 					}
-				} else {
-
 				}
 				opcode = int8(u.buffer[0] & 0xF)
 				ok = true
 				fin = ((u.buffer[0] & 0x80) != 0)
-				u.buffer = u.buffer[total:]
+				u.buffer = u.buffer[total:l]
 			}
 		}
 	}
@@ -316,6 +299,23 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 		return responseHeader.Get("Sec-Websocket-Protocol")
 	}
 	return ""
+}
+
+var nativeAllocator = &mempool.NativeAllocator{}
+
+// NewUpgrader .
+func NewUpgrader(isTLS bool) *Upgrader {
+	u := &Upgrader{
+		Malloc:  mempool.Malloc,
+		Realloc: mempool.Realloc,
+		Free:    mempool.Free,
+	}
+	if isTLS {
+		u.Malloc = nativeAllocator.Malloc
+		u.Realloc = nativeAllocator.Realloc
+		u.Free = nativeAllocator.Free
+	}
+	return u
 }
 
 func subprotocols(r *http.Request) []string {
