@@ -7,6 +7,7 @@ package mempool
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 )
@@ -59,11 +60,26 @@ func (pool *MemPool) init(maxSize int) {
 	}
 }
 
+func printStack(s, c int) {
+	i := 2
+	str := ""
+	for ; i < 5; i++ {
+		pc, file, line, ok := runtime.Caller(i)
+		if !ok {
+			break
+		}
+		str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+	}
+	println("size:", s, "cap:", c)
+	println(str)
+}
+
 // Malloc borrows []byte from pool
 func (pool *MemPool) Malloc(size int) []byte {
 	if size <= 0 || size > pool.maxSize {
 		return nil
 	}
+	printStack(size, 0)
 	allocSize := size
 	if size < 64 {
 		allocSize = 64
@@ -94,6 +110,7 @@ func (pool *MemPool) Free(buf []byte) error {
 	if cap(buf) == 0 || cap(buf) > pool.maxSize || cap(buf) != 1<<bits {
 		return errors.New("MemPool Put() incorrect buffer size")
 	}
+	printStack(len(buf), cap(buf))
 	atomic.AddInt64(&freeCnt, 1)
 	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
 	pool.buffers[bits].Put(buf)

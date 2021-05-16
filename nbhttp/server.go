@@ -260,6 +260,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
+		newData := svr.Malloc(len(data))
+		copy(newData, data)
+		data = newData
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			loging.Error("nil parser")
@@ -275,9 +278,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 
-	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-		return mempool.Malloc(int(conf.ReadBufferSize))
-	})
+	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+	// 	return mempool.Malloc(int(conf.ReadBufferSize))
+	// })
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
@@ -374,7 +377,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	g := nbio.NewGopher(gopherConf)
 
-	// nativeAllocator := &mempool.NativeAllocator{}
+	nativeAllocator := &mempool.NativeAllocator{}
 	svr := &Server{
 		Gopher:                 g,
 		_onOpen:                func(c *nbio.Conn) {},
@@ -385,12 +388,12 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
 
-		// Malloc:  nativeAllocator.Malloc,
-		// Realloc: nativeAllocator.Realloc,
-		// Free:    nativeAllocator.Free,
-		Malloc:  mempool.Malloc,
-		Realloc: mempool.Realloc,
-		Free:    mempool.Free,
+		Malloc:  nativeAllocator.Malloc,
+		Realloc: nativeAllocator.Realloc,
+		Free:    nativeAllocator.Free,
+		// Malloc:  mempool.Malloc,
+		// Realloc: mempool.Realloc,
+		// Free:    mempool.Free,
 	}
 
 	isClient := false
@@ -459,10 +462,10 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 		}
 	})
-	g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-		return mempool.Malloc(int(conf.ReadBufferSize))
-	})
-	g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
+	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
+	// 	return mempool.Malloc(int(conf.ReadBufferSize))
+	// })
+	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 	// 	mempool.Free(buffer)
 	// })
