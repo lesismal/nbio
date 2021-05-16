@@ -61,7 +61,7 @@ func loop(addr string, connNum int) {
 	for {
 		for i := 0; i < connNum; i++ {
 			echo(conns[i])
-			return
+			// return
 		}
 	}
 }

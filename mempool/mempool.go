@@ -7,7 +7,6 @@ package mempool
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 )
@@ -61,17 +60,17 @@ func (pool *MemPool) init(maxSize int) {
 }
 
 func printStack(s, c int) {
-	i := 2
-	str := ""
-	for ; i < 5; i++ {
-		pc, file, line, ok := runtime.Caller(i)
-		if !ok {
-			break
-		}
-		str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
-	}
-	println("size:", s, "cap:", c)
-	println(str)
+	// i := 2
+	// str := ""
+	// for ; i < 5; i++ {
+	// 	pc, file, line, ok := runtime.Caller(i)
+	// 	if !ok {
+	// 		break
+	// 	}
+	// 	str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+	// }
+	// println("size:", s, "cap:", c)
+	// println(str)
 }
 
 // Malloc borrows []byte from pool
@@ -79,7 +78,6 @@ func (pool *MemPool) Malloc(size int) []byte {
 	if size <= 0 || size > pool.maxSize {
 		return nil
 	}
-	printStack(size, 0)
 	allocSize := size
 	if size < 64 {
 		allocSize = 64
@@ -88,7 +86,8 @@ func (pool *MemPool) Malloc(size int) []byte {
 	atomic.AddInt64(&mallocCnt, 1)
 	atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
 	// fmt.Println("+++ Malloc:", cap(buf))
-	// debug.PrintStack()
+	printStack(size, cap(buf))
+
 	return buf
 }
 
