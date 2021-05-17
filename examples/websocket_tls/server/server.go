@@ -53,7 +53,7 @@ func main() {
 
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Addrs:   []string{":8888"},
 	}, mux, nil, tlsConfig)
 
 	// to improve performance if you need
