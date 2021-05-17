@@ -59,7 +59,6 @@ func (p *poller) deleteConn(c *Conn) {
 	fd := c.fd
 	if c == p.g.connsUnix[fd] {
 		p.g.connsUnix[fd] = nil
-		p.deleteEvent(fd)
 	}
 	p.g.onClose(c, c.closeErr)
 }
@@ -83,10 +82,7 @@ func (p *poller) modWrite(fd int) {
 }
 
 func (p *poller) deleteEvent(fd int) {
-	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
-	p.mux.Unlock()
-	p.trigger()
+	// closing the conn removes it from the kqueue
 }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
@@ -119,7 +115,6 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 		}
 	} else {
 		syscall.Close(fd)
-		p.deleteEvent(fd)
 	}
 }
 
