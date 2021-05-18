@@ -320,6 +320,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
+	conf.EnableSendfile = false
 
 	var messageHandlerExecutePool *taskpool.MixedPool
 	parserExecutor := func(index int, f func()) {
@@ -412,7 +413,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		parser.Server = svr
-		parser.TLSBuffer = make([]byte, conf.MinBufferSize)
+		parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
