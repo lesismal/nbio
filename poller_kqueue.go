@@ -6,6 +6,7 @@
 
 package nbio
 
+
 import (
 	"errors"
 	"net"
@@ -84,12 +85,15 @@ func (p *poller) modWrite(fd int) {
 
 func (p *poller) deleteEvent(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_READ})
 	p.mux.Unlock()
 	p.trigger()
 }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
+	if ev.Flags&syscall.EV_DELETE > 0 {
+		return
+	}
 	fd := int(ev.Ident)
 	c := p.getConn(fd)
 	if c != nil {
@@ -107,7 +111,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 				if err == syscall.EAGAIN {
 					return
 				}
-				if err != nil || n == 0 {
+				if (err != nil || n == 0) && ev.Flags&syscall.EV_DELETE == 0 {
 					c.closeWithError(err)
 				}
 				return
