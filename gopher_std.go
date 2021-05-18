@@ -89,6 +89,8 @@ func NewGopher(conf Config) *Gopher {
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
+		lockListener:       conf.LockListener,
+		lockPoller:         conf.LockPoller,
 		listeners:          make([]*poller, len(conf.Addrs)),
 		pollers:            make([]*poller, conf.NPoller),
 		connsStd:           map[*Conn]struct{}{},

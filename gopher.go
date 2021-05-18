@@ -64,8 +64,11 @@ type Config struct {
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize int
 
-	// LockThread represents poller's goroutine to lock thread or not, it's set to false by default.
-	LockThread bool
+	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
+	LockListener bool
+
+	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
+	LockPoller bool
 }
 
 // Gopher is a manager of poller
@@ -83,7 +86,8 @@ type Gopher struct {
 	readBufferSize     int
 	maxWriteBufferSize int
 	minConnCacheSize   int
-	lockThread         bool
+	lockListener       bool
+	lockPoller         bool
 
 	lfds []int
 

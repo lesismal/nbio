@@ -90,8 +90,10 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+	if p.g.lockListener {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
 
 	p.shutdown = false
 	for !p.shutdown {
@@ -117,7 +119,7 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
-	if p.g.lockThread {
+	if p.g.lockPoller {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}

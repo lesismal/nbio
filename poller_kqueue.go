@@ -126,7 +126,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 }
 
 func (p *poller) start() {
-	if p.g.lockThread {
+	if p.g.lockPoller {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}
@@ -144,8 +144,10 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+	if p.g.lockListener {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
 
 	p.shutdown = false
 	for !p.shutdown {
@@ -171,6 +173,11 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
+	if p.g.lockPoller {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
+
 	var events = make([]syscall.Kevent_t, 1024)
 	var changes []syscall.Kevent_t
 
