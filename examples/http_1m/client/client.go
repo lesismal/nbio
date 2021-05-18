@@ -62,7 +62,7 @@ func loop(addr string, connNum int) {
 }
 
 func post(conn net.Conn, addr string) {
-	reqData := []byte(fmt.Sprintf("POST /echo HTTP/1.1\r\nHost: %v\r\n Connection: close \r\nContent-Length :  5 \r\nAccept-Encoding : gzip \r\n\r\nhello", addr))
+	reqData := []byte(fmt.Sprintf("POST /echo HTTP/1.1\r\nHost: %v\r\nContent-Length: 5\r\nAccept-Encoding: gzip\r\n\r\nhello", addr))
 	resData := make([]byte, 1024)
 	n, err := conn.Write(reqData)
 	if err != nil || n < len(reqData) {
