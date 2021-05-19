@@ -2,7 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-// +build windows darwin netbsd freebsd openbsd dragonfly
+// +build windows
 
 package nbio
 
@@ -79,7 +79,7 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) start() {
-	if p.g.lockThread {
+	if p.g.lockListener {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}

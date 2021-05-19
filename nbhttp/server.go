@@ -84,8 +84,11 @@ type Config struct {
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize int
 
-	// LockThread represents poller's goroutine to lock thread or not, it's set to false by default.
-	LockThread bool
+	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
+	LockListener bool
+
+	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
+	LockPoller bool
 
 	// MessageHandlerPoolSize represents max http server's task pool goroutine num, it's set to runtime.NumCPU() * 256 by default.
 	MessageHandlerPoolSize int
@@ -212,7 +215,8 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		NListener:          conf.NListener,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
-		LockThread:         conf.LockThread,
+		LockPoller:         conf.LockPoller,
+		LockListener:       conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
 
@@ -374,7 +378,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		NListener:          conf.NListener,
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
-		LockThread:         conf.LockThread,
+		LockPoller:         conf.LockPoller,
 	}
 	g := nbio.NewGopher(gopherConf)
 

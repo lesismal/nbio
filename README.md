@@ -178,8 +178,11 @@ conf := nbio.Config struct {
     // more than MaxWriteBufferSize, the connection would be closed by nbio.
     MaxWriteBufferSize uint32
 
-    // LockThread represents poller's goroutine to lock thread or not.
-    LockThread bool
+    // LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
+	LockListener bool
+
+    // LockPoller represents poller's goroutine to lock thread or not.
+    LockPoller bool
 }
 ```
 

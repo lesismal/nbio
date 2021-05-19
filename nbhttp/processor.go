@@ -189,18 +189,22 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	if request.ProtoMajor < 1 {
 		request.Close = true
 	} else {
-		if request.ProtoMajor == 1 && request.ProtoMinor == 0 {
-			hasClose := false
-			keepAlive := false
-			for _, v := range request.Header["Connection"] {
-				switch strings.ToLower(v) {
-				case "close":
-					hasClose = true
-				case "keep-alive":
-					keepAlive = true
-				}
+		hasClose := false
+		keepAlive := false
+	CONNECTION_VALUES:
+		for _, v := range request.Header["Connection"] {
+			switch strings.ToLower(strings.Trim(v, " ")) {
+			case "close":
+				hasClose = true
+				break CONNECTION_VALUES
+			case "keep-alive":
+				keepAlive = true
 			}
+		}
+		if request.ProtoMajor == 1 && request.ProtoMinor == 0 {
 			request.Close = hasClose || !keepAlive
+		} else {
+			request.Close = hasClose
 		}
 	}
 

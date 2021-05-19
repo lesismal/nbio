@@ -7,7 +7,6 @@
 package nbio
 
 import (
-	"errors"
 	"io"
 	"net"
 	"runtime"
@@ -91,8 +90,10 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
+	if p.g.lockListener {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+	}
 
 	p.shutdown = false
 	for !p.shutdown {
@@ -118,7 +119,7 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
-	if p.g.lockThread {
+	if p.g.lockPoller {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}
@@ -274,42 +275,4 @@ func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
 	}
 
 	return p, nil
-}
-
-func dupStdConn(conn net.Conn) (*Conn, error) {
-	sc, ok := conn.(interface {
-		SyscallConn() (syscall.RawConn, error)
-	})
-	if !ok {
-		return nil, errors.New("RawConn Unsupported")
-	}
-	rc, err := sc.SyscallConn()
-	if err != nil {
-		return nil, errors.New("RawConn Unsupported")
-	}
-
-	var newFd int
-	errCtrl := rc.Control(func(fd uintptr) {
-		newFd, err = syscall.Dup(int(fd))
-	})
-
-	if errCtrl != nil {
-		return nil, errCtrl
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	err = syscall.SetNonblock(newFd, true)
-	if err != nil {
-		syscall.Close(newFd)
-		return nil, err
-	}
-
-	return &Conn{
-		fd:    newFd,
-		lAddr: conn.LocalAddr(),
-		rAddr: conn.RemoteAddr(),
-	}, nil
 }

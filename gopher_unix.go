@@ -2,7 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
-// +build linux
+// +build linux darwin netbsd freebsd openbsd dragonfly
 
 package nbio
 
@@ -99,6 +99,8 @@ func NewGopher(conf Config) *Gopher {
 		readBufferSize:     conf.ReadBufferSize,
 		maxWriteBufferSize: conf.MaxWriteBufferSize,
 		minConnCacheSize:   conf.MinConnCacheSize,
+		lockListener:       conf.LockListener,
+		lockPoller:         conf.LockPoller,
 		listeners:          make([]*poller, len(conf.Addrs)),
 		pollers:            make([]*poller, conf.NPoller),
 		connsUnix:          make([]*Conn, MaxOpenFiles),
