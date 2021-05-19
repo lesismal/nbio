@@ -179,6 +179,8 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 		return nil, err
 	}
 
+	conn.Close()
+
 	err = syscall.SetNonblock(newFd, true)
 	if err != nil {
 		syscall.Close(newFd)
