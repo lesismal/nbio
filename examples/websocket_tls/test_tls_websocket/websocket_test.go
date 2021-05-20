@@ -148,7 +148,7 @@ func client(ctx context.Context, count int) {
 	defer c.Close()
 
 	for i := 0; i < count; i++ {
-		text := "hello world"
+		text := fmt.Sprintf("hello world %d", i)
 		err := c.WriteMessage(gwebsocket.TextMessage, []byte(text))
 		if err != nil {
 			log.Fatalf("write: %v", err)
