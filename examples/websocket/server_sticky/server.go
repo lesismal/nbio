@@ -25,12 +25,9 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		svr.MessageHandlerExecutor(func() {
-			// echo
-			c.WriteMessage(messageType, data)
-
-			fmt.Println("OnMessage:", messageType, string(data))
-		})
+		// echo
+		c.WriteMessage(messageType, data)
+		fmt.Println("OnMessage:", messageType, string(data))
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)

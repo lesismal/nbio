@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/loging"
 	"github.com/lesismal/nbio/mempool"
 )
@@ -55,7 +56,7 @@ type Processor interface {
 	OnBody(data []byte, needRelease bool)
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
-	HandleExecute(executor func(f func()))
+	HandleExecute(executor func(index int, f func()))
 	Clear()
 }
 
@@ -66,7 +67,7 @@ type ServerProcessor struct {
 	parser   *Parser
 	request  *http.Request
 	handler  http.Handler
-	executor func(f func())
+	executor func(index int, f func())
 
 	resQueue       []*Response
 	sequence       uint64
@@ -228,6 +229,11 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		executing = (p.resQueue[0] != res)
 		p.mux.Unlock()
 
+		index := 0
+		c, ok := p.conn.(*nbio.Conn)
+		if ok {
+			index = c.Hash()
+		}
 		if !executing {
 			f := func() {
 				for {
@@ -245,7 +251,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 					p.mux.Unlock()
 				}
 			}
-			p.executor(f)
+			p.executor(index, f)
 		}
 	} else {
 		p.handler.ServeHTTP(res, request)
@@ -254,7 +260,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 }
 
 // HandleExecute .
-func (p *ServerProcessor) HandleExecute(executor func(f func())) {
+func (p *ServerProcessor) HandleExecute(executor func(index int, f func())) {
 	if executor != nil {
 		p.executor = executor
 	}
@@ -309,12 +315,12 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(f func()), minBufferSize int, keepaliveTime time.Duration, enableSendfile bool) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index int, f func()), minBufferSize int, keepaliveTime time.Duration, enableSendfile bool) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
 	if executor == nil {
-		executor = func(f func()) { f() }
+		executor = func(index int, f func()) { f() }
 	}
 	if minBufferSize <= 0 {
 		minBufferSize = DefaultMinBufferSize
@@ -410,7 +416,7 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 }
 
 // HandleExecute .
-func (p *ClientProcessor) HandleExecute(executor func(f func())) {
+func (p *ClientProcessor) HandleExecute(executor func(index int, f func())) {
 
 }
 
@@ -491,7 +497,7 @@ func (p *EmptyProcessor) OnComplete(parser *Parser) {
 }
 
 // HandleExecute .
-func (p *EmptyProcessor) HandleExecute(executor func(f func())) {
+func (p *EmptyProcessor) HandleExecute(executor func(index int, f func())) {
 
 }
 

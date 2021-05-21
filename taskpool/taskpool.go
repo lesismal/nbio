@@ -79,6 +79,11 @@ func (tp *TaskPool) Go(f func()) {
 	tp.push(f)
 }
 
+// GoByIndex .
+func (tp *TaskPool) GoByIndex(index int, f func()) {
+	tp.Go(f)
+}
+
 // Stop .
 func (tp *TaskPool) Stop() {
 	if atomic.CompareAndSwapInt32(&tp.stopped, 0, 1) {

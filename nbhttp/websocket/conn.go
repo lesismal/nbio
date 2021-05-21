@@ -26,6 +26,8 @@ const (
 type Conn struct {
 	net.Conn
 
+	index int
+
 	mux sync.Mutex
 
 	subprotocol string
@@ -81,7 +83,7 @@ func (c *Conn) SetPongHandler(h func(*Conn, string)) {
 func (c *Conn) OnMessage(h func(*Conn, int8, []byte)) {
 	if h != nil {
 		c.messageHandler = func(c *Conn, messageType int8, data []byte) {
-			c.Server.MessageHandlerExecutor(func() {
+			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, data)
 				c.Server.Free(data)
 			})
@@ -163,9 +165,10 @@ func (c *Conn) Write(data []byte) (int, error) {
 	return -1, ErrInvalidWriteCalling
 }
 
-func newConn(c net.Conn, compress bool, subprotocol string) *Conn {
+func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {
 	conn := &Conn{
 		Conn:           c,
+		index:          index,
 		subprotocol:    subprotocol,
 		pongHandler:    func(*Conn, string) {},
 		messageHandler: func(*Conn, int8, []byte) {},

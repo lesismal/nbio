@@ -20,6 +20,11 @@ func (np *FixedNoOrderPool) Go(f func()) {
 	np.chTask <- f
 }
 
+// GoByIndex .
+func (np *FixedNoOrderPool) GoByIndex(index int, f func()) {
+	np.Go(f)
+}
+
 // Go .
 func (np *FixedNoOrderPool) Stop() {
 	close(np.chTask)

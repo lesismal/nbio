@@ -113,7 +113,7 @@ type Server struct {
 	_onStop  func()
 
 	ParserExecutor         func(index int, f func())
-	MessageHandlerExecutor func(f func())
+	MessageHandlerExecutor func(index int, f func())
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
@@ -152,7 +152,7 @@ func (s *Server) Online() int {
 }
 
 // NewServer .
-func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f func())) *Server {
+func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(index int, f func())) *Server {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -204,7 +204,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 			bufferSize = 1024
 		}
 		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
-		messageHandlerExecutor = messageHandlerExecutePool.Go
+		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
 	gopherConf := nbio.Config{
@@ -292,7 +292,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	g.OnStop(func() {
 		svr._onStop()
-		svr.MessageHandlerExecutor = func(f func()) {}
+		svr.MessageHandlerExecutor = func(index int, f func()) {}
 		svr.ParserExecutor = func(index int, f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
@@ -302,7 +302,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 }
 
 // NewServerTLS .
-func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
+func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(index int, f func()), tlsConfig *tls.Config) *Server {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -354,7 +354,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			bufferSize = 1024
 		}
 		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
-		messageHandlerExecutor = messageHandlerExecutePool.Go
+		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
 	// setup prefer protos: http2.0, other protos to be added
@@ -477,7 +477,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 
 	g.OnStop(func() {
 		svr._onStop()
-		svr.MessageHandlerExecutor = func(f func()) {}
+		svr.MessageHandlerExecutor = func(index int, f func()) {}
 		svr.ParserExecutor = func(index int, f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
