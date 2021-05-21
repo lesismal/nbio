@@ -102,22 +102,13 @@ func TestEcho(t *testing.T) {
 	})
 
 	one := func(n int) {
-		var c net.Conn
-		var err error
-		if n%2 == 0 {
-			c, err = Dial("tcp", addr)
-			if err != nil {
-				log.Panicf("Dial failed: %v", err)
-			}
-		} else {
-			c, err = net.Dial("tcp", addr)
-			if err != nil {
-				log.Panicf("net.Dial failed: %v", err)
-			}
+		c, err := Dial("tcp", addr)
+		if err != nil {
+			log.Panicf("Dial failed: %v", err)
 		}
 		g.AddConn(c)
 		if n%2 == 0 {
-			c.(*Conn).Writev([][]byte{make([]byte, msgSize)})
+			c.Writev([][]byte{make([]byte, msgSize)})
 		} else {
 			c.Write(make([]byte, msgSize))
 		}
