@@ -18,7 +18,7 @@ import (
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-var addr = flag.String("addr", "localhost:28003", "http service address")
+var addr = flag.String("addr", "localhost:28004", "http service address")
 var (
 	svr *nbhttp.Server
 )
