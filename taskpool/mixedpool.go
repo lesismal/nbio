@@ -41,6 +41,11 @@ func (mp *MixedPool) Go(f func()) {
 	mp.FixedNoOrderPool.Go(f)
 }
 
+// GoByIndex .
+func (mp *MixedPool) GoByIndex(index int, f func()) {
+	mp.Go(f)
+}
+
 // Go .
 func (mp *MixedPool) Stop() {
 	close(mp.chTask)

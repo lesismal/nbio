@@ -126,7 +126,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(conn, false, subprotocol)
+	u.conn = newConn(conn, nbc.Hash(), false, subprotocol)
 	u.Server = parser.Server
 	u.conn.Server = parser.Server
 	return u.conn, nil
