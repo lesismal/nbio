@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -83,12 +84,11 @@ func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWri
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	count := 0
+	count := int32(0)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		// echo
 		fmt.Println("OnMessage:", messageType, string(data))
-		count++
-		if count == maxCount {
+		if int(atomic.AddInt32(&count, 1)) == maxCount {
 			cancelFunc()
 		}
 		c.SetReadDeadline(time.Now().Add(time.Second * 60))
@@ -167,7 +167,7 @@ func TestWebsocketTwoRead(t *testing.T) {
 		server(ctx, cancelFunc, 10)
 		waitGrp.Done()
 	}()
-	time.Sleep(1)
+	time.Sleep(time.Second)
 	log.Println("done sleep")
 	client(ctx, 10)
 	waitGrp.Done()
