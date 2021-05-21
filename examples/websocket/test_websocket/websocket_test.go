@@ -99,7 +99,7 @@ func TestWebsocketTwoRead(t *testing.T) {
 		server(ctx, cancelFunc, 10)
 		waitGrp.Done()
 	}()
-	time.Sleep(1)
+	time.Sleep(time.Second)
 	log.Println("done sleep")
 	client(ctx, 10)
 	waitGrp.Done()
