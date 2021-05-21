@@ -459,7 +459,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 							return
 						}
 					}
-					if n < len(buffer) {
+					if n == 0 {
 						return
 					}
 				}

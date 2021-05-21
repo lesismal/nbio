@@ -19,7 +19,7 @@ func client(ctx context.Context, count int) {
 		InsecureSkipVerify: true,
 	}
 
-	conn, err := tls.Dial("tcp", "localhost:8888", tlsConfig)
+	conn, err := tls.Dial("tcp", "localhost:8887", tlsConfig)
 	if err != nil {
 		panic(err)
 	}
@@ -50,7 +50,7 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 
 	g := nbio.NewGopher(nbio.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Addrs:   []string{"localhost:8887"},
 	})
 	isClient := false
 	count := 0
@@ -62,6 +62,7 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 	}))
 	g.OnData(ntls.WrapData(func(c *nbio.Conn, tlsConn *ltls.Conn, data []byte) {
 		log.Println("OnData:", c.RemoteAddr().String(), string(data))
+		count++
 		if count == readCount {
 			cancelFunc()
 		}
