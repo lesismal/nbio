@@ -1,13 +1,22 @@
-package main
+// +build !unit
+
+// run this test via :go test -tags=integration .
+
+package nbhttp
 
 import (
+	"context"
+	stockTLS "crypto/tls"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
+	"net/url"
+	"sync"
+	"testing"
 	"time"
 
+	gwebsocket "github.com/gorilla/websocket"
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
@@ -37,7 +46,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 
-func main() {
+func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
@@ -53,7 +62,7 @@ func main() {
 
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{":8888"},
+		Addrs:   []string{":8889"},
 	}, mux, nil, tlsConfig)
 
 	// to improve performance if you need
@@ -63,13 +72,14 @@ func main() {
 	err = svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
+		*startupError = err
+		started.Done()
 		return
 	}
+	started.Done()
 	defer svr.Stop()
 
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-	<-interrupt
+	<-ctx.Done()
 	log.Println("exit")
 }
 
@@ -124,3 +134,70 @@ Mr+u5TRncZBIzAZtButlh1AHnpN/qO3P0c0Rbdep3XBc/82JWO8qdb5QvAkxga3X
 BpA7MNLxiqss+rCbwf3NbWxEMiDQ2zRwVoafVFys7tjmv6t2Xck=
 -----END RSA PRIVATE KEY-----
 `)
+
+var addr = flag.String("addr", "localhost:8889", "http service address")
+
+func client(count int) error {
+	flag.Parse()
+
+	u := url.URL{Scheme: "wss", Host: *addr, Path: "/wss"}
+	log.Printf("connecting to %s", u.String())
+
+	tlsConfig := &stockTLS.Config{
+		InsecureSkipVerify: true,
+	}
+	dialer := &gwebsocket.Dialer{
+		TLSClientConfig: tlsConfig,
+	}
+
+	c, _, err := dialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	text := "hello world"
+	for i := 0; i < count; i++ {
+		err := c.WriteMessage(gwebsocket.TextMessage, []byte(text))
+		if err != nil {
+			log.Fatalf("write: %v", err)
+			return err
+		}
+		log.Println("write:", text)
+
+		_, message, err := c.ReadMessage()
+		if err != nil {
+			log.Println("read:", err)
+			return err
+		}
+		if string(message) != text {
+			log.Fatalf("message != text: %v, %v", len(message), string(message))
+		} else {
+			log.Println("read :", string(message))
+		}
+		time.Sleep(time.Millisecond * 500)
+	}
+	return nil
+}
+func TestServerSimulation(t *testing.T) {
+	waitGrp := sync.WaitGroup{}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	waitGrp.Add(1)
+	var err error
+	go server(ctx, &waitGrp, &err)
+	waitGrp.Wait()
+	if err != nil {
+		t.Errorf("client should not have errorred: %s", err)
+		cancelFunc()
+		return
+	}
+	err = client(5)
+	if err != nil {
+		t.Errorf("client should not have errorred: %s", err)
+	}
+	err = client(5)
+	if err != nil {
+		t.Errorf("client should not have errorred: %s", err)
+	}
+	cancelFunc()
+}

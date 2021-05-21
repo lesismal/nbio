@@ -1,77 +1,27 @@
-package main
+package test
 
 import (
+	"context"
+	"crypto/tls"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"os/signal"
+	"net/url"
+	"sync"
+	"testing"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
+	gwebsocket "github.com/gorilla/websocket"
+	ntls "github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
+var addr = flag.String("addr", "localhost:28003", "http service address")
 var (
 	svr *nbhttp.Server
 )
-
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	isTLS := true
-	upgrader := websocket.NewUpgrader(isTLS)
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		// echo
-		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
-		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
-	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-	})
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
-}
-
-func main() {
-	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
-	if err != nil {
-		log.Fatalf("tls.X509KeyPair failed: %v", err)
-	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
-	}
-	tlsConfig.BuildNameToCertificate()
-
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/wss", onWebsocket)
-
-	svr = nbhttp.NewServerTLS(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{":8888"},
-	}, mux, nil, tlsConfig)
-
-	// to improve performance if you need
-	// parserPool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
-	// svr.ParserExecutor = parserPool.GoByIndex
-
-	err = svr.Start()
-	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
-		return
-	}
-	defer svr.Stop()
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-	<-interrupt
-	log.Println("exit")
-}
 
 var rsaCertPEM = []byte(`-----BEGIN CERTIFICATE-----
 MIIDazCCAlOgAwIBAgIUJeohtgk8nnt8ofratXJg7kUJsI4wDQYJKoZIhvcNAQEL
@@ -124,3 +74,101 @@ Mr+u5TRncZBIzAZtButlh1AHnpN/qO3P0c0Rbdep3XBc/82JWO8qdb5QvAkxga3X
 BpA7MNLxiqss+rCbwf3NbWxEMiDQ2zRwVoafVFys7tjmv6t2Xck=
 -----END RSA PRIVATE KEY-----
 `)
+
+func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWriter, r *http.Request) {
+	isTLS := false
+	upgrader := websocket.NewUpgrader(isTLS)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
+	count := 0
+	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
+		// echo
+		fmt.Println("OnMessage:", messageType, string(data))
+		count++
+		if count == maxCount {
+			cancelFunc()
+		}
+		c.SetReadDeadline(time.Now().Add(time.Second * 60))
+	})
+	wsConn.OnClose(func(c *websocket.Conn, err error) {
+		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+	})
+	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+}
+
+func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
+	cert, err := ntls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
+	if err != nil {
+		log.Fatalf("tls.X509KeyPair failed: %v", err)
+	}
+	tlsConfig := &ntls.Config{
+		Certificates:       []ntls.Certificate{cert},
+		InsecureSkipVerify: true,
+	}
+	tlsConfig.BuildNameToCertificate()
+
+	mux := &http.ServeMux{}
+	mux.HandleFunc("/wss", func(w http.ResponseWriter, r *http.Request) {
+		onWebsocket(cancelFunc, readCount, w, r)
+	})
+
+	svr = nbhttp.NewServerTLS(nbhttp.Config{
+		Network: "tcp",
+		Addrs:   []string{*addr},
+	}, mux, nil, tlsConfig)
+
+	err = svr.Start()
+	if err != nil {
+		fmt.Printf("nbio.Start failed: %v\n", err)
+		return
+	}
+	defer svr.Stop()
+	<-ctx.Done()
+	log.Println("server shutdown")
+}
+
+func client(ctx context.Context, count int) {
+	flag.Parse()
+
+	u := url.URL{Scheme: "wss", Host: *addr, Path: "/wss"}
+	log.Printf("connecting to %s", u.String())
+
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+	}
+	dialer := gwebsocket.DefaultDialer
+	dialer.TLSClientConfig = tlsConfig
+	c, _, err := gwebsocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	for i := 0; i < count; i++ {
+		text := fmt.Sprintf("hello world %d", i)
+		err := c.WriteMessage(gwebsocket.TextMessage, []byte(text))
+		if err != nil {
+			log.Fatalf("write: %v", err)
+			return
+		}
+		log.Println("write:", text)
+	}
+	<-ctx.Done()
+}
+
+func TestWebsocketTwoRead(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	waitGrp := sync.WaitGroup{}
+	waitGrp.Add(1)
+	go func() {
+		server(ctx, cancelFunc, 10)
+		waitGrp.Done()
+	}()
+	time.Sleep(1)
+	log.Println("done sleep")
+	client(ctx, 10)
+	waitGrp.Done()
+}

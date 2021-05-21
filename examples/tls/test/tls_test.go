@@ -1,76 +1,82 @@
-package main
+package tlstest
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
-	"net/http"
-	"os"
-	"os/signal"
+	"sync"
+	"testing"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio/nbhttp"
-	"github.com/lesismal/nbio/nbhttp/websocket"
+	ltls "github.com/lesismal/llib/std/crypto/tls"
+	"github.com/lesismal/nbio"
+	ntls "github.com/lesismal/nbio/extension/tls"
 )
 
-var (
-	svr *nbhttp.Server
-)
+func client(ctx context.Context, count int) {
+	tlsConfig := &tls.Config{
+		InsecureSkipVerify: true,
+	}
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	isTLS := true
-	upgrader := websocket.NewUpgrader(isTLS)
-	conn, err := upgrader.Upgrade(w, r, nil)
+	conn, err := tls.Dial("tcp", "localhost:8888", tlsConfig)
 	if err != nil {
 		panic(err)
 	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
-		// echo
-		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
-		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
-	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-	})
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	defer conn.Close()
+
+	for i := 0; i < count; i++ {
+		wbuf := []byte(fmt.Sprintf("hello %d", i))
+		n1, err := conn.Write(wbuf)
+		if err != nil || n1 != len(wbuf) {
+			log.Fatalf("conn.Write failed: %v, %v", n1, err)
+		}
+
+	}
+
+	<-ctx.Done()
 }
 
-func main() {
-	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
+func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
+	cert, err := ltls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
 	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
+	tlsConfig := &ltls.Config{
+		Certificates:       []ltls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
 	tlsConfig.BuildNameToCertificate()
 
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/wss", onWebsocket)
-
-	svr = nbhttp.NewServerTLS(nbhttp.Config{
+	g := nbio.NewGopher(nbio.Config{
 		Network: "tcp",
-		Addrs:   []string{":8888"},
-	}, mux, nil, tlsConfig)
+		Addrs:   []string{"localhost:8888"},
+	})
+	isClient := false
+	count := 0
+	g.OnOpen(ntls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *ltls.Conn) {
+		log.Println("OnOpen:", c.RemoteAddr().String())
+	}))
+	g.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *ltls.Conn, err error) {
+		log.Println("OnClose:", c.RemoteAddr().String())
+	}))
+	g.OnData(ntls.WrapData(func(c *nbio.Conn, tlsConn *ltls.Conn, data []byte) {
+		log.Println("OnData:", c.RemoteAddr().String(), string(data))
+		if count == readCount {
+			cancelFunc()
+		}
 
-	// to improve performance if you need
-	// parserPool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
-	// svr.ParserExecutor = parserPool.GoByIndex
+	}))
 
-	err = svr.Start()
+	err = g.Start()
 	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
+		log.Fatalf("nbio.Start failed: %v\n", err)
 		return
 	}
-	defer svr.Stop()
-
-	interrupt := make(chan os.Signal, 1)
-	signal.Notify(interrupt, os.Interrupt)
-	<-interrupt
-	log.Println("exit")
+	defer g.Stop()
+	<-ctx.Done()
+	log.Println("server shutdown")
+	g.Wait()
 }
 
 var rsaCertPEM = []byte(`-----BEGIN CERTIFICATE-----
@@ -124,3 +130,17 @@ Mr+u5TRncZBIzAZtButlh1AHnpN/qO3P0c0Rbdep3XBc/82JWO8qdb5QvAkxga3X
 BpA7MNLxiqss+rCbwf3NbWxEMiDQ2zRwVoafVFys7tjmv6t2Xck=
 -----END RSA PRIVATE KEY-----
 `)
+
+func TestTLS(t *testing.T) {
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	waitGrp := sync.WaitGroup{}
+	waitGrp.Add(1)
+	go func() {
+		server(ctx, cancelFunc, 10)
+		waitGrp.Done()
+	}()
+	time.Sleep(1)
+	log.Println("done sleep")
+	client(ctx, 10)
+	waitGrp.Done()
+}

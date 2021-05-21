@@ -9,7 +9,7 @@ import (
 func main() {
 	g := nbio.NewGopher(nbio.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Addrs:   []string{":8888"},
 	})
 
 	g.OnData(func(c *nbio.Conn, data []byte) {
