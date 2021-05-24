@@ -69,13 +69,14 @@ type ServerProcessor struct {
 	handler  http.Handler
 	executor func(index int, f func())
 
-	resQueue       []*Response
-	sequence       uint64
-	responsedSeq   uint64
-	minBufferSize  int
-	keepaliveTime  time.Duration
-	enableSendfile bool
-	isUpgrade      bool
+	resQueue                    []*Response
+	sequence                    uint64
+	responsedSeq                uint64
+	minBufferSize               int
+	doNotSetReadDeadlineOnFlush bool
+	keepaliveTime               time.Duration
+	enableSendfile              bool
+	isUpgrade                   bool
 }
 
 // Conn .
@@ -277,7 +278,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 		if req.Close {
 			// the data may still in the send queue
 			p.conn.Close()
-		} else {
+		} else if !p.doNotSetReadDeadlineOnFlush {
 			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 		}
 		releaseRequest(req)
@@ -315,7 +316,7 @@ func (p *ServerProcessor) call(f func()) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index int, f func()), minBufferSize int, keepaliveTime time.Duration, enableSendfile bool) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index int, f func()), minBufferSize int, doNotSetReadDeadlineOnFlush bool, keepaliveTime time.Duration, enableSendfile bool) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
@@ -326,12 +327,13 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index
 		minBufferSize = DefaultMinBufferSize
 	}
 	return &ServerProcessor{
-		conn:           conn,
-		handler:        handler,
-		executor:       executor,
-		minBufferSize:  minBufferSize,
-		keepaliveTime:  keepaliveTime,
-		enableSendfile: enableSendfile,
+		conn:                        conn,
+		handler:                     handler,
+		executor:                    executor,
+		minBufferSize:               minBufferSize,
+		doNotSetReadDeadlineOnFlush: doNotSetReadDeadlineOnFlush,
+		keepaliveTime:               keepaliveTime,
+		enableSendfile:              enableSendfile,
 	}
 }
 

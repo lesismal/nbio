@@ -96,6 +96,10 @@ type Config struct {
 	// MessageHandlerTaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
 	MessageHandlerTaskIdleTime time.Duration
 
+	// if true, then conn.SetReadDeadline(k) will not be called with the keepAliveAfter each
+	// http response is flushed. You probably want this set to true if the connection is going
+	// be upgraded to a web-socket
+	DoNotSetReadDeadlineOnFlush bool
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
 
@@ -245,7 +249,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
+		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.DoNotSetReadDeadlineOnFlush, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
@@ -414,7 +418,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.mux.Unlock()
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
-		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
+		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.DoNotSetReadDeadlineOnFlush, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		parser.Server = svr
 		parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
