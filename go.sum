@@ -8,6 +8,8 @@ github.com/klauspost/compress v1.11.8 h1:difgzQsp5mdAz9v8lm3P/I+EpDKMU/6uTMw1y1F
 github.com/klauspost/compress v1.11.8/go.mod h1:aoV0uJVorq1K+umq18yTdKaF57EivdYsUV+/s2qKfXs=
 github.com/lesismal/llib v0.0.0-20210513155531-5e8d5ab861e3 h1:LfA4MtBaTNRAqRbvv1A5OYcS6zTqjGLn6oe5ZK08Mdw=
 github.com/lesismal/llib v0.0.0-20210513155531-5e8d5ab861e3/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
+github.com/lesismal/llib v0.0.0-20210604154117-fe13dfe10992 h1:dKSIx7h17JzuCgEGTmZHv8SsaFMczqEZuQ0Anx6BqOc=
+github.com/lesismal/llib v0.0.0-20210604154117-fe13dfe10992/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasthttp v1.24.0 h1:AAiG4oLDUArTb7rYf9oO2bkGooOqCaUF6a2u8asBP3I=
