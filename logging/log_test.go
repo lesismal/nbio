@@ -1,4 +1,4 @@
-package loging
+package logging
 
 import "testing"
 

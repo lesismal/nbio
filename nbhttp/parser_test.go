@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 func TestServerParserContentLength(t *testing.T) {
@@ -92,7 +94,13 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 			nRequest++
 		})
 	}
+	svr := &Server{
+		Malloc:  mempool.Malloc,
+		Realloc: mempool.Realloc,
+		Free:    mempool.Free,
+	}
 	parser = NewParser(processor, isClient, maxReadSize, minBufferSize)
+	parser.Server = svr
 	tBegin := time.Now()
 	loop := 10000
 	for i := 0; i < loop; i++ {
@@ -120,16 +128,26 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 }
 
 func newParser(isClient bool) *Parser {
+	svr := &Server{
+		Malloc:  mempool.Malloc,
+		Realloc: mempool.Realloc,
+		Free:    mempool.Free,
+	}
 	maxReadSize := 1024 * 1024 * 4
 	minBufferSize := 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response) {})
-		return NewParser(processor, isClient, maxReadSize, minBufferSize)
+		parser := NewParser(processor, isClient, maxReadSize, minBufferSize)
+		parser.Server = svr
+		return parser
 	}
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", pirntMessage)
 	processor := NewServerProcessor(nil, mux, nil, 2048, DefaultKeepaliveTime, false)
-	return NewParser(processor, isClient, maxReadSize, minBufferSize)
+
+	parser := NewParser(processor, isClient, maxReadSize, minBufferSize)
+	parser.Server = svr
+	return parser
 }
 
 func pirntMessage(w http.ResponseWriter, request *http.Request) {

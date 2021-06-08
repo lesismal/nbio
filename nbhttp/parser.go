@@ -101,7 +101,7 @@ UPGRADER:
 
 	if p.TLSBuffer == nil {
 		defer func() {
-			if data != nil {
+			if data != nil && p.Server != nil {
 				p.Server.Free(data)
 			}
 		}()

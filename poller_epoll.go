@@ -14,7 +14,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/lesismal/nbio/loging"
+	"github.com/lesismal/nbio/logging"
 )
 
 const (
@@ -51,7 +51,7 @@ func (p *poller) addConn(c *Conn) {
 	if err != nil {
 		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
-		loging.Error("[%v] add read event failed: %v", c.fd, err)
+		logging.Error("[%v] add read event failed: %v", c.fd, err)
 		return
 	}
 }
@@ -75,8 +75,8 @@ func (p *poller) deleteConn(c *Conn) {
 func (p *poller) start() {
 	defer p.g.Done()
 
-	loging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer loging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	logging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer logging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 	defer func() {
 		syscall.Close(p.epfd)
 		syscall.Close(p.evtfd)
@@ -108,10 +108,10 @@ func (p *poller) acceptorLoop() {
 			o.addConn(c)
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				loging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+				logging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
-				loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+				logging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 				break
 			}
 		}
@@ -155,7 +155,7 @@ func (p *poller) readWriteLoop() {
 }
 
 func (p *poller) stop() {
-	loging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	logging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	if p.listener != nil {
 		p.listener.Close()

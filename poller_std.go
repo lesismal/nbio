@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lesismal/nbio/loging"
+	"github.com/lesismal/nbio/logging"
 )
 
 type poller struct {
@@ -85,8 +85,8 @@ func (p *poller) start() {
 	}
 	defer p.g.Done()
 
-	loging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer loging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	logging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer logging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
 
 	if p.isListener {
 		var err error
@@ -95,10 +95,10 @@ func (p *poller) start() {
 			err = p.accept()
 			if err != nil {
 				if ne, ok := err.(net.Error); ok && ne.Temporary() {
-					loging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+					logging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 					time.Sleep(time.Second / 20)
 				} else {
-					loging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+					logging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 					break
 				}
 			}
@@ -109,7 +109,7 @@ func (p *poller) start() {
 }
 
 func (p *poller) stop() {
-	loging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	logging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	if p.isListener {
 		p.listener.Close()

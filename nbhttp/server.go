@@ -15,7 +15,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/loging"
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/taskpool"
 )
@@ -208,7 +208,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 Exit:
 	s.Stop()
-	loging.Info("Gopher[%v] shutdown", s.Name)
+	logging.Info("Gopher[%v] shutdown", s.Name)
 	return nil
 }
 
@@ -243,7 +243,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
-				loging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 			}
 		}()
 		f()
@@ -316,7 +316,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
-			loging.Error("nil parser")
+			logging.Error("nil parser")
 		}
 		parser.onClose(err)
 		svr._onClose(c, err)
@@ -330,13 +330,13 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		data = newData
 		parser := c.Session().(*Parser)
 		if parser == nil {
-			loging.Error("nil parser")
+			logging.Error("nil parser")
 			return
 		}
 		svr.ParserExecutor(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
-				loging.Debug("parser.Read failed: %v", err)
+				logging.Debug("parser.Read failed: %v", err)
 				c.CloseWithError(err)
 			}
 		})
@@ -394,7 +394,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 				const size = 64 << 10
 				buf := make([]byte, size)
 				buf = buf[:runtime.Stack(buf, false)]
-				loging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 			}
 		}()
 		f()
@@ -486,7 +486,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	g.OnClose(func(c *nbio.Conn, err error) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
-			loging.Error("nil parser")
+			logging.Error("nil parser")
 			return
 		}
 		parser.onClose(err)
@@ -498,7 +498,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
-			loging.Error("nil parser")
+			logging.Error("nil parser")
 			c.Close()
 			return
 		}
@@ -515,7 +515,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 					if n > 0 {
 						err := parser.Read(buffer[:n])
 						if err != nil {
-							loging.Debug("parser.Read failed: %v", err)
+							logging.Debug("parser.Read failed: %v", err)
 							c.CloseWithError(err)
 							return
 						}

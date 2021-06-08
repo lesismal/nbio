@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lesismal/nbio/loging"
+	"github.com/lesismal/nbio/logging"
 )
 
 const (
@@ -144,7 +144,7 @@ func (g *Gopher) Stop() {
 	}
 
 	g.Wait()
-	loging.Info("Gopher[%v] stop", g.Name)
+	logging.Info("Gopher[%v] stop", g.Name)
 }
 
 // AddConn adds conn to a poller
@@ -315,8 +315,8 @@ func (g *Gopher) resetTimer(it *htimer) {
 
 func (g *Gopher) timerLoop() {
 	defer g.Done()
-	loging.Debug("Gopher[%v] timer start", g.Name)
-	defer loging.Debug("Gopher[%v] timer stopped", g.Name)
+	logging.Debug("Gopher[%v] timer start", g.Name)
+	defer logging.Debug("Gopher[%v] timer stopped", g.Name)
 	for {
 		select {
 		case <-g.trigger.C:
@@ -335,7 +335,7 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								loging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
+								logging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
 								debug.PrintStack()
 							}
 						}()
