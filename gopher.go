@@ -144,6 +144,7 @@ func (g *Gopher) Stop() {
 	}
 
 	g.Wait()
+	loging.Info("Gopher[%v] stop", g.Name)
 }
 
 // AddConn adds conn to a poller

@@ -5,6 +5,8 @@
 package nbhttp
 
 import (
+	"context"
+	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
@@ -149,6 +151,65 @@ func (s *Server) OnStop(h func()) {
 
 func (s *Server) Online() int {
 	return len(s.conns)
+}
+
+func (s *Server) closeIdleConns(chCloseQueue chan *nbio.Conn) {
+	s.mux.Lock()
+	defer s.mux.Unlock()
+	for c := range s.conns {
+		sess := c.Session()
+		if sess != nil {
+			parser := sess.(*Parser)
+			sp := parser.Processor.(*ServerProcessor)
+			sp.mux.Lock()
+			if len(sp.resQueue) == 0 {
+				chCloseQueue <- c
+			}
+			sp.mux.Unlock()
+		}
+	}
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	pollIntervalBase := time.Millisecond
+	shutdownPollIntervalMax := time.Millisecond * 200
+	nextPollInterval := func() time.Duration {
+		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
+		pollIntervalBase *= 2
+		if pollIntervalBase > shutdownPollIntervalMax {
+			pollIntervalBase = shutdownPollIntervalMax
+		}
+		return interval
+	}
+
+	chCloseQueue := make(chan *nbio.Conn, 1024)
+	defer close(chCloseQueue)
+
+	go func() {
+		for c := range chCloseQueue {
+			c.Close()
+		}
+	}()
+
+	timer := time.NewTimer(nextPollInterval())
+	defer timer.Stop()
+	for {
+		s.closeIdleConns(chCloseQueue)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			if len(s.conns) == 0 {
+				goto Exit
+			}
+			timer.Reset(nextPollInterval())
+		}
+	}
+
+Exit:
+	s.Stop()
+	loging.Info("Gopher[%v] shutdown", s.Name)
+	return nil
 }
 
 // NewServer .
