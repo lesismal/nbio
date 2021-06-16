@@ -2,6 +2,7 @@
 #include <websocketpp/client.hpp>
 
 #include <iostream>
+#include <strings.h>
 
 typedef websocketpp::client<websocketpp::config::asio_tls_client> client;
 
@@ -14,7 +15,8 @@ typedef websocketpp::config::asio_client::message_type::ptr message_ptr;
 
 void sendFunc(client* c,websocketpp::connection_hdl hdl) {
     websocketpp::lib::error_code ec;
-    c->send(hdl, "hello world", 10, websocketpp::frame::opcode::binary, ec);
+    char *in = "Be careful when adding or removing oneof fields. If checking the value of a oneof returns None/NOT_SET, it could mean that the oneof has not been set or it has been set to a field in a different version of the oneof. There is no way to tell the difference, since there's no way to know if an unknown field on the wire is a member of the oneof.hello world";
+    c->send(hdl, in, strlen(in), websocketpp::frame::opcode::binary, ec);
     if (ec) {
         std::cout << "Echo failed because: " << ec.message() << std::endl;
     }
