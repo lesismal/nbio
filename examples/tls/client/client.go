@@ -14,6 +14,7 @@ import (
 var (
 	tlsConfig = &tls.Config{
 		InsecureSkipVerify: true,
+		MaxVersion:         771,
 	}
 )
 
