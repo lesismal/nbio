@@ -180,18 +180,19 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		}
 	}
 
-	if consumed && bufLen == 0 {
-		bufLen = len(u.buffer)
-		if bufLen > 0 {
-			var newBuf []byte
-			if bufLen < 1024 {
-				newBuf = u.Server.Malloc(1024)[:bufLen]
-			} else {
-				newBuf = u.Server.Malloc(bufLen)
+	if consumed {
+		if bufLen == 0 {
+			bufLen = len(u.buffer)
+			if bufLen > 0 {
+				newBuf := u.Server.Malloc(bufLen)
+				copy(newBuf, u.buffer)
+				u.buffer = newBuf
 			}
-			copy(newBuf, u.buffer)
-			u.buffer = newBuf
 		}
+		u.Server.Free(buffer)
+	} else if p.TLSBuffer != nil {
+		u.buffer = u.Server.Malloc(len(data))
+		copy(u.buffer, data)
 		u.Server.Free(buffer)
 	}
 
