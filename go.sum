@@ -8,12 +8,6 @@ github.com/julienschmidt/httprouter v1.3.0 h1:U0609e9tgbseu3rBINet9P48AI/D3oJs4d
 github.com/julienschmidt/httprouter v1.3.0/go.mod h1:JR6WtHb+2LUe8TCKY3cZOxFyyO8IZAc4RVcycCCAKdM=
 github.com/klauspost/compress v1.11.8 h1:difgzQsp5mdAz9v8lm3P/I+EpDKMU/6uTMw1y1FObuo=
 github.com/klauspost/compress v1.11.8/go.mod h1:aoV0uJVorq1K+umq18yTdKaF57EivdYsUV+/s2qKfXs=
-github.com/lesismal/llib v0.0.0-20210513155531-5e8d5ab861e3 h1:LfA4MtBaTNRAqRbvv1A5OYcS6zTqjGLn6oe5ZK08Mdw=
-github.com/lesismal/llib v0.0.0-20210513155531-5e8d5ab861e3/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
-github.com/lesismal/llib v0.0.0-20210604154117-fe13dfe10992 h1:dKSIx7h17JzuCgEGTmZHv8SsaFMczqEZuQ0Anx6BqOc=
-github.com/lesismal/llib v0.0.0-20210604154117-fe13dfe10992/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
-github.com/lesismal/llib v0.0.0-20210609040620-df6e3c66066f h1:gWAKr9m76pg11B35sYd2vkv6NkUI4O4KFTwdeewQNuc=
-github.com/lesismal/llib v0.0.0-20210609040620-df6e3c66066f/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
 github.com/lesismal/llib v1.0.0 h1:iiNFFCvJQroYtlanc7ff4wOPRu7tFhbAKGTFW2J9ZxY=
 github.com/lesismal/llib v1.0.0/go.mod h1:3vmCrIMrpkaoA3bDu/sI+J7EyEUMPbOvmAxb7PlzilM=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
