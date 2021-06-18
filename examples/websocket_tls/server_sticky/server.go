@@ -3,23 +3,44 @@ package main
 import (
 	"fmt"
 	"log"
-
-	// "math/rand"
-	"net"
 	"net/http"
-	_ "net/http/pprof"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio"
-	ntls "github.com/lesismal/nbio/extension/tls"
+	"github.com/lesismal/nbio/examples/sticky/proxy"
+	"github.com/lesismal/nbio/nbhttp"
+	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-func init() {
-	go http.ListenAndServe("localhost:6060", nil)
+var (
+	svr *nbhttp.Server
+)
+
+func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	isTLS := true
+	upgrader := websocket.NewUpgrader(isTLS)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
+	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
+		// echo
+		c.WriteMessage(messageType, data)
+		fmt.Println("OnMessage:", messageType, string(data))
+		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
+	})
+	wsConn.OnClose(func(c *websocket.Conn, err error) {
+		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+	})
+	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 
 func main() {
+	go proxy.Run("localhost:8888", "localhost:9999")
+
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
@@ -30,148 +51,29 @@ func main() {
 	}
 	tlsConfig.BuildNameToCertificate()
 
-	g := nbio.NewGopher(nbio.Config{
+	mux := &http.ServeMux{}
+	mux.HandleFunc("/wss", onWebsocket)
+
+	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:9999"},
-	})
+	}, mux, nil, tlsConfig)
 
-	g.OnOpen(ntls.WrapOpen(tlsConfig, false, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
-		log.Println("OnOpen:", c.RemoteAddr().String())
-	}))
-	g.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {
-		log.Println("OnClose:", c.RemoteAddr().String())
-	}))
-	g.OnData(ntls.WrapData(func(c *nbio.Conn, tlsConn *tls.Conn, data []byte) {
-		log.Printf("OnData: %v, data length: %v\n", c.RemoteAddr().String(), len(data))
-		tlsConn.Write(data)
-	}))
+	// to improve performance if you need
+	// parserPool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
+	// svr.ParserExecutor = parserPool.GoByIndex
 
-	err = g.Start()
+	err = svr.Start()
 	if err != nil {
-		log.Fatalf("nbio.Start failed: %v\n", err)
+		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
 	}
-	defer g.Stop()
+	defer svr.Stop()
 
-	go runProxy("localhost:8888", "localhost:9999")
-
-	g.Wait()
-}
-
-func stickyTunnel(clientConn *net.TCPConn, serverAddr string) {
-	serverConn, dailErr := net.Dial("tcp", serverAddr)
-	log.Printf("+ stickyTunnel: [%v -> %v]\n", clientConn.LocalAddr().String(), serverAddr)
-	if dailErr == nil {
-		c2sCor := func() {
-			defer func() {
-				recover()
-			}()
-
-			var buf = make([]byte, 4096)
-			for i := 0; true; i++ {
-				nread, err := clientConn.Read(buf)
-				if err != nil {
-					clientConn.Close()
-					serverConn.Close()
-					break
-				}
-				tmp := buf[:nread]
-				// for len(tmp) > 0 {
-				// 	nSend := int(rand.Intn(len(tmp)) + 1)
-				// 	sendBuf := tmp[:nSend]
-				// 	_, err = serverConn.Write(sendBuf)
-				// 	tmp = tmp[nSend:]
-				// 	if err != nil {
-				// 		clientConn.Close()
-				// 		serverConn.Close()
-				// 		return
-				// 	}
-				// 	time.Sleep(time.Second / 1000)
-				// }
-				for j := 0; j < len(tmp); j++ {
-					_, err := serverConn.Write([]byte{tmp[j]})
-					if err != nil {
-						clientConn.Close()
-						serverConn.Close()
-						return
-					}
-					time.Sleep(time.Second / 1000)
-				}
-			}
-		}
-
-		s2cCor := func() {
-			defer func() {
-				recover()
-			}()
-
-			var buf = make([]byte, 4096)
-
-			for i := 0; true; i++ {
-				nread, err := serverConn.Read(buf)
-				if err != nil {
-					clientConn.Close()
-					serverConn.Close()
-					break
-				}
-
-				tmp := buf[:nread]
-				// for len(tmp) > 0 {
-				// 	nSend := int(rand.Intn(len(tmp)) + 1)
-				// 	sendBuf := tmp[:nSend]
-				// 	_, err = clientConn.Write(sendBuf)
-				// 	tmp = tmp[nSend:]
-				// 	if err != nil {
-				// 		clientConn.Close()
-				// 		serverConn.Close()
-				// 		return
-				// 	}
-				// 	time.Sleep(time.Second / 1000)
-				// }
-				for j := 0; j < len(tmp); j++ {
-					_, err := clientConn.Write([]byte{tmp[j]})
-					if err != nil {
-						clientConn.Close()
-						serverConn.Close()
-						return
-					}
-					time.Sleep(time.Second / 1000)
-				}
-			}
-		}
-
-		go c2sCor()
-		go s2cCor()
-	} else {
-		clientConn.Close()
-	}
-}
-
-func runProxy(agentAddr string, serverAddr string) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", agentAddr)
-	if err != nil {
-		fmt.Println("ResolveTCPAddr Error: ", err)
-		return
-	}
-
-	listener, err2 := net.ListenTCP("tcp", tcpAddr)
-	if err2 != nil {
-		fmt.Println("ListenTCP Error: ", err2)
-		return
-	}
-
-	defer listener.Close()
-
-	fmt.Println(fmt.Sprintf("proxy running on: [%s -> %s]", agentAddr, serverAddr))
-	for {
-		conn, err := listener.AcceptTCP()
-
-		if err != nil {
-			fmt.Println("AcceptTCP Error: ", err2)
-		} else {
-			go stickyTunnel(conn, serverAddr)
-		}
-	}
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	<-interrupt
+	log.Println("exit")
 }
 
 var rsaCertPEM = []byte(`-----BEGIN CERTIFICATE-----
