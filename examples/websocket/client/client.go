@@ -9,7 +9,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:28000", "http service address")
+var addr = flag.String("addr", "localhost:8888", "http service address")
+var message = flag.String("message", "hello would", "message send to the server")
+var messageLen = flag.Int("mlen", 6553, "if set, will override message setting and send message of the specified length")
 
 func main() {
 	flag.Parse()
@@ -23,7 +25,14 @@ func main() {
 	}
 	defer c.Close()
 
-	text := "hello world"
+	text := *message
+	if *messageLen > 0 {
+		textBytes := make([]byte, *messageLen)
+		for i := 0; i < *messageLen; i++ {
+			textBytes[i] = (*message)[i%(len(*message)-1)]
+		}
+		text = string(textBytes)
+	}
 	for {
 		err := c.WriteMessage(websocket.TextMessage, []byte(text))
 		if err != nil {

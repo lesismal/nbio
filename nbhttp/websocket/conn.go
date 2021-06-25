@@ -111,16 +111,21 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 	default:
 	}
 
-	for len(data) > 0 {
-		n := len(data)
-		if n > framePayloadSize {
-			n = framePayloadSize
+	if len(data) == 0 {
+		return c.writeMessage(messageType, true, []byte{})
+
+	} else {
+		for len(data) > 0 {
+			n := len(data)
+			if n > framePayloadSize {
+				n = framePayloadSize
+			}
+			err := c.writeMessage(messageType, n == len(data), data[:n])
+			if err != nil {
+				return err
+			}
+			data = data[n:]
 		}
-		err := c.writeMessage(messageType, n == len(data), data[:n])
-		if err != nil {
-			return err
-		}
-		data = data[n:]
 	}
 
 	return nil

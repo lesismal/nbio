@@ -163,9 +163,9 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				}
 				copy(u.message[ml:], body)
 
-				if u.opcode == 0 {
-					u.opcode = opcode
-				}
+			}
+			if u.opcode == 0 {
+				u.opcode = opcode
 			}
 		} else {
 			break
