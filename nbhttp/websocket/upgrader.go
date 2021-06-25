@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -43,6 +44,11 @@ type Upgrader struct {
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
 	const badHandshake = "websocket: the client is not using the websocket protocol: "
 
+	// requestDump, err := httputil.DumpRequest(r, true)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// fmt.Println(string(requestDump))
 	if !headerContains(r.Header, "Connection", "upgrade") {
 		return nil, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}
@@ -59,9 +65,15 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeInvalidWebsocketVersion)
 	}
 
-	if _, ok := responseHeader["Sec-Websocket-Extensions"]; ok {
+	hereIdx := 0
+	hereIdx++
+	fmt.Printf("here %d\n", hereIdx)
+	if value, ok := responseHeader["Sec-Websocket-Extensions"]; ok {
+		fmt.Printf("error return value: %+v\n", value)
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeUnsupportedExtensions)
 	}
+	hereIdx++
+	fmt.Printf("here %d responseHeaders=%+v\n", hereIdx, responseHeader)
 
 	checkOrigin := u.CheckOrigin
 	if checkOrigin == nil {
@@ -150,6 +162,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	consumed := false
 	for i := 0; true; i++ {
 		opcode, body, ok, fin := u.nextFrame()
+		fmt.Printf("read websocket frame opcode=%x body=%s ok=%v fin=%v\n", opcode, body, ok, fin)
 		if ok {
 			consumed = true
 			bl := len(body)
@@ -163,9 +176,9 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				}
 				copy(u.message[ml:], body)
 
-				if u.opcode == 0 {
-					u.opcode = opcode
-				}
+			}
+			if u.opcode == 0 {
+				u.opcode = opcode
 			}
 		} else {
 			break
@@ -222,9 +235,11 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 	)
 	l := int64(len(u.buffer))
 	headLen := int64(2)
+	fmt.Printf("l=%d\n", l)
 	if l >= 2 {
 		payloadLen := u.buffer[1] & 0x7F
 		bodyLen := int64(-1)
+		fmt.Printf("payloadLen=%d\n", payloadLen)
 
 		switch payloadLen {
 		case 126:
@@ -245,6 +260,8 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 			if masked {
 				headLen += 4
 			}
+			fmt.Printf("bodylen=%d masked=%v headLen=%v\n", bodyLen, masked, headLen)
+
 			total := headLen + bodyLen
 			if l >= total {
 				body = u.buffer[headLen:total]
@@ -254,6 +271,7 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 						body[i] ^= mask[i%4]
 					}
 				}
+				fmt.Printf("unmasked_body=%s\n", string(body))
 				opcode = int8(u.buffer[0] & 0xF)
 				ok = true
 				fin = ((u.buffer[0] & 0x80) != 0)

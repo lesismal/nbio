@@ -9,7 +9,8 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:28000", "http service address")
+var addr = flag.String("addr", "localhost:8888", "http service address")
+var message = flag.String("message", "hello would", "message send to the server")
 
 func main() {
 	flag.Parse()
@@ -23,7 +24,7 @@ func main() {
 	}
 	defer c.Close()
 
-	text := "hello world"
+	text := *message
 	for {
 		err := c.WriteMessage(websocket.TextMessage, []byte(text))
 		if err != nil {
