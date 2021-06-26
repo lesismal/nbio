@@ -13,11 +13,12 @@ import (
 var addr = flag.String("addr", "localhost:8888", "http service address")
 var message = flag.String("message", "hello would", "message send to the server")
 var messageLen = flag.Int("mlen", 100000, "if set, will override message setting and send message of the specified length")
+var path = flag.String("path", "/ws", "path to connect to")
 
 func main() {
 	flag.Parse()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: *addr, Path: *path}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
@@ -47,18 +48,31 @@ func main() {
 			log.Println("read:", err)
 			return
 		}
-		line := make([]byte, 1024)
+		line := make([]byte, *messageLen+10)
 		i := 0
+		read := 0
+		output := ""
 		for err == nil {
-			_, err = reader.Read(line)
-			if err != nil {
-				log.Println("read :", i, string(line))
+			var n int
+			n, err = reader.Read(line)
+			if err == nil {
+				log.Println("read :", i, n, string(line))
+				read += n
 			}
+			output += string(line[:n])
+			i++
+		}
+		if string(output) != text {
+			log.Println("output not equal text:", len(output), len(text))
 		}
 		if err != io.EOF {
 			log.Println("reader read error:", err)
 			return
+		} else {
+			log.Println("readlen:", read)
+
 		}
+
 		time.Sleep(time.Second)
 	}
 }
