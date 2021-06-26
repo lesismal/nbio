@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log"
 	"net/url"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 var addr = flag.String("addr", "localhost:8888", "http service address")
 var message = flag.String("message", "hello would", "message send to the server")
-var messageLen = flag.Int("mlen", 6553, "if set, will override message setting and send message of the specified length")
+var messageLen = flag.Int("mlen", 100000, "if set, will override message setting and send message of the specified length")
 
 func main() {
 	flag.Parse()
@@ -41,15 +42,22 @@ func main() {
 		}
 		log.Println("write:", text)
 
-		_, message, err := c.ReadMessage()
+		_, reader, err := c.NextReader()
 		if err != nil {
 			log.Println("read:", err)
 			return
 		}
-		if string(message) != text {
-			log.Fatalf("message != text: %v, %v", len(message), string(message))
-		} else {
-			log.Println("read :", string(message))
+		line := make([]byte, 1024)
+		i := 0
+		for err == nil {
+			_, err = reader.Read(line)
+			if err != nil {
+				log.Println("read :", i, string(line))
+			}
+		}
+		if err != io.EOF {
+			log.Println("reader read error:", err)
+			return
 		}
 		time.Sleep(time.Second)
 	}

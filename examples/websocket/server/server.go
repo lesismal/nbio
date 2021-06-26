@@ -26,8 +26,8 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn := conn.(*websocket.Conn)
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		// echo
+		fmt.Println("OnMessage:", messageType, string(data), len(data))
 		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
 		c.SetReadDeadline(time.Now().Add(time.Second * 60))
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
