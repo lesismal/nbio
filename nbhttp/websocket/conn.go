@@ -11,7 +11,7 @@ import (
 const (
 	maxFrameHeaderSize         = 14
 	maxControlFramePayloadSize = 125
-	framePayloadSize           = 4096 - maxFrameHeaderSize
+	framePayloadSize           = 65535
 )
 
 // The message types are defined in RFC 6455, section 11.8.
@@ -142,7 +142,7 @@ func (c *Conn) writeMessage(messageType int8, sendOpcode, fin bool, data []byte)
 	if bodyLen < 126 {
 		buf = c.Server.Malloc(len(data) + 2)
 		buf[1] = byte(bodyLen)
-	} else if bodyLen < 65535 {
+	} else if bodyLen <= 65535 {
 		buf = c.Server.Malloc(len(data) + 4)
 		buf[1] = 126
 		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
