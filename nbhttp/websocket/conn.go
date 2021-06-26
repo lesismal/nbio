@@ -115,18 +115,19 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 	isFirstFrame := true
 
 	if len(data) == 0 {
-		return c.writeMessage(messageType, true, []byte{}, isFirstFrame)
-
+		return c.writeMessage(messageType, true, true, []byte{})
 	} else {
+		sendOpcode := true
 		for len(data) > 0 {
 			n := len(data)
 			if n > framePayloadSize {
 				n = framePayloadSize
 			}
-			err := c.writeMessage(messageType, n == len(data), data[:n], isFirstFrame)
+			err := c.writeMessage(messageType, sendOpcode, n == len(data), data[:n])
 			if err != nil {
 				return err
 			}
+			sendOpcode = false
 			data = data[n:]
 			isFirstFrame = false
 		}
@@ -135,7 +136,7 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 	return nil
 }
 
-func (c *Conn) writeMessage(messageType int8, fin bool, data []byte, isFirstFrame bool) error {
+func (c *Conn) writeMessage(messageType int8, sendOpcode, fin bool, data []byte) error {
 	var (
 		buf     []byte
 		bodyLen = len(data)
@@ -158,7 +159,7 @@ func (c *Conn) writeMessage(messageType int8, fin bool, data []byte, isFirstFram
 	copy(buf[offset:], data)
 
 	// opcode
-	if isFirstFrame {
+	if sendOpcode {
 		buf[0] = byte(messageType)
 	}
 
