@@ -151,6 +151,9 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	for i := 0; true; i++ {
 		opcode, body, ok, fin := u.nextFrame()
 		if ok {
+			if u.opcode == 0 {
+				u.opcode = opcode
+			}
 			consumed = true
 			bl := len(body)
 			if bl > 0 {
@@ -162,10 +165,6 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					u.message = u.Server.Realloc(u.message, rl)
 				}
 				copy(u.message[ml:], body)
-
-			}
-			if u.opcode == 0 {
-				u.opcode = opcode
 			}
 		} else {
 			break
@@ -181,19 +180,18 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	if consumed {
-		if bufLen == 0 {
-			bufLen = len(u.buffer)
-			if bufLen > 0 {
-				newBuf := u.Server.Malloc(bufLen)
-				copy(newBuf, u.buffer)
-				u.buffer = newBuf
-			}
+		if len(u.buffer) > 0 && len(u.buffer) < bufLen+len(data) {
+			newBuf := u.Server.Malloc(len(u.buffer))
+			copy(newBuf, u.buffer)
+			u.buffer = newBuf
 		}
 		u.Server.Free(buffer)
 	} else if p.TLSBuffer != nil {
-		u.buffer = u.Server.Malloc(len(data))
-		copy(u.buffer, data)
-		u.Server.Free(buffer)
+		if bufLen == 0 {
+			u.buffer = u.Server.Malloc(len(data))
+			copy(u.buffer, data)
+			// u.Server.Free(data)
+		}
 	}
 
 	return nil
@@ -207,6 +205,10 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 }
 
 func (u *Upgrader) handleMessage() {
+	if !u.Server.CheckUtf8(u.message) {
+		u.conn.Close()
+		return
+	}
 	u.conn.handleMessage(u.opcode, u.message)
 	// u.Free(u.message)
 	u.message = nil
@@ -223,6 +225,7 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
+		opcode = int8(u.buffer[0] & 0xF)
 		payloadLen := u.buffer[1] & 0x7F
 		bodyLen := int64(-1)
 
@@ -254,7 +257,7 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 						body[i] ^= mask[i%4]
 					}
 				}
-				opcode = int8(u.buffer[0] & 0xF)
+
 				ok = true
 				fin = ((u.buffer[0] & 0x80) != 0)
 				u.buffer = u.buffer[total:l]

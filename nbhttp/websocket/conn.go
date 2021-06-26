@@ -59,6 +59,7 @@ func (c *Conn) handleMessage(opcode int8, data []byte) {
 	case PongMessage:
 		c.pongHandler(c, string(data))
 	default:
+		c.Close()
 	}
 }
 
