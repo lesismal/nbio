@@ -14,6 +14,7 @@ var addr = flag.String("addr", "localhost:8888", "http service address")
 var message = flag.String("message", "hello would", "message send to the server")
 var messageLen = flag.Int("mlen", 100000, "if set, will override message setting and send message of the specified length")
 var path = flag.String("path", "/ws", "path to connect to")
+var binary = flag.Bool("binary", false, "if set, message is sent as binary")
 
 func main() {
 	flag.Parse()
@@ -28,25 +29,37 @@ func main() {
 	defer c.Close()
 
 	text := *message
+	messageType := websocket.TextMessage
+	if *binary {
+		messageType = websocket.BinaryMessage
+	}
 	if *messageLen > 0 {
 		textBytes := make([]byte, *messageLen)
 		for i := 0; i < *messageLen; i++ {
 			textBytes[i] = (*message)[i%(len(*message)-1)]
+			if messageType == websocket.BinaryMessage {
+				textBytes[i] = 0xef
+			}
 		}
 		text = string(textBytes)
 	}
 	for {
-		err := c.WriteMessage(websocket.TextMessage, []byte(text))
+		err := c.WriteMessage(messageType, []byte(text))
 		if err != nil {
 			log.Fatalf("write: %v", err)
 			return
 		}
 		log.Println("write:", text)
 
-		_, reader, err := c.NextReader()
+		receiveType, reader, err := c.NextReader()
 		if err != nil {
 			log.Println("read:", err)
 			return
+		}
+		if receiveType != messageType {
+			log.Println("received type != messageType")
+			return
+
 		}
 		line := make([]byte, *messageLen+10)
 		i := 0

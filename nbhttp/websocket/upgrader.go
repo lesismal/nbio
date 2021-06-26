@@ -205,7 +205,7 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 }
 
 func (u *Upgrader) handleMessage() {
-	if !u.Server.CheckUtf8(u.message) {
+	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
 	}
