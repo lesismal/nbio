@@ -205,6 +205,10 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 }
 
 func (u *Upgrader) handleMessage() {
+	if !u.Server.CheckUtf8(u.message) {
+		u.conn.Close()
+		return
+	}
 	u.conn.handleMessage(u.opcode, u.message)
 	// u.Free(u.message)
 	u.message = nil

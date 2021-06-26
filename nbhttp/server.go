@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"sync"
 	"time"
+	"unicode/utf8"
 	"unsafe"
 
 	"github.com/lesismal/llib/std/crypto/tls"
@@ -109,7 +110,9 @@ type Config struct {
 type Server struct {
 	*nbio.Gopher
 
-	MaxLoad  int
+	MaxLoad   int
+	CheckUtf8 func(data []byte) bool
+
 	_onOpen  func(c *nbio.Conn)
 	_onClose func(c *nbio.Conn, err error)
 	_onStop  func()
@@ -287,6 +290,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		_onClose:               func(c *nbio.Conn, err error) {},
 		_onStop:                func() {},
 		MaxLoad:                conf.MaxLoad,
+		CheckUtf8:              utf8.Valid,
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
@@ -450,6 +454,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		_onClose:               func(c *nbio.Conn, err error) {},
 		_onStop:                func() {},
 		MaxLoad:                conf.MaxLoad,
+		CheckUtf8:              utf8.Valid,
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
