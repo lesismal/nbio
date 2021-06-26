@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -13,7 +14,9 @@ import (
 )
 
 var (
-	svr *nbhttp.Server
+	svr  *nbhttp.Server
+	addr = flag.String("addr", ":8888", "listening addr")
+	path = flag.String("path", "/ws", "url path")
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -37,12 +40,13 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/ws", onWebsocket)
+	mux.HandleFunc(*path, onWebsocket)
 
 	svr = nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Addrs:   []string{*addr},
 	}, mux, nil)
 
 	err := svr.Start()
