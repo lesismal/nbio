@@ -38,11 +38,11 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/ws", onWebsocket)
+	mux.HandleFunc("/", onWebsocket)
 
 	svr = nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
+		Addrs:   []string{"localhost:9001"},
 	}, mux, nil)
 
 	err := svr.Start()

@@ -158,6 +158,8 @@ func (c *Conn) writeMessage(messageType int8, sendOpcode, fin bool, data []byte)
 	// opcode
 	if sendOpcode {
 		buf[0] = byte(messageType)
+	} else {
+		buf[0] = 0
 	}
 
 	// fin

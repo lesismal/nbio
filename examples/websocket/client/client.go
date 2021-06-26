@@ -10,14 +10,14 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:8888", "http service address")
+var addr = flag.String("addr", "localhost:9001", "http service address")
 var message = flag.String("message", "hello would", "message send to the server")
 var messageLen = flag.Int("mlen", 100000, "if set, will override message setting and send message of the specified length")
 
 func main() {
 	flag.Parse()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: "/ws"}
+	u := url.URL{Scheme: "ws", Host: *addr, Path: "/"}
 	log.Printf("connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
