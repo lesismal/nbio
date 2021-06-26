@@ -112,8 +112,6 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 	default:
 	}
 
-	isFirstFrame := true
-
 	if len(data) == 0 {
 		return c.writeMessage(messageType, true, true, []byte{})
 	} else {
@@ -129,7 +127,6 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 			}
 			sendOpcode = false
 			data = data[n:]
-			isFirstFrame = false
 		}
 	}
 
