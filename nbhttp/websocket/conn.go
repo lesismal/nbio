@@ -59,6 +59,7 @@ func (c *Conn) handleMessage(opcode int8, data []byte) {
 	case PongMessage:
 		c.pongHandler(c, string(data))
 	default:
+		c.Close()
 	}
 }
 
@@ -111,8 +112,10 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 	default:
 	}
 
+	isFirstFrame := true
+
 	if len(data) == 0 {
-		return c.writeMessage(messageType, true, []byte{})
+		return c.writeMessage(messageType, true, []byte{}, isFirstFrame)
 
 	} else {
 		for len(data) > 0 {
@@ -120,18 +123,19 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 			if n > framePayloadSize {
 				n = framePayloadSize
 			}
-			err := c.writeMessage(messageType, n == len(data), data[:n])
+			err := c.writeMessage(messageType, n == len(data), data[:n], isFirstFrame)
 			if err != nil {
 				return err
 			}
 			data = data[n:]
+			isFirstFrame = false
 		}
 	}
 
 	return nil
 }
 
-func (c *Conn) writeMessage(messageType int8, fin bool, data []byte) error {
+func (c *Conn) writeMessage(messageType int8, fin bool, data []byte, isFirstFrame bool) error {
 	var (
 		buf     []byte
 		bodyLen = len(data)
@@ -154,7 +158,9 @@ func (c *Conn) writeMessage(messageType int8, fin bool, data []byte) error {
 	copy(buf[offset:], data)
 
 	// opcode
-	buf[0] = byte(messageType)
+	if isFirstFrame {
+		buf[0] = byte(messageType)
+	}
 
 	// fin
 	if fin {
