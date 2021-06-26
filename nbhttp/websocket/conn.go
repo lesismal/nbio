@@ -185,8 +185,12 @@ func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {
 		messageHandler: func(*Conn, int8, []byte) {},
 		onClose:        func(*Conn, error) {},
 	}
-	conn.pingHandler = func(*Conn, string) {
-		conn.WriteMessage(PongMessage, nil)
+	conn.pingHandler = func(c *Conn, data string) {
+		if len(data) > 125 {
+			conn.Close()
+			return
+		}
+		c.WriteMessage(PongMessage, []byte(data))
 	}
 	conn.closeHandler = func(c *Conn, code int, text string) {
 		if len(text)+2 > maxControlFramePayloadSize {
