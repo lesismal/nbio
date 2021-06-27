@@ -22,4 +22,14 @@ var (
 	ErrInvalidControlFrame = errors.New("websocket: invalid control frame")
 
 	ErrInvalidWriteCalling = errors.New("websocket: invalid write calling, should call WriteMessage instead")
+
+	ErrReserveBitSet = errors.New("websocket: reserved bit set it frame")
+
+	ErrReservedOpcodeSet = errors.New("websocket: reserved opcode received")
+
+	ErrControlMessageFragmented = errors.New("websocket: control messages must not be fragmented")
+
+	ErrFragmentsShouldNotHaveBinaryOrTextOpcode = errors.New("websocket: fragments should not have opcode of text or binary")
+
+	ErrInvalidCloseCode = errors.New("websocket: invalid close code")
 )
