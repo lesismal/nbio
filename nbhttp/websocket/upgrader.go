@@ -149,7 +149,16 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	buffer := u.buffer
 	consumed := false
 	for i := 0; true; i++ {
-		opcode, body, ok, fin := u.nextFrame()
+		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
+		if res1 || res2 || res3 {
+			return ErrReserveBitSet
+		}
+		if opcode >= 3 && opcode <= 7 {
+			return ErrReservedOpcodeSet
+		}
+		if !fin && (opcode != 1 && opcode != 2) {
+			return ErrControlMessageFragmented
+		}
 		if ok {
 			if u.opcode == 0 {
 				u.opcode = opcode
@@ -215,17 +224,15 @@ func (u *Upgrader) handleMessage() {
 	u.opcode = 0
 }
 
-func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
-	var (
-		ok     bool   = false
-		fin    bool   = false
-		body   []byte = nil
-		opcode int8   = -1
-	)
+func (u *Upgrader) nextFrame() (opcode int8, body []byte, ok, fin, res1, res2, res3 bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
 		opcode = int8(u.buffer[0] & 0xF)
+		res1 = int8(u.buffer[0]&0x40) != 0
+		res2 = int8(u.buffer[0]&0x20) != 0
+		res3 = int8(u.buffer[0]&0x10) != 0
+		fin = ((u.buffer[0] & 0x80) != 0)
 		payloadLen := u.buffer[1] & 0x7F
 		bodyLen := int64(-1)
 
@@ -259,13 +266,12 @@ func (u *Upgrader) nextFrame() (int8, []byte, bool, bool) {
 				}
 
 				ok = true
-				fin = ((u.buffer[0] & 0x80) != 0)
 				u.buffer = u.buffer[total:l]
 			}
 		}
 	}
 
-	return opcode, body, ok, fin
+	return opcode, body, ok, fin, res1, res2, res3
 }
 
 func (u *Upgrader) returnError(w http.ResponseWriter, r *http.Request, status int, err error) error {
