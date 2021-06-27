@@ -28,4 +28,6 @@ var (
 	ErrReservedOpcodeSet = errors.New("websocket: reserved opcode received")
 
 	ErrControlMessageFragmented = errors.New("websocket: control messages must not be fragmented")
+
+	ErrFragmentsShouldNotHaveBinaryOrTextOpcode = errors.New("websocket: fragments should not have opcode of text or binary")
 )

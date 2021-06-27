@@ -32,9 +32,10 @@ type Upgrader struct {
 
 	CheckOrigin func(r *http.Request) bool
 
-	opcode  int8
-	buffer  []byte
-	message []byte
+	expectingFragments bool
+	opcode             int8
+	buffer             []byte
+	message            []byte
 
 	Server *nbhttp.Server
 }
@@ -156,15 +157,20 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		if opcode >= 3 && opcode <= 7 {
 			return ErrReservedOpcodeSet
 		}
-		if !fin && (opcode != 1 && opcode != 2) {
+		if !fin && (opcode != 0 && opcode != 1 && opcode != 2) {
 			return ErrControlMessageFragmented
 		}
-		if ok {
+		if u.expectingFragments && (opcode == 1 || opcode == 2) {
+			return ErrFragmentsShouldNotHaveBinaryOrTextOpcode
+		}
+		if !ok {
+			break
+		}
+		bl := len(body)
+		if opcode == 0 || opcode == 1 || opcode == 2 {
 			if u.opcode == 0 {
 				u.opcode = opcode
 			}
-			consumed = true
-			bl := len(body)
 			if bl > 0 {
 				ml := len(u.message)
 				if ml == 0 {
@@ -175,12 +181,21 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				}
 				copy(u.message[ml:], body)
 			}
+			if fin {
+				u.handleMessage()
+				consumed = true
+				u.expectingFragments = false
+			} else {
+				u.expectingFragments = true
+			}
 		} else {
-			break
-		}
-
-		if fin {
+			opcodeBackup := u.opcode
+			u.opcode = opcode
+			messageBackup := u.message
+			u.message = body
 			u.handleMessage()
+			u.message = messageBackup
+			u.opcode = opcodeBackup
 		}
 
 		if len(u.buffer) == 0 {
@@ -298,7 +313,9 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 
 // NewUpgrader .
 func NewUpgrader(isTLS bool) *Upgrader {
-	return &Upgrader{}
+	return &Upgrader{
+		expectingFragments: false,
+	}
 }
 
 func subprotocols(r *http.Request) []string {
