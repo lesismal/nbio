@@ -41,6 +41,46 @@ type Conn struct {
 	Server  *nbhttp.Server
 }
 
+func validCloseCode(code int) bool {
+	switch code {
+	case 1000:
+		return true //| Normal Closure  | hybi@ietf.org | RFC 6455  |
+	case 1001:
+		return true //      | Going Away      | hybi@ietf.org | RFC 6455  |
+	case 1002:
+		return true //   | Protocol error  | hybi@ietf.org | RFC 6455  |
+	case 1003:
+		return true //     | Unsupported Data| hybi@ietf.org | RFC 6455  |
+	case 1004:
+		return false //     | ---Reserved---- | hybi@ietf.org | RFC 6455  |
+	case 1005:
+		return false //      | No Status Rcvd  | hybi@ietf.org | RFC 6455  |
+	case 1006:
+		return false //      | Abnormal Closure| hybi@ietf.org | RFC 6455  |
+	case 1007:
+		return true //      | Invalid frame   | hybi@ietf.org | RFC 6455  |
+		//      |            | payload data    |               |           |
+	case 1008:
+		return true //     | Policy Violation| hybi@ietf.org | RFC 6455  |
+	case 1009:
+		return true //       | Message Too Big | hybi@ietf.org | RFC 6455  |
+	case 1010:
+		return true //       | Mandatory Ext.  | hybi@ietf.org | RFC 6455  |
+	case 1011:
+		return true //       | Internal Server | hybi@ietf.org | RFC 6455  |
+		//     |            | Error           |               |           |
+	case 1015:
+		return true //  | TLS handshake   | hybi@ietf.org | RFC 6455
+	default:
+	}
+	// IANA registration policy and should be granted in the range 3000-3999.
+	// The range of status codes from 4000-4999 is designated for Private
+	if code >= 3000 && code < 5000 {
+		return true
+	}
+	return false
+}
+
 func (c *Conn) handleMessage(opcode int8, data []byte) {
 	switch opcode {
 	case TextMessage, BinaryMessage:
@@ -48,7 +88,13 @@ func (c *Conn) handleMessage(opcode int8, data []byte) {
 	case CloseMessage:
 		if len(data) >= 2 {
 			code := int(binary.BigEndian.Uint16(data[:2]))
-			c.closeHandler(c, code, string(data[2:]))
+			if !validCloseCode(code) || !c.Server.CheckUtf8(data[2:]) {
+				protoErrorCode := make([]byte, 2)
+				binary.BigEndian.PutUint16(protoErrorCode, 1002)
+				c.WriteMessage(CloseMessage, protoErrorCode)
+			} else {
+				c.closeHandler(c, code, string(data[2:]))
+			}
 		} else {
 			c.WriteMessage(CloseMessage, nil)
 		}

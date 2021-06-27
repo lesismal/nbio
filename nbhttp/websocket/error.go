@@ -30,4 +30,6 @@ var (
 	ErrControlMessageFragmented = errors.New("websocket: control messages must not be fragmented")
 
 	ErrFragmentsShouldNotHaveBinaryOrTextOpcode = errors.New("websocket: fragments should not have opcode of text or binary")
+
+	ErrInvalidCloseCode = errors.New("websocket: invalid close code")
 )
