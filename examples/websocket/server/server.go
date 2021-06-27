@@ -15,8 +15,8 @@ import (
 
 var (
 	svr  *nbhttp.Server
-	addr = flag.String("addr", ":9001", "listening addr")
-	path = flag.String("path", "/", "url path")
+	addr = flag.String("addr", ":8888", "listening addr")
+	path = flag.String("path", "/ws", "url path")
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
