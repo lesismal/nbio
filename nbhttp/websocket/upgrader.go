@@ -166,6 +166,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		if !ok {
 			break
 		}
+		consumed = true
 		bl := len(body)
 		if opcode == 0 || opcode == 1 || opcode == 2 {
 			if u.opcode == 0 {
@@ -183,7 +184,6 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			}
 			if fin {
 				u.handleMessage()
-				consumed = true
 				u.expectingFragments = false
 			} else {
 				u.expectingFragments = true

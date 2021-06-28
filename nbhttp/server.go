@@ -508,8 +508,8 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			return
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
+			tlsConn.Append(data)
 			svr.ParserExecutor(c.Hash(), func() {
-				tlsConn.Append(data)
 				buffer := parser.TLSBuffer
 				for {
 					n, err := tlsConn.Read(buffer)
