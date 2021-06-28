@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,10 +15,12 @@ import (
 )
 
 var (
-	svr *nbhttp.Server
+	svr   *nbhttp.Server
+	print = flag.Bool("print", false, "stdout output of echoed data")
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	flag.Parse()
 	isTLS := true
 	upgrader := websocket.NewUpgrader(isTLS)
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -28,13 +31,19 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
+		if *print {
+			fmt.Println("OnMessage:", messageType, string(data))
+		}
 		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+		if *print {
+			fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+		}
 	})
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	if *print {
+		fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	}
 }
 
 func main() {
