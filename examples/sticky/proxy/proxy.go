@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func stickyTunnel(clientConn *net.TCPConn, dst string) {
+func stickyTunnel(clientConn *net.TCPConn, dst string, interval time.Duration, f func(max int) int) {
 	serverConn, dailErr := net.Dial("tcp", dst)
 	log.Printf("+ stickyTunnel: [%v -> %v]\n", clientConn.LocalAddr().String(), dst)
 	if dailErr == nil {
@@ -25,26 +25,21 @@ func stickyTunnel(clientConn *net.TCPConn, dst string) {
 					break
 				}
 				tmp := buf[:nread]
-				// for len(tmp) > 0 {
-				// 	nSend := int(rand.Intn(len(tmp)) + 1)
-				// 	sendBuf := tmp[:nSend]
-				// 	_, err = serverConn.Write(sendBuf)
-				// 	tmp = tmp[nSend:]
-				// 	if err != nil {
-				// 		clientConn.Close()
-				// 		serverConn.Close()
-				// 		return
-				// 	}
-				// 	time.Sleep(time.Second / 1000)
-				// }
-				for j := 0; j < len(tmp); j++ {
-					_, err := serverConn.Write([]byte{tmp[j]})
+				for len(tmp) > 0 {
+					n := f(len(tmp))
+					if n == 0 {
+						n = len(tmp)
+					}
+					_, err := serverConn.Write(tmp[:n])
 					if err != nil {
 						clientConn.Close()
 						serverConn.Close()
 						return
 					}
-					time.Sleep(time.Second / 1000)
+					if interval > 0 {
+						time.Sleep(interval)
+					}
+					tmp = tmp[n:]
 				}
 			}
 		}
@@ -65,26 +60,21 @@ func stickyTunnel(clientConn *net.TCPConn, dst string) {
 				}
 
 				tmp := buf[:nread]
-				// for len(tmp) > 0 {
-				// 	nSend := int(rand.Intn(len(tmp)) + 1)
-				// 	sendBuf := tmp[:nSend]
-				// 	_, err = clientConn.Write(sendBuf)
-				// 	tmp = tmp[nSend:]
-				// 	if err != nil {
-				// 		clientConn.Close()
-				// 		serverConn.Close()
-				// 		return
-				// 	}
-				// 	time.Sleep(time.Second / 1000)
-				// }
-				for j := 0; j < len(tmp); j++ {
-					_, err := clientConn.Write([]byte{tmp[j]})
+				for len(tmp) > 0 {
+					n := f(len(tmp))
+					if n == 0 {
+						n = len(tmp)
+					}
+					_, err := clientConn.Write(tmp[:n])
 					if err != nil {
 						clientConn.Close()
 						serverConn.Close()
 						return
 					}
-					time.Sleep(time.Second / 1000)
+					if interval > 0 {
+						time.Sleep(interval)
+					}
+					tmp = tmp[n:]
 				}
 			}
 		}
@@ -96,7 +86,7 @@ func stickyTunnel(clientConn *net.TCPConn, dst string) {
 	}
 }
 
-func Run(src string, dst string) {
+func Run(src string, dst string, interval time.Duration, f func(max int) int) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", src)
 	if err != nil {
 		fmt.Println("ResolveTCPAddr Error: ", err)
@@ -118,7 +108,7 @@ func Run(src string, dst string) {
 		if err != nil {
 			fmt.Println("AcceptTCP Error: ", err2)
 		} else {
-			go stickyTunnel(conn, dst)
+			go stickyTunnel(conn, dst, interval, f)
 		}
 	}
 }

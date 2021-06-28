@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,8 +30,6 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
-		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
@@ -39,7 +38,13 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	go proxy.Run("localhost:8888", "localhost:9999")
+	go proxy.Run("localhost:8888", "localhost:9999", time.Nanosecond, func(max int) int {
+		n := rand.Intn(max) % max
+		if n == 0 {
+			n = 1
+		}
+		return n
+	})
 
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
@@ -58,10 +63,6 @@ func main() {
 		Network: "tcp",
 		Addrs:   []string{"localhost:9999"},
 	}, mux, nil, tlsConfig)
-
-	// to improve performance if you need
-	// parserPool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
-	// svr.ParserExecutor = parserPool.GoByIndex
 
 	err = svr.Start()
 	if err != nil {
