@@ -25,7 +25,6 @@ const (
 	PingMessage     MessageType = 9
 	PongMessage     MessageType = 10
 
-	ReservedMessageTypes = 3 | 4 | 5 | 6 | 7
 )
 
 type Conn struct {
