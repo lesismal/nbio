@@ -31,7 +31,7 @@ func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWri
 	}
 	wsConn := conn.(*websocket.Conn)
 	count := int32(0)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
+	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		fmt.Println("OnMessage:", messageType, string(data))
 		if int(atomic.AddInt32(&count, 1)) == maxCount {

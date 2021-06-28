@@ -14,13 +14,15 @@ const (
 	framePayloadSize           = 65535
 )
 
-// The message types are defined in RFC 6455, section 11.8.
+type MessageType int8
+
+// The message types are defined in RFC 6455, section 11.8.t
 const (
-	TextMessage   int8 = 1
-	BinaryMessage int8 = 2
-	CloseMessage  int8 = 8
-	PingMessage   int8 = 9
-	PongMessage   int8 = 10
+	TextMessage   MessageType = 1
+	BinaryMessage MessageType = 2
+	CloseMessage  MessageType = 8
+	PingMessage   MessageType = 9
+	PongMessage   MessageType = 10
 )
 
 type Conn struct {
@@ -34,7 +36,7 @@ type Conn struct {
 
 	pingHandler    func(c *Conn, appData string)
 	pongHandler    func(c *Conn, appData string)
-	messageHandler func(c *Conn, messageType int8, data []byte)
+	messageHandler func(c *Conn, messageType MessageType, data []byte)
 	closeHandler   func(c *Conn, code int, text string)
 
 	onClose func(c *Conn, err error)
@@ -81,7 +83,7 @@ func validCloseCode(code int) bool {
 	return false
 }
 
-func (c *Conn) handleMessage(opcode int8, data []byte) {
+func (c *Conn) handleMessage(opcode MessageType, data []byte) {
 	switch opcode {
 	case TextMessage, BinaryMessage:
 		c.messageHandler(c, opcode, data)
@@ -127,9 +129,9 @@ func (c *Conn) SetPongHandler(h func(*Conn, string)) {
 	}
 }
 
-func (c *Conn) OnMessage(h func(*Conn, int8, []byte)) {
+func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
-		c.messageHandler = func(c *Conn, messageType int8, data []byte) {
+		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, data)
 				c.Server.Free(data)
@@ -144,7 +146,7 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 	}
 }
 
-func (c *Conn) WriteMessage(messageType int8, data []byte) error {
+func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 
@@ -179,7 +181,7 @@ func (c *Conn) WriteMessage(messageType int8, data []byte) error {
 	return nil
 }
 
-func (c *Conn) writeMessage(messageType int8, sendOpcode, fin bool, data []byte) error {
+func (c *Conn) writeMessage(messageType MessageType, sendOpcode, fin bool, data []byte) error {
 	var (
 		buf     []byte
 		bodyLen = len(data)
@@ -228,7 +230,7 @@ func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {
 		index:          index,
 		subprotocol:    subprotocol,
 		pongHandler:    func(*Conn, string) {},
-		messageHandler: func(*Conn, int8, []byte) {},
+		messageHandler: func(*Conn, MessageType, []byte) {},
 		onClose:        func(*Conn, error) {},
 	}
 	conn.pingHandler = func(c *Conn, data string) {

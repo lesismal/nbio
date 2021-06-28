@@ -33,7 +33,7 @@ type Upgrader struct {
 	CheckOrigin func(r *http.Request) bool
 
 	expectingFragments bool
-	opcode             int8
+	opcode             MessageType
 	buffer             []byte
 	message            []byte
 
@@ -239,11 +239,11 @@ func (u *Upgrader) handleMessage() {
 	u.opcode = 0
 }
 
-func (u *Upgrader) nextFrame() (opcode int8, body []byte, ok, fin, res1, res2, res3 bool) {
+func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
-		opcode = int8(u.buffer[0] & 0xF)
+		opcode = MessageType(u.buffer[0] & 0xF)
 		res1 = int8(u.buffer[0]&0x40) != 0
 		res2 = int8(u.buffer[0]&0x20) != 0
 		res3 = int8(u.buffer[0]&0x10) != 0
