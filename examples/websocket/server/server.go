@@ -14,9 +14,10 @@ import (
 )
 
 var (
-	svr  *nbhttp.Server
-	addr = flag.String("addr", ":8888", "listening addr")
-	path = flag.String("path", "/ws", "url path")
+	svr   *nbhttp.Server
+	addr  = flag.String("addr", ":8888", "listening addr")
+	path  = flag.String("path", "/ws", "url path")
+	print = flag.Bool("print", false, "output input to standardout")
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -30,18 +31,24 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.SetReadDeadline(time.Time{})
 	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
 		// echo
-		switch messageType {
-		case websocket.TextMessage:
-			fmt.Println("OnMessage:", messageType, string(data), len(data))
-		case websocket.BinaryMessage:
-			fmt.Println("OnMessage:", messageType, data, len(data))
+		if *print {
+			switch messageType {
+			case websocket.TextMessage:
+				fmt.Println("OnMessage:", messageType, string(data), len(data))
+			case websocket.BinaryMessage:
+				fmt.Println("OnMessage:", messageType, data, len(data))
+			}
 		}
 		c.WriteMessage(messageType, data)
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+		if *print {
+			fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+		}
 	})
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	if *print {
+		fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	}
 }
 
 func main() {
