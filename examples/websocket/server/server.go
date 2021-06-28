@@ -29,7 +29,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.SetReadDeadline(time.Time{})
-	wsConn.OnMessage(func(c *websocket.Conn, messageType int8, data []byte) {
+	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		if *print {
 			switch messageType {

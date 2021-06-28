@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -33,7 +34,7 @@ type Upgrader struct {
 	CheckOrigin func(r *http.Request) bool
 
 	expectingFragments bool
-	opcode             int8
+	opcode             MessageType
 	buffer             []byte
 	message            []byte
 
@@ -133,6 +134,22 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	return u.conn, nil
 }
 
+func validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
+	if res1 || res2 || res3 {
+		return ErrReserveBitSet
+	}
+	if opcode > BinaryMessage && opcode < CloseMessage {
+		return fmt.Errorf("%w: opcode=%d", ErrReservedOpcodeSet, opcode)
+	}
+	if !fin && (opcode != FragmentMessage && opcode != TextMessage && opcode != BinaryMessage) {
+		return fmt.Errorf("%w: opcode=%d", ErrControlMessageFragmented, opcode)
+	}
+	if expectingFragments && (opcode == TextMessage || opcode == BinaryMessage) {
+		return ErrFragmentsShouldNotHaveBinaryOrTextOpcode
+	}
+	return nil
+}
+
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
@@ -151,24 +168,15 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	consumed := false
 	for i := 0; true; i++ {
 		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
-		if res1 || res2 || res3 {
-			return ErrReserveBitSet
-		}
-		if opcode >= 3 && opcode <= 7 {
-			return ErrReservedOpcodeSet
-		}
-		if !fin && (opcode != 0 && opcode != 1 && opcode != 2) {
-			return ErrControlMessageFragmented
-		}
-		if u.expectingFragments && (opcode == 1 || opcode == 2) {
-			return ErrFragmentsShouldNotHaveBinaryOrTextOpcode
+		if err := validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
+			return err
 		}
 		if !ok {
 			break
 		}
 		consumed = true
 		bl := len(body)
-		if opcode == 0 || opcode == 1 || opcode == 2 {
+		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
 			if u.opcode == 0 {
 				u.opcode = opcode
 			}
@@ -239,11 +247,11 @@ func (u *Upgrader) handleMessage() {
 	u.opcode = 0
 }
 
-func (u *Upgrader) nextFrame() (opcode int8, body []byte, ok, fin, res1, res2, res3 bool) {
+func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
-		opcode = int8(u.buffer[0] & 0xF)
+		opcode = MessageType(u.buffer[0] & 0xF)
 		res1 = int8(u.buffer[0]&0x40) != 0
 		res2 = int8(u.buffer[0]&0x20) != 0
 		res3 = int8(u.buffer[0]&0x10) != 0
