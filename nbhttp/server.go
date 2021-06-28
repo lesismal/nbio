@@ -427,9 +427,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		// "h2": {},
 	}
 	for _, v := range tlsConfig.NextProtos {
-		if _, ok := preferenceProtos[v]; ok {
-			delete(preferenceProtos, v)
-		}
+		delete(preferenceProtos, v)
 	}
 	for proto := range preferenceProtos {
 		tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)

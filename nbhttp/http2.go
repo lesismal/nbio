@@ -21,8 +21,6 @@ const (
 
 // Http2Upgrader .
 type Http2Upgrader struct {
-	conn net.Conn
-
 	smReaded bool
 
 	ReadLimit        int64
@@ -32,7 +30,6 @@ type Http2Upgrader struct {
 
 	CheckOrigin func(r *http.Request) bool
 
-	opcode  int8
 	buffer  []byte
 	message []byte
 }

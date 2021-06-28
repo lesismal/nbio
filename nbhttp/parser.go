@@ -461,8 +461,6 @@ UPGRADER:
 						return fmt.Errorf("invalid chunk size %v", cs)
 					}
 					p.chunkSize = int(chunkSize)
-				} else {
-					// chunk extension
 				}
 			}
 		case stateBodyChunkSizeLF:
