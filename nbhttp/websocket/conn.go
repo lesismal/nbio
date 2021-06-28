@@ -18,11 +18,14 @@ type MessageType int8
 
 // The message types are defined in RFC 6455, section 11.8.t
 const (
-	TextMessage   MessageType = 1
-	BinaryMessage MessageType = 2
-	CloseMessage  MessageType = 8
-	PingMessage   MessageType = 9
-	PongMessage   MessageType = 10
+	FragmentMessage MessageType = 0 // Must be preceded by Text or Binary message
+	TextMessage     MessageType = 1
+	BinaryMessage   MessageType = 2
+	CloseMessage    MessageType = 8
+	PingMessage     MessageType = 9
+	PongMessage     MessageType = 10
+
+	ReservedMessageTypes = 3 | 4 | 5 | 6 | 7
 )
 
 type Conn struct {
