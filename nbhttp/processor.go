@@ -10,13 +10,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -302,16 +300,6 @@ func (p *ServerProcessor) HandleMessage(handler http.Handler) {
 	if handler != nil {
 		p.handler = handler
 	}
-}
-
-func (p *ServerProcessor) call(f func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			logging.Error("ServerProcessor call failed: %v", err)
-			debug.PrintStack()
-		}
-	}()
-	f()
 }
 
 // NewServerProcessor .

@@ -74,7 +74,6 @@ func (tp *FixedPool) pushByIndex(index int, f func()) {
 	select {
 	case r.chTaskBy <- f:
 	case <-tp.chClose:
-		return
 	}
 	return
 }

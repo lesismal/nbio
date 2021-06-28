@@ -43,8 +43,6 @@ type Upgrader struct {
 
 // Upgrade .
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
-	const badHandshake = "websocket: the client is not using the websocket protocol: "
-
 	if !headerContains(r.Header, "Connection", "upgrade") {
 		return nil, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}

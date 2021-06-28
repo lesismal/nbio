@@ -10,7 +10,12 @@ func TestSetLogger(t *testing.T) {
 func TestSetLevel(t *testing.T) {
 	SetLevel(LevelAll)
 	func() {
-		defer func() { recover() }()
+		defer func() {
+			err := recover()
+			if err != nil {
+				t.Errorf("recorver returned err: %s", err)
+			}
+		}()
 		SetLevel(1000)
 	}()
 }
