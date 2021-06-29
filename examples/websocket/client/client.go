@@ -12,9 +12,10 @@ import (
 
 var addr = flag.String("addr", "localhost:8888", "http service address")
 var message = flag.String("message", "hello would", "message send to the server")
-var messageLen = flag.Int("mlen", 100000, "if set, will override message setting and send message of the specified length")
+var messageLen = flag.Int("mlen", 1024*1024*4, "if set, will override message setting and send message of the specified length")
 var path = flag.String("path", "/ws", "path to connect to")
 var binary = flag.Bool("binary", false, "if set, message is sent as binary")
+var print = flag.Bool("print", false, "output to stdout")
 
 func main() {
 	flag.Parse()
@@ -49,7 +50,10 @@ func main() {
 			log.Fatalf("write: %v", err)
 			return
 		}
-		log.Println("write:", text)
+		if *print {
+			log.Println("write:", text)
+
+		}
 
 		receiveType, reader, err := c.NextReader()
 		if err != nil {
@@ -69,7 +73,9 @@ func main() {
 			var n int
 			n, err = reader.Read(line)
 			if err == nil {
-				log.Println("read :", i, n, string(line))
+				if *print {
+					log.Println("read :", i, n, string(line))
+				}
 				read += n
 			}
 			output += string(line[:n])
@@ -82,7 +88,10 @@ func main() {
 			log.Println("reader read error:", err)
 			return
 		} else {
-			log.Println("readlen:", read)
+			if *print {
+
+				log.Println("readlen:", read)
+			}
 
 		}
 

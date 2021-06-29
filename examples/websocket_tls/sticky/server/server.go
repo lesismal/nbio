@@ -51,8 +51,9 @@ func main() {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
 	}
 	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
+		Certificates:                []tls.Certificate{cert},
+		InsecureSkipVerify:          true,
+		DynamicRecordSizingDisabled: false,
 	}
 	tlsConfig.BuildNameToCertificate()
 
@@ -60,8 +61,9 @@ func main() {
 	mux.HandleFunc("/wss", onWebsocket)
 
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{"localhost:9999"},
+		Network:            "tcp",
+		Addrs:              []string{"localhost:9999"},
+		MaxWriteBufferSize: 16 * 1024 * 1024,
 	}, mux, nil, tlsConfig)
 
 	err = svr.Start()

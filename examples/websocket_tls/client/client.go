@@ -65,10 +65,12 @@ func main() {
 					return
 				}
 				var message []byte
-				line := make([]byte, 4096)
+				line := make([]byte, 65535)
 				i := 0
 				for {
+					log.Printf("pre read")
 					l, err := reader.Read(line)
+					log.Printf("post read")
 					if err != nil {
 						if errors.Is(err, io.EOF) {
 							break
@@ -76,7 +78,7 @@ func main() {
 						log.Fatalf("error while reading %s", err)
 					}
 					message = append(message, line[:l]...)
-					log.Printf("read %d %d", i, l)
+					log.Printf("read %d %d %d", i, l, len(message))
 					i++
 
 				}

@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"sync"
 
@@ -24,7 +25,6 @@ const (
 	CloseMessage    MessageType = 8
 	PingMessage     MessageType = 9
 	PongMessage     MessageType = 10
-
 )
 
 type Conn struct {
@@ -166,17 +166,22 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		return c.writeMessage(messageType, true, true, []byte{})
 	} else {
 		sendOpcode := true
+		i := 0
+		soFar := 0
 		for len(data) > 0 {
 			n := len(data)
 			if n > framePayloadSize {
 				n = framePayloadSize
 			}
+			fmt.Printf("sending %d %d %d of %d\n", i, n, soFar, len(data))
 			err := c.writeMessage(messageType, sendOpcode, n == len(data), data[:n])
 			if err != nil {
 				return err
 			}
 			sendOpcode = false
+			soFar += n
 			data = data[n:]
+			i++
 		}
 	}
 
