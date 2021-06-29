@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/textproto"
-	"runtime"
 	"strconv"
 	"strings"
 )
@@ -39,8 +38,6 @@ type Parser struct {
 	readLimit     int
 	minBufferSize int
 
-	// session interface{}
-
 	Processor Processor
 
 	Upgrader Upgrader
@@ -62,11 +59,6 @@ func (p *Parser) onClose(err error) {
 	if p.Upgrader != nil {
 		p.Upgrader.Close(p, err)
 	}
-	runtime.SetFinalizer(p, func(p *Parser) {
-		if p.cache != nil {
-			p.Server.Free(p.cache)
-		}
-	})
 }
 
 // Read .
@@ -82,9 +74,7 @@ func (p *Parser) Read(data []byte) error {
 		if offset+len(data) > p.readLimit {
 			return ErrTooLong
 		}
-		p.cache = p.Server.Realloc(p.cache, offset+len(data))
-		copy(p.cache[offset:], data)
-		p.Server.Free(data)
+		p.cache = append(p.cache, data...)
 		data = p.cache
 		p.cache = nil
 	}
@@ -93,18 +83,9 @@ UPGRADER:
 	if p.Upgrader != nil {
 		udata := data
 		if start > 0 {
-			udata = p.Server.Malloc(len(data) - start)
-			copy(udata, data[start:])
+			udata = data[start:]
 		}
 		return p.Upgrader.Read(p, udata)
-	}
-
-	if p.TLSBuffer == nil {
-		defer func() {
-			if data != nil && p.Server != nil {
-				p.Server.Free(data)
-			}
-		}()
 	}
 
 	for i := offset; i < len(data); i++ {
@@ -413,14 +394,6 @@ UPGRADER:
 				start += cl
 				i = start - 1
 			} else {
-				// if start == 0 {
-				// 	p.cache = data
-				// 	data = nil
-				// 	return nil
-				// }
-				// p.cache = p.Server.Malloc(cl)[:left]
-				// copy(p.cache, data[start:])
-				// return nil
 				goto Exit
 			}
 		case stateBodyChunkSizeBefore:
@@ -500,18 +473,6 @@ UPGRADER:
 				p.nextState(stateBodyChunkDataCR)
 				return nil
 			} else {
-				// if start == 0 {
-				// 	p.cache = data
-				// 	data = nil
-				// 	return nil
-				// }
-				// if cl < p.minBufferSize {
-				// 	p.cache = p.Server.Malloc(p.minBufferSize)[:left]
-				// } else {
-				// 	p.cache = p.Server.Malloc(cl)[:left]
-				// }
-				// copy(p.cache, data[start:])
-				// return nil
 				goto Exit
 			}
 		case stateBodyChunkDataCR:
@@ -636,27 +597,12 @@ Exit:
 			p.cache = data
 			data = nil
 		} else {
-			if left < p.minBufferSize {
-				p.cache = p.Server.Malloc(p.minBufferSize)[:left]
-			} else {
-				p.cache = p.Server.Malloc(left)
-			}
-			copy(p.cache, data[start:])
+			p.cache = data[start:]
 		}
 	}
 
 	return nil
 }
-
-// Session returns user session
-// func (p *Parser) Session() interface{} {
-// 	return p.session
-// }
-
-// SetSession sets user session
-// func (p *Parser) SetSession(session interface{}) {
-// 	p.session = session
-// }
 
 func (p *Parser) parseTransferEncoding() error {
 	raw, present := p.header["Transfer-Encoding"]
