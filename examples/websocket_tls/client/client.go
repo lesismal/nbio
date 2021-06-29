@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"crypto/tls"
+	"errors"
 	"flag"
+	"io"
 	"log"
 	"net/url"
 	"sync"
@@ -11,7 +14,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:8888", "http service address")
+var addr = flag.String("addr", "localhost:9999", "http service address")
+var mesgLen = flag.Int("message-len", 4*1048576, "length of message sent")
+var clients = flag.Int("clients", 1, "number of clients to simulate")
+var print = flag.Bool("print", false, "stdout input and output")
 
 func main() {
 	flag.Parse()
@@ -27,8 +33,13 @@ func main() {
 	}
 	waitGroup := sync.WaitGroup{}
 
-	waitGroup.Add(100)
-	for i := 0; i < 100; i++ {
+	waitGroup.Add(*clients)
+
+	text := make([]byte, *mesgLen, *mesgLen)
+	for i := 0; i < *mesgLen; i++ {
+		text[i] = 'A'
+	}
+	for i := 0; i < *clients; i++ {
 		go func() {
 			defer waitGroup.Done()
 			c, _, err := dialer.Dial(u.String(), nil)
@@ -37,24 +48,47 @@ func main() {
 			}
 			defer c.Close()
 
-			text := "hello world"
 			for {
-				err := c.WriteMessage(websocket.TextMessage, []byte(text))
+				err := c.WriteMessage(websocket.TextMessage, text)
 				if err != nil {
 					log.Fatalf("write: %v", err)
 					return
 				}
-				log.Println("write:", text)
+				log.Println("wrote")
+				if *print {
+					log.Println("write:", text)
+				}
 
-				_, message, err := c.ReadMessage()
+				_, reader, err := c.NextReader()
 				if err != nil {
 					log.Println("read:", err)
 					return
 				}
-				if string(message) != text {
-					log.Fatalf("message != text: %v, %v", len(message), string(message))
+				var message []byte
+				line := make([]byte, 4096)
+				i := 0
+				for {
+					l, err := reader.Read(line)
+					if err != nil {
+						if errors.Is(err, io.EOF) {
+							break
+						}
+						log.Fatalf("error while reading %s", err)
+					}
+					message = append(message, line[:l]...)
+					log.Printf("read %d %d", i, l)
+					i++
+
+				}
+				log.Println("read:", len(message))
+				res := bytes.Compare(message, text)
+				if res != 0 {
+					log.Fatalf("message != text: at offset %d, %v\n", res, message[res:])
 				} else {
-					log.Println("read :", string(message))
+					if *print {
+						log.Println("read :", string(message))
+					}
+					log.Println("good")
 				}
 				time.Sleep(time.Millisecond * 500)
 			}

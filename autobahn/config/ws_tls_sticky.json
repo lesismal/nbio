@@ -10,8 +10,8 @@
 		}
 	],
 	"cases": [
-		"*"
+		"9.1.4"
 	],
-	"exclude-cases": [],
+	"exclude-cases": [""],
 	"exclude-agent-cases": {}
 }
