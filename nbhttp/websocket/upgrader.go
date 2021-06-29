@@ -155,7 +155,11 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		return nbhttp.ErrTooLong
 	}
 
-	u.buffer = append(u.buffer, data...)
+	if bufLen == 0 {
+		u.buffer = data
+	} else {
+		u.buffer = append(u.buffer, data...)
+	}
 
 	for i := 0; true; i++ {
 		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
@@ -192,6 +196,10 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		if len(u.buffer) == 0 {
 			break
 		}
+	}
+
+	if bufLen == 0 {
+		u.buffer = append([]byte{}, u.buffer...)
 	}
 
 	return nil

@@ -597,7 +597,7 @@ Exit:
 			p.cache = data
 			data = nil
 		} else {
-			p.cache = data[start:]
+			p.cache = append([]byte{}, data[start:]...)
 		}
 	}
 
