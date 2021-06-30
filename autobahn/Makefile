@@ -9,4 +9,6 @@ summary:
 	chmod -R 700 $(PWD)/report/
 	cat $(PWD)/report/ws_tls_sticky/index.json
 
-.PHONY: clean summary
+rerun: clean report summary
+
+.PHONY: clean summary rerun
