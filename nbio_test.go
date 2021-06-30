@@ -223,7 +223,7 @@ func TestFuzz(t *testing.T) {
 		bs = append(bs, []byte{2})
 		bs = append(bs, []byte{3})
 		bs = append(bs, []byte{4})
-		//c.Writev(bs)
+		c.Writev(bs)
 
 		time.Sleep(time.Second / 10)
 
