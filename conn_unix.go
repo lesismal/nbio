@@ -327,7 +327,8 @@ func (c *Conn) write(b []byte) (int, error) {
 		left := len(b) - n
 		if left > 0 {
 			c.leftSize += left
-			leftData := netmempool.WrapBuffer(b[n:])
+			leftData := netmempool.Malloc(left)
+			copy(leftData.Remaining(), b[n:])
 			c.writeBuffers = append(c.writeBuffers, leftData)
 			c.modWrite()
 		} else {
