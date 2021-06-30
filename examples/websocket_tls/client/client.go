@@ -14,7 +14,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:9999", "http service address")
+var addr = flag.String("addr", "localhost:8888", "http service address")
 var mesgLen = flag.Int("message-len", 4*1048576, "length of message sent")
 var clients = flag.Int("clients", 1, "number of clients to simulate")
 var print = flag.Bool("print", false, "stdout input and output")
