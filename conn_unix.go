@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/mempool"
+	"github.com/lesismal/nbio/netmempool"
 )
 
 // Conn implements net.Conn
@@ -28,7 +29,7 @@ type Conn struct {
 	wTimer *htimer
 
 	leftSize     int
-	writeBuffers [][]byte
+	writeBuffers []*netmempool.Buffer
 
 	closed   bool
 	isWAdded bool
@@ -326,12 +327,8 @@ func (c *Conn) write(b []byte) (int, error) {
 		left := len(b) - n
 		if left > 0 {
 			c.leftSize += left
-			leftData := b
-			if n > 0 {
-				leftData = mempool.Malloc(left)
-				copy(leftData, b[n:])
-				c.g.onWriteBufferFree(c, b)
-			}
+			leftData := netmempool.Malloc(len(b[n:]))
+			copy(leftData.Remaining(), b[n:])
 			c.writeBuffers = append(c.writeBuffers, leftData)
 			c.modWrite()
 		} else {
@@ -340,9 +337,32 @@ func (c *Conn) write(b []byte) (int, error) {
 		return len(b), nil
 	}
 	c.leftSize += len(b)
-	c.writeBuffers = append(c.writeBuffers, b)
+	c.writeBuffers = append(c.writeBuffers, netmempool.WrapBuffer(b))
 
 	return len(b), nil
+}
+func (c *Conn) writeBuffered() error {
+	for {
+		if len(c.writeBuffers) == 0 {
+			break
+		}
+		b := c.writeBuffers[0]
+		n, err := syscall.Write(int(c.fd), b.Remaining())
+		b.Consumed(n)
+		if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+			return err
+		}
+		left := len(b.Remaining())
+		if left > 0 {
+			c.modWrite()
+			return nil
+		} else {
+			c.g.onWriteBufferFree(c, b.Remaining())
+		}
+		netmempool.Free(b)
+		c.writeBuffers = c.writeBuffers[1:]
+	}
+	return nil
 }
 
 func (c *Conn) flush() error {
@@ -352,16 +372,7 @@ func (c *Conn) flush() error {
 		return errClosed
 	}
 
-	buffers := c.writeBuffers
-	c.leftSize = 0
-	c.writeBuffers = nil
-	var err error
-	switch len(buffers) {
-	case 1:
-		_, err = c.write(buffers[0])
-	default:
-		_, err = c.writev(buffers)
-	}
+	err := c.writeBuffered()
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
@@ -398,7 +409,9 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		return -1, syscall.EINVAL
 	}
 	if len(c.writeBuffers) > 0 {
-		c.writeBuffers = append(c.writeBuffers, in...)
+		for _, i := range in {
+			c.writeBuffers = append(c.writeBuffers, netmempool.WrapBuffer(i))
+		}
 		return size, nil
 	}
 
@@ -464,7 +477,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	for _, b := range c.writeBuffers {
-		mempool.Free(b)
+		netmempool.Free(b)
 	}
 	c.writeBuffers = nil
 

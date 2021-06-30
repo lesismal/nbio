@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	addr = ":9099"
+	addr = ":9101"
 )
 
 var (
@@ -30,7 +30,6 @@ func writeComplete(c *nbio.Conn, data []byte) (int, error) {
 	msgLen := len(data)
 	for {
 		n, err := c.Write(data[offset:])
-		fmt.Printf("write %d %s\n", n, err)
 		offset += n
 		if err != nil || offset == msgLen {
 			return offset, err
