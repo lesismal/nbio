@@ -27,9 +27,22 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		// echo
-		c.WriteMessage(messageType, data)
+	var writer *websocket.LargeMessageWriter
+	wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+		fmt.Printf("received frame %v\n", data)
+		if writer == nil {
+			writer = websocket.NewLargeMessageWriter(wsConn, messageType)
+		}
+		n, err := writer.WriteFin(data, fin)
+		if err != nil {
+			log.Fatalf("error writing to writer: %s", err)
+		}
+		if n != len(data) {
+			log.Fatalf("failed to write complete message to writer. expected=%d actual=%d", len(data), n)
+		}
+		if fin {
+			writer = nil
+		}
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)

@@ -178,15 +178,21 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if u.opcode == 0 {
 				u.opcode = opcode
 			}
-			if bl > 0 {
-				ml := len(u.message)
-				if ml == 0 {
-					u.message = u.Server.Malloc(bl)
-				} else {
-					rl := ml + len(body)
-					u.message = u.Server.Realloc(u.message, rl)
+			if u.conn.dataFrameHandler != nil {
+				u.message = body
+				u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
+				u.message = nil
+			} else {
+				if bl > 0 {
+					ml := len(u.message)
+					if ml == 0 {
+						u.message = u.Server.Malloc(bl)
+					} else {
+						rl := ml + len(body)
+						u.message = u.Server.Realloc(u.message, rl)
+					}
+					copy(u.message[ml:], body)
 				}
-				copy(u.message[ml:], body)
 			}
 			if fin {
 				u.handleMessage()
