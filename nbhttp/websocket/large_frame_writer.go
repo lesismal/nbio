@@ -16,6 +16,9 @@ func NewLargeMessageWriter(conn *Conn, opcode MessageType) *LargeMessageWriter {
 
 func (l *LargeMessageWriter) WriteFin(data []byte, fin bool) (int, error) {
 	total := 0
+	if len(data) == 0 {
+		return 0, l.conn.writeMessage(l.opcode, l.firstFrame, fin && len(data) == 0, []byte{})
+	}
 	for len(data) > 0 {
 		n := len(data)
 		if n > framePayloadSize {

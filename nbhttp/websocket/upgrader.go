@@ -179,8 +179,16 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				u.opcode = opcode
 			}
 			if u.conn.dataFrameHandler != nil {
-				u.message = body
-				u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
+				u.message = nil
+				if bl > 0 {
+					u.message = u.Server.Malloc(bl)
+					copy(u.message, body)
+				}
+				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
+					u.conn.Close()
+				} else {
+					u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
+				}
 				u.message = nil
 			} else {
 				if bl > 0 {
