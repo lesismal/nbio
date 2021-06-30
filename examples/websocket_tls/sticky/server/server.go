@@ -33,13 +33,13 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
 		mtx.Lock()
 		defer mtx.Unlock()
-		fmt.Printf("received frame %v\n", data)
 		if writer == nil {
 			writer = websocket.NewLargeMessageWriter(wsConn, messageType)
 		}
 		n, err := writer.WriteFin(data, fin)
 		if err != nil {
-			log.Fatalf("error writing to writer: %s", err)
+			c.Close()
+			return
 		}
 		if n != len(data) {
 			log.Fatalf("failed to write complete message to writer. expected=%d actual=%d", len(data), n)
