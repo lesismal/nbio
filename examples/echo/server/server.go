@@ -8,8 +8,9 @@ import (
 
 func main() {
 	g := nbio.NewGopher(nbio.Config{
-		Network: "tcp",
-		Addrs:   []string{":8888"},
+		Network:            "tcp",
+		Addrs:              []string{":8888"},
+		MaxWriteBufferSize: 6 * 1024 * 1024,
 	})
 
 	g.OnData(func(c *nbio.Conn, data []byte) {
