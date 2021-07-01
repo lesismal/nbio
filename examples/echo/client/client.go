@@ -14,9 +14,9 @@ import (
 func main() {
 	var (
 		ret    []byte
-		buf    = make([]byte, 1024)
+		buf    = make([]byte, 1024*1024*4)
 		addr   = "localhost:8888"
-		ctx, _ = context.WithTimeout(context.Background(), time.Second)
+		ctx, _ = context.WithTimeout(context.Background(), 60*time.Second)
 	)
 
 	logging.SetLevel(logging.LevelInfo)

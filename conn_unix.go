@@ -353,6 +353,7 @@ func (c *Conn) flush() error {
 	}
 
 	buffers := c.writeBuffers
+	c.leftSize = 0
 	c.writeBuffers = nil
 	var err error
 	switch len(buffers) {
