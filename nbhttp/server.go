@@ -239,7 +239,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
 
-	var messageHandlerExecutePool *taskpool.MixedPool
+	var messageHandlerExecutePool *taskpool.FixedPool
 	parserExecutor := func(index int, f func()) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -267,7 +267,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		if bufferSize <= 0 {
 			bufferSize = 1024
 		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
+		messageHandlerExecutePool = taskpool.NewFixedPool(nativeSize, bufferSize)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
@@ -391,7 +391,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	conf.EnableSendfile = false
 
-	var messageHandlerExecutePool *taskpool.MixedPool
+	var messageHandlerExecutePool *taskpool.FixedPool
 	parserExecutor := func(index int, f func()) {
 		defer func() {
 			if err := recover(); err != nil {
@@ -418,7 +418,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		if bufferSize <= 0 {
 			bufferSize = 1024
 		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
+		messageHandlerExecutePool = taskpool.NewFixedPool(nativeSize, bufferSize)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 

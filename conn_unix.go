@@ -323,6 +323,9 @@ func (c *Conn) write(b []byte) (int, error) {
 		if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 			return n, err
 		}
+		if n < 0 { // if err== EINTR or EAGAIN, then n is -1, we still need to buffer the message
+			n = 0
+		}
 
 		left := len(b) - n
 		if left > 0 {
@@ -336,8 +339,11 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		return len(b), nil
 	}
-	c.leftSize += len(b)
-	c.writeBuffers = append(c.writeBuffers, netmempool.WrapBuffer(b))
+	bLen := len(b)
+	leftData := netmempool.Malloc(bLen)
+	copy(leftData.Remaining(), b)
+	c.leftSize += bLen
+	c.writeBuffers = append(c.writeBuffers, leftData)
 
 	return len(b), nil
 }

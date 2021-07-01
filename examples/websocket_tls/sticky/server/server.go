@@ -3,15 +3,11 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
-	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio/examples/sticky/proxy"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
@@ -28,24 +24,15 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	mtx := sync.Mutex{}
-	var writer *websocket.LargeMessageWriter
+	isFirst := true
 	wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
-		mtx.Lock()
-		defer mtx.Unlock()
-		if writer == nil {
-			writer = websocket.NewLargeMessageWriter(wsConn, messageType)
-		}
-		n, err := writer.WriteFin(data, fin)
+		err := c.WriteFrame(messageType, isFirst, fin, data)
 		if err != nil {
 			c.Close()
 			return
 		}
-		if n != len(data) {
-			log.Fatalf("failed to write complete message to writer. expected=%d actual=%d", len(data), n)
-		}
 		if fin {
-			writer = nil
+			isFirst = true
 		}
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
@@ -55,13 +42,13 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	go proxy.Run("localhost:8888", "localhost:9999", time.Nanosecond, func(max int) int {
-		n := rand.Intn(max) % max
-		if n == 0 {
-			n = 1
-		}
-		return n
-	})
+	// go proxy.Run("localhost:8888", "localhost:9999", time.Nanosecond, func(max int) int {
+	// 	n := rand.Intn(max) % max
+	// 	if n == 0 {
+	// 		n = 1
+	// 	}
+	// 	return n
+	// })
 
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
