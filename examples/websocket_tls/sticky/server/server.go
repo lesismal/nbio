@@ -27,8 +27,23 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
+	isFirst := true
+	conn.SetDeadline(time.Time{})
+	// mtx := &sync.Mutex{}
+	// wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+	// 	//mtx.Lock()
+	// 	//defer mtx.Unlock()
+	// 	log.Printf("received %s\n", data)
+	// 	err := c.WriteFrame(messageType, isFirst, fin, data)
+	// 	if err != nil {
+	// 		c.Close()
+	// 		return
+	// 	}
+	// 	if fin {
+	// 		isFirst = true
+	// 	}
+	// })
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		// echo
 		c.WriteMessage(messageType, data)
 	})
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
@@ -59,11 +74,15 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
+	log.Printf("calling new server tls\n")
+
+	//messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:9999"},
 	}, mux, nil, tlsConfig)
 
+	log.Printf("calling start\n")
 	err = svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)

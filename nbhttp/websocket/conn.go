@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net"
 	"sync"
 
@@ -24,7 +25,6 @@ const (
 	CloseMessage    MessageType = 8
 	PingMessage     MessageType = 9
 	PongMessage     MessageType = 10
-
 )
 
 type Conn struct {
@@ -36,10 +36,11 @@ type Conn struct {
 
 	subprotocol string
 
-	pingHandler    func(c *Conn, appData string)
-	pongHandler    func(c *Conn, appData string)
-	messageHandler func(c *Conn, messageType MessageType, data []byte)
-	closeHandler   func(c *Conn, code int, text string)
+	pingHandler      func(c *Conn, appData string)
+	pongHandler      func(c *Conn, appData string)
+	messageHandler   func(c *Conn, messageType MessageType, data []byte)
+	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
+	closeHandler     func(c *Conn, code int, text string)
 
 	onClose func(c *Conn, err error)
 	Server  *nbhttp.Server
@@ -142,6 +143,17 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	}
 }
 
+func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
+	if h != nil {
+		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
+			c.Server.MessageHandlerExecutor(c.index, func() {
+				h(c, messageType, fin, data)
+				c.Server.Free(data)
+			})
+		}
+	}
+}
+
 func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h != nil {
 		c.onClose = h
@@ -163,7 +175,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	}
 
 	if len(data) == 0 {
-		return c.writeMessage(messageType, true, true, []byte{})
+		return c.WriteFrame(messageType, true, true, []byte{})
 	} else {
 		sendOpcode := true
 		for len(data) > 0 {
@@ -171,7 +183,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 			if n > framePayloadSize {
 				n = framePayloadSize
 			}
-			err := c.writeMessage(messageType, sendOpcode, n == len(data), data[:n])
+			err := c.WriteFrame(messageType, sendOpcode, n == len(data), data[:n])
 			if err != nil {
 				return err
 			}
@@ -183,7 +195,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	return nil
 }
 
-func (c *Conn) writeMessage(messageType MessageType, sendOpcode, fin bool, data []byte) error {
+func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
 	var (
 		buf     []byte
 		bodyLen = len(data)
@@ -218,6 +230,7 @@ func (c *Conn) writeMessage(messageType MessageType, sendOpcode, fin bool, data 
 	}
 
 	_, err := c.Conn.Write(buf)
+	fmt.Printf("frame called %s\n", data)
 	return err
 }
 
@@ -228,12 +241,13 @@ func (c *Conn) Write(data []byte) (int, error) {
 
 func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {
 	conn := &Conn{
-		Conn:           c,
-		index:          index,
-		subprotocol:    subprotocol,
-		pongHandler:    func(*Conn, string) {},
-		messageHandler: func(*Conn, MessageType, []byte) {},
-		onClose:        func(*Conn, error) {},
+		Conn:             c,
+		index:            index,
+		subprotocol:      subprotocol,
+		pongHandler:      func(*Conn, string) {},
+		messageHandler:   func(*Conn, MessageType, []byte) {},
+		dataFrameHandler: nil,
+		onClose:          func(*Conn, error) {},
 	}
 	conn.pingHandler = func(c *Conn, data string) {
 		if len(data) > 125 {

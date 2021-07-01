@@ -49,12 +49,13 @@ func main() {
 			defer c.Close()
 
 			for {
+				log.Printf("writing message: %s\n", text)
 				err := c.WriteMessage(websocket.TextMessage, text)
 				if err != nil {
 					log.Fatalf("write: %v", err)
 					return
 				}
-				log.Println("wrote")
+				log.Printf("wrote\n")
 				if *print {
 					log.Println("write:", text)
 				}

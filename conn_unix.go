@@ -8,6 +8,7 @@ package nbio
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"syscall"
@@ -319,6 +320,9 @@ func (c *Conn) write(b []byte) (int, error) {
 
 	if len(c.writeBuffers) == 0 {
 		n, err := syscall.Write(int(c.fd), b)
+		if n > 0 {
+			fmt.Printf("syscall write called %s\n", b)
+		}
 		if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 			return n, err
 		}
@@ -353,6 +357,9 @@ func (c *Conn) flush() error {
 	}
 
 	buffers := c.writeBuffers
+	if len(buffers) > 0 {
+		fmt.Printf("flush called %d %d\n", len(buffers), len(buffers[0]))
+	}
 	c.leftSize = 0
 	c.writeBuffers = nil
 	var err error
