@@ -122,10 +122,6 @@ type Server struct {
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
-
-	// Malloc  func(size int) []byte
-	// Realloc func(buf []byte, size int) []byte
-	// Free    func(buf []byte) error
 }
 
 // OnOpen registers callback for new connection
@@ -294,10 +290,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
-
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -455,13 +447,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
-
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
 	}
 
 	isClient := false
@@ -497,6 +482,22 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		delete(svr.conns, c)
 		svr.mux.Unlock()
 	})
+	buffers := make([][]byte, conf.NPoller)
+	for i := 0; i < len(buffers); i++ {
+		buffers[i] = make([]byte, conf.ReadBufferSize)
+	}
+	getBuffer := func(c *nbio.Conn) []byte {
+		return buffers[uint64(c.Hash())%uint64(conf.NPoller)]
+	}
+	if runtime.GOOS == "windows" {
+		getBuffer = func(c *nbio.Conn) []byte {
+			parser := c.Session().(*Parser)
+			if parser.TLSBuffer == nil {
+				parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
+			}
+			return parser.TLSBuffer
+		}
+	}
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
@@ -505,12 +506,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			return
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
-			// tmp := append([]byte{}, data...)
-			// tlsConn.Append(tmp)
 			tlsConn.Append(data)
 			svr.ParserExecutor(c.Hash(), func() {
-				buffer := parser.TLSBuffer
-				// buffer := make([]byte, 4096)
+				buffer := getBuffer(c)
 				for {
 					n, err := tlsConn.Read(buffer)
 					if err != nil {
