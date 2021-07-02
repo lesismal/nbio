@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"testing"
 	"time"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 func TestServerParserContentLength(t *testing.T) {
@@ -95,9 +93,9 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 		})
 	}
 	svr := &Server{
-		Malloc:  mempool.Malloc,
-		Realloc: mempool.Realloc,
-		Free:    mempool.Free,
+		// Malloc:  mempool.Malloc,
+		// Realloc: mempool.Realloc,
+		// Free:    mempool.Free,
 	}
 	parser = NewParser(processor, isClient, maxReadSize, minBufferSize)
 	parser.Server = svr
@@ -129,9 +127,9 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 
 func newParser(isClient bool) *Parser {
 	svr := &Server{
-		Malloc:  mempool.Malloc,
-		Realloc: mempool.Realloc,
-		Free:    mempool.Free,
+		// Malloc:  mempool.Malloc,
+		// Realloc: mempool.Realloc,
+		// Free:    mempool.Free,
 	}
 	maxReadSize := 1024 * 1024 * 4
 	minBufferSize := 1024 * 4
