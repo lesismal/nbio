@@ -27,7 +27,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	isFirst := true
+	// isFirst := true
 	conn.SetDeadline(time.Time{})
 	// mtx := &sync.Mutex{}
 	// wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
