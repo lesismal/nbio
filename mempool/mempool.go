@@ -7,8 +7,11 @@ package mempool
 import (
 	"errors"
 	"fmt"
+	"os"
+	"runtime"
 	"sync"
 	"sync/atomic"
+	"unsafe"
 )
 
 var (
@@ -208,8 +211,27 @@ func (c *ChosMemPool) Realloc(buf []byte, size int) []byte {
 	return newBuf[:size]
 }
 
+var (
+	mtx    = sync.Mutex{}
+	stacks = map[uintptr][]byte{}
+)
+
 // Free .
 func (c *ChosMemPool) Free(buf []byte) error {
+	sbuf := make([]byte, 1024*32)
+	n := runtime.Stack(sbuf, false)
+	sbuf = sbuf[:n]
+	ptr := uintptr(unsafe.Pointer(&buf[0]))
+
+	mtx.Lock()
+	defer mtx.Unlock()
+	if v, ok := stacks[ptr]; ok {
+		fmt.Printf("pre put: %v\n%v", len(v), string(v))
+		fmt.Printf("curr put: %v\n%v", len(sbuf), string(sbuf))
+		os.Exit(1)
+	} else {
+		stacks[ptr] = sbuf
+	}
 	c.pool.Put(buf)
 	return nil
 }
