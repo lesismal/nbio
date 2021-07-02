@@ -77,7 +77,7 @@ func (res *Response) WriteHeader(statusCode int) {
 	}
 }
 
-const maxPacketSize = 32768
+const maxPacketSize = 65536
 
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
@@ -110,7 +110,7 @@ func (res *Response) Write(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		buf = nil
+		buf = mempool.Malloc(0)
 		buf = append(buf, lenStr...)
 		buf = append(buf, "\r\n"...)
 		buf = append(buf, data...)
@@ -130,13 +130,14 @@ func (res *Response) Write(data []byte) (int, error) {
 
 	buf := res.buffer
 	res.buffer = nil
-	if len(buf)+l >= maxPacketSize {
-		_, err := conn.Write(buf)
-		if err != nil {
-			return 0, err
-		}
-		return conn.Write(data)
-	}
+	// if len(buf)+l >= maxPacketSize {
+	// 	_, err := conn.Write(buf)
+	// 	if err != nil {
+	// 		return 0, err
+	// 	}
+	// 	// may be double freed if OnWriteBufferRelease
+	// 	return conn.Write(data)
+	// }
 	buf = append(buf, data...)
 	return conn.Write(buf)
 }

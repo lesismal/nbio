@@ -85,7 +85,6 @@ func (br *BodyReader) close() error {
 		br.buffer = nil
 		br.index = 0
 	}
-	bodyReaderPool.Put(br)
 	return nil
 }
 
