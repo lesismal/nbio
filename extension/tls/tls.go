@@ -12,8 +12,8 @@ type Conn = tls.Conn
 type Config = tls.Config
 
 // Dial returns a net.Conn to be added to a Gopher
-func Dial(network, addr string, config *Config) (*tls.Conn, error) {
-	tlsConn, err := tls.Dial(network, addr, config)
+func Dial(network, addr string, config *Config, v ...interface{}) (*tls.Conn, error) {
+	tlsConn, err := tls.Dial(network, addr, config, v...)
 	if err != nil {
 		return nil, err
 	}

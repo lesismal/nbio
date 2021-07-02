@@ -10,6 +10,8 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 // Parser .
@@ -76,7 +78,6 @@ func (p *Parser) Read(data []byte) error {
 		}
 		p.cache = append(p.cache, data...)
 		data = p.cache
-		p.cache = nil
 	}
 
 UPGRADER:
@@ -85,7 +86,12 @@ UPGRADER:
 		if start > 0 {
 			udata = data[start:]
 		}
-		return p.Upgrader.Read(p, udata)
+		err := p.Upgrader.Read(p, udata)
+		if p.cache != nil {
+			mempool.Free(p.cache)
+			p.cache = nil
+		}
+		return err
 	}
 
 	for i := offset; i < len(data); i++ {
@@ -379,17 +385,8 @@ UPGRADER:
 		case stateBodyContentLength:
 			cl := p.contentLength
 			left := len(data) - start
-			if left == cl {
-				if start == 0 {
-					p.Processor.OnBody(data, true)
-					data = nil
-				} else {
-					p.Processor.OnBody(data[start:], false)
-				}
-				p.handleMessage()
-				return nil
-			} else if left > cl {
-				p.Processor.OnBody(data[start:start+cl], false)
+			if left >= cl {
+				p.Processor.OnBody(data[start : start+cl])
 				p.handleMessage()
 				start += cl
 				i = start - 1
@@ -458,20 +455,11 @@ UPGRADER:
 		case stateBodyChunkData:
 			cl := p.chunkSize
 			left := len(data) - start
-			if left > cl {
-				p.Processor.OnBody(data[start:start+cl], false)
+			if left >= cl {
+				p.Processor.OnBody(data[start : start+cl])
 				start += cl
 				i = start - 1
 				p.nextState(stateBodyChunkDataCR)
-			} else if left == cl {
-				if start == 0 {
-					p.Processor.OnBody(data, true)
-					data = nil
-				} else {
-					p.Processor.OnBody(data[start:], false)
-				}
-				p.nextState(stateBodyChunkDataCR)
-				return nil
 			} else {
 				goto Exit
 			}
@@ -593,12 +581,18 @@ UPGRADER:
 Exit:
 	left := len(data) - start
 	if left > 0 {
-		if start == 0 && offset > 0 {
-			p.cache = data
-			data = nil
-		} else {
-			p.cache = append([]byte{}, data[start:]...)
+		if p.cache == nil {
+			p.cache = mempool.Malloc(left)
+			copy(p.cache, data[start:])
+		} else if start > 0 {
+			oldCache := p.cache
+			p.cache = mempool.Malloc(left)
+			copy(p.cache, data[start:])
+			mempool.Free(oldCache)
 		}
+	} else if len(p.cache) > 0 {
+		mempool.Free(p.cache)
+		p.cache = nil
 	}
 
 	return nil

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -51,7 +50,7 @@ type Processor interface {
 	OnStatus(code int, status string)
 	OnHeader(key, value string)
 	OnContentLength(contentLength int)
-	OnBody(data []byte, needRelease bool)
+	OnBody(data []byte)
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
 	HandleExecute(executor func(index int, f func()))
@@ -134,23 +133,11 @@ func (p *ServerProcessor) OnContentLength(contentLength int) {
 }
 
 // OnBody .
-func (p *ServerProcessor) OnBody(data []byte, needRelease bool) {
+func (p *ServerProcessor) OnBody(data []byte) {
 	if p.request.Body == nil {
-		if !needRelease {
-			l := len(data)
-			if l < p.minBufferSize {
-				l = p.minBufferSize
-			}
-			b := mempool.Malloc(l)[:len(data)]
-			copy(b, data)
-			data = b
-		}
 		p.request.Body = NewBodyReader(data)
 	} else {
 		p.request.Body.(*BodyReader).Append(data)
-		if needRelease {
-			mempool.Free(data)
-		}
 	}
 }
 
@@ -380,12 +367,11 @@ func (p *ClientProcessor) OnContentLength(contentLength int) {
 }
 
 // OnBody .
-func (p *ClientProcessor) OnBody(data []byte, needRelease bool) {
+func (p *ClientProcessor) OnBody(data []byte) {
 	if p.response.Body == nil {
 		p.response.Body = NewBodyReader(data)
 	} else {
 		p.response.Body.(*BodyReader).Append(data)
-		mempool.Free(data)
 	}
 }
 
@@ -470,7 +456,7 @@ func (p *EmptyProcessor) OnContentLength(contentLength int) {
 }
 
 // OnBody .
-func (p *EmptyProcessor) OnBody(data []byte, needRelease bool) {
+func (p *EmptyProcessor) OnBody(data []byte) {
 
 }
 

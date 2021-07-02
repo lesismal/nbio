@@ -58,7 +58,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 		}
 		c.Close()
 	}
-	c.g.onWriteBufferFree(c, b)
+	// c.g.onWriteBufferFree(c, b)
 
 	return nwrite, err
 }
@@ -73,9 +73,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		}
 		c.Close()
 	}
-	for _, v := range in {
-		c.g.onWriteBufferFree(c, v)
-	}
+	// for _, v := range in {
+	// 	c.g.onWriteBufferFree(c, v)
+	// }
 	return int(nwrite), err
 }
 
