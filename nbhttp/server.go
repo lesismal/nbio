@@ -351,9 +351,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	// 	return mempool.Malloc(int(conf.ReadBufferSize))
 	// })
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
-	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-		mempool.Free(buffer)
-	})
+	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+	// 	mempool.Free(buffer)
+	// })
 
 	g.OnStop(func() {
 		svr._onStop()
@@ -537,9 +537,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	// 	return mempool.Malloc(int(conf.ReadBufferSize))
 	// })
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
-	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-		mempool.Free(buffer)
-	})
+	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+	// 	mempool.Free(buffer)
+	// })
 
 	g.OnStop(func() {
 		svr._onStop()
