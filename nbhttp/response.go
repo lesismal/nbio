@@ -12,6 +12,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -220,7 +222,7 @@ func (res *Response) eoncodeHead() {
 	status := res.status
 	statusCode := res.statusCode
 
-	data := make([]byte, 2048)[0:0]
+	data := mempool.Malloc(1024)[0:0]
 
 	data = append(data, res.request.Proto...)
 	data = append(data, ' ', '0'+byte(statusCode/100), '0'+byte(statusCode%100)/10, '0'+byte(statusCode%10), ' ')

@@ -14,6 +14,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -175,7 +176,12 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				u.opcode = opcode
 			}
 			if bl > 0 {
-				u.message = append(u.message, body...)
+				if u.message == nil {
+					u.message = mempool.Malloc(len(body))
+					copy(u.message, body)
+				} else {
+					u.message = append(u.message, body...)
+				}
 			}
 			if fin {
 				u.handleMessage()
@@ -199,7 +205,9 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	if bufLen == 0 {
-		u.buffer = append([]byte{}, u.buffer...)
+		tmp := u.buffer
+		u.buffer = mempool.Malloc(len(tmp))
+		copy(u.buffer, tmp)
 	}
 
 	return nil
