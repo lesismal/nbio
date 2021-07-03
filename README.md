@@ -61,7 +61,7 @@
 - [x] least dependency
 - [x] TLS supported
 - [x] HTTP/HTTPS 1.x
-- [x] Websocket
+- [x] Websocket, [Passes the Autobahn Test Suite](https://lesismal.github.io/nbio/websocket)
 - [ ] HTTP 2.0
 
 ## Installation
