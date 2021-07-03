@@ -9,12 +9,14 @@ package nbio
 import (
 	"io"
 	"os"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 const maxSendfileSize = 4 << 20
 
 // SendFile .
-func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
+func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {
 	if f == nil {
 		return 0, nil
 	}
@@ -27,5 +29,35 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = stat.Size()
 	}
 
-	return io.CopyN(c, f, remain)
+	for remain > 0 {
+		bufLen := 1024 * 32
+		if bufLen > int(remain) {
+			bufLen = int(remain)
+		}
+		buf := mempool.Malloc(bufLen)
+		nr, er := f.Read(buf)
+		if nr > 0 {
+			nw, ew := c.Write(buf[0:nr])
+			if nw < 0 {
+				nw = 0
+			}
+			remain -= int64(nw)
+			written += int64(nw)
+			if ew != nil {
+				err = ew
+				break
+			}
+			if nr != nw {
+				err = io.ErrShortWrite
+				break
+			}
+		}
+		if er != nil {
+			if er != io.EOF {
+				err = er
+			}
+			break
+		}
+	}
+	return written, err
 }

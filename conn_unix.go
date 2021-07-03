@@ -333,7 +333,7 @@ func (c *Conn) write(b []byte) (int, error) {
 			copy(c.writeBuffer, b[n:])
 			c.modWrite()
 		}
-		return len(b), err
+		return len(b), nil
 	}
 	c.writeBuffer = append(c.writeBuffer, b...)
 
@@ -417,7 +417,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	nwrite := 0
 	for _, b := range in {
 		n, err := c.write(b)
-		if n > 0  { 
+		if n > 0 {
 			nwrite += n
 		}
 		if err != nil {
