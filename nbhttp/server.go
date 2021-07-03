@@ -97,7 +97,7 @@ type Config struct {
 	MessageHandlerPoolSize int
 
 	// MessageHandlerTaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
-	MessageHandlerTaskIdleTime time.Duration
+	// MessageHandlerTaskIdleTime time.Duration
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
@@ -235,8 +235,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
 
-	var messageHandlerExecutePool *taskpool.MixedPool
-	parserExecutor := func(index int, f func()) {
+	var parserExecutor = func(index int, f func()) {
 		defer func() {
 			if err := recover(); err != nil {
 				const size = 64 << 10
@@ -248,22 +247,12 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		f()
 	}
 
+	var messageHandlerExecutePool *taskpool.FixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 256
+			conf.MessageHandlerPoolSize = conf.NPoller * 64
 		}
-		if conf.MessageHandlerTaskIdleTime <= 0 {
-			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
-		}
-		nativeSize := conf.MaxLoad / 8
-		if nativeSize <= 0 {
-			nativeSize = 1024
-		}
-		bufferSize := conf.MaxLoad - nativeSize + 1
-		if bufferSize <= 0 {
-			bufferSize = 1024
-		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
+		messageHandlerExecutePool = taskpool.NewFixedPool(conf.MessageHandlerPoolSize, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
@@ -321,14 +310,14 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		// newData := svr.Malloc(len(data))
-		// copy(newData, data)
-		// data = newData
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			logging.Error("nil parser")
 			return
 		}
+		// because the data if poller buffer,
+		// do not set svr.ParserExecutor with a func executed in another goroutine,
+		// or the memory of data buffer would be dirty
 		svr.ParserExecutor(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
@@ -339,10 +328,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
-	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
@@ -399,26 +384,16 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			return parser.TLSBuffer
 		}
 	}
-	parserHandlerExecutePool := taskpool.NewFixedPool(conf.NParser, 1024)
-	parserExecutor := parserHandlerExecutePool.GoByIndex
 
-	var messageHandlerExecutePool *taskpool.MixedPool
+	var parserHandlerExecutePool = taskpool.NewFixedPool(conf.NParser, 1024)
+	var parserExecutor = parserHandlerExecutePool.GoByIndex
+
+	var messageHandlerExecutePool *taskpool.FixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 256
+			conf.MessageHandlerPoolSize = conf.NPoller * 64
 		}
-		if conf.MessageHandlerTaskIdleTime <= 0 {
-			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
-		}
-		nativeSize := conf.MaxLoad / 8
-		if nativeSize <= 0 {
-			nativeSize = 1024
-		}
-		bufferSize := conf.MaxLoad - nativeSize + 1
-		if bufferSize <= 0 {
-			bufferSize = 1024
-		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
+		messageHandlerExecutePool = taskpool.NewFixedPool(conf.MessageHandlerPoolSize, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
@@ -524,10 +499,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 		}
 	})
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
-	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
