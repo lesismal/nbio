@@ -18,7 +18,7 @@ var (
 	freeCntSize   int64
 )
 
-var defaultMemPool = New(1024 * 1024 * 1024)
+var DefaultMemPool = NewChosMemPool(64)
 
 var pos = []byte{0, 1, 28, 2, 29, 14, 24, 3,
 	30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19,
@@ -120,28 +120,28 @@ func (pool *MemPool) Free(buf []byte) error {
 
 // Malloc exports default package method
 func Malloc(size int) []byte {
-	return defaultMemPool.Malloc(size)
+	return DefaultMemPool.Malloc(size)
 }
 
 // Realloc exports default package method
 func Realloc(buf []byte, size int) []byte {
-	return defaultMemPool.Realloc(buf, size)
+	return DefaultMemPool.Realloc(buf, size)
 }
 
 // Free exports default package method
 func Free(buf []byte) error {
-	return defaultMemPool.Free(buf)
+	return DefaultMemPool.Free(buf)
 }
 
 // NativeAllocator definition
 type NativeAllocator struct{}
 
-// MallocMallocNative exports default package method
+// Malloc .
 func (a *NativeAllocator) Malloc(size int) []byte {
 	return make([]byte, size)
 }
 
-// (a*NativeAllocator) Realloc exports default package method
+// Realloc .
 func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -151,7 +151,7 @@ func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
 	return newBuf
 }
 
-// (a*NativeAllocator) Free exports default package method
+// Free .
 func (a *NativeAllocator) Free(buf []byte) error {
 	return nil
 }
@@ -167,4 +167,49 @@ func State() (int64, int64, int64, int64, string) {
 	n1, n2, n3, n4 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
 	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
 	return n1, n2, n3, n4, s
+}
+
+// ChosMemPool
+type ChosMemPool struct {
+	minSize int
+	pool    sync.Pool
+}
+
+func NewChosMemPool(minSize int) *ChosMemPool {
+	if minSize <= 0 {
+		minSize = 64
+	}
+	c := &ChosMemPool{
+		minSize: minSize,
+	}
+	c.pool.New = func() interface{} {
+		return make([]byte, minSize)
+	}
+	return c
+}
+
+func (c *ChosMemPool) Malloc(size int) []byte {
+	b := c.pool.Get().([]byte)
+	if cap(b) < size {
+		c.pool.Put(b)
+		b = make([]byte, size)
+	}
+	return b[:size]
+}
+
+// Realloc .
+func (c *ChosMemPool) Realloc(buf []byte, size int) []byte {
+	if size <= cap(buf) {
+		return buf[:size]
+	}
+	newBuf := c.Malloc(size)
+	copy(newBuf, buf)
+	c.pool.Put(buf)
+	return newBuf[:size]
+}
+
+// Free .
+func (c *ChosMemPool) Free(buf []byte) error {
+	c.pool.Put(buf)
+	return nil
 }

@@ -14,6 +14,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -155,15 +156,12 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		return nbhttp.ErrTooLong
 	}
 
-	if bufLen > 0 {
-		u.buffer = u.Server.Realloc(u.buffer, bufLen+len(data))
-		copy(u.buffer[bufLen:], data)
-	} else {
+	if bufLen == 0 {
 		u.buffer = data
+	} else {
+		u.buffer = append(u.buffer, data...)
 	}
 
-	buffer := u.buffer
-	consumed := false
 	for i := 0; true; i++ {
 		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
 		if err := validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
@@ -172,34 +170,42 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		if !ok {
 			break
 		}
-		consumed = true
 		bl := len(body)
 		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
 			if u.opcode == 0 {
 				u.opcode = opcode
 			}
-			if u.conn.dataFrameHandler != nil {
-				u.message = nil
-				if bl > 0 {
-					u.message = u.Server.Malloc(bl)
+			//<<<<<<< HEAD
+			//			if u.conn.dataFrameHandler != nil {
+			//				u.message = nil
+			//				if bl > 0 {
+			//					u.message = u.Server.Malloc(bl)
+			//					copy(u.message, body)
+			//				}
+			//				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
+			//					u.conn.Close()
+			//				} else {
+			//					u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
+			//				}
+			//				u.message = nil
+			//			} else {
+			//				if bl > 0 {
+			//					ml := len(u.message)
+			//					if ml == 0 {
+			//						u.message = u.Server.Malloc(bl)
+			//					} else {
+			//						rl := ml + len(body)
+			//						u.message = u.Server.Realloc(u.message, rl)
+			//					}
+			//					copy(u.message[ml:], body)
+			//=======
+			if bl > 0 {
+				if u.message == nil {
+					u.message = mempool.Malloc(len(body))
 					copy(u.message, body)
-				}
-				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
-					u.conn.Close()
 				} else {
-					u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
-				}
-				u.message = nil
-			} else {
-				if bl > 0 {
-					ml := len(u.message)
-					if ml == 0 {
-						u.message = u.Server.Malloc(bl)
-					} else {
-						rl := ml + len(body)
-						u.message = u.Server.Realloc(u.message, rl)
-					}
-					copy(u.message[ml:], body)
+					u.message = append(u.message, body...)
+					// >>>>>>> master
 				}
 			}
 			if fin {
@@ -223,19 +229,10 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		}
 	}
 
-	if consumed {
-		if len(u.buffer) > 0 && len(u.buffer) < bufLen+len(data) {
-			newBuf := u.Server.Malloc(len(u.buffer))
-			copy(newBuf, u.buffer)
-			u.buffer = newBuf
-		}
-		u.Server.Free(buffer)
-	} else if p.TLSBuffer != nil {
-		if bufLen == 0 {
-			u.buffer = u.Server.Malloc(len(data))
-			copy(u.buffer, data)
-			// u.Server.Free(data)
-		}
+	if bufLen == 0 {
+		tmp := u.buffer
+		u.buffer = mempool.Malloc(len(tmp))
+		copy(u.buffer, tmp)
 	}
 
 	return nil
@@ -254,7 +251,6 @@ func (u *Upgrader) handleMessage() {
 		return
 	}
 	u.conn.handleMessage(u.opcode, u.message)
-	// u.Free(u.message)
 	u.message = nil
 	u.opcode = 0
 }

@@ -12,6 +12,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -75,7 +77,7 @@ func (res *Response) WriteHeader(statusCode int) {
 	}
 }
 
-const maxPacketSize = 32768
+const maxPacketSize = 65536
 
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
@@ -84,9 +86,6 @@ func (res *Response) Write(data []byte) (int, error) {
 	if l == 0 || conn == nil {
 		return 0, nil
 	}
-
-	malloc := res.parser.Server.Malloc
-	realloc := res.parser.Server.Realloc
 
 	res.hasBody = true
 
@@ -100,18 +99,10 @@ func (res *Response) Write(data []byte) (int, error) {
 		lenStr := res.formatInt(l, 16)
 		size := hl + len(lenStr) + l + 4
 		if size < maxPacketSize {
-			if buf == nil {
-				buf = malloc(size)
-			} else {
-				buf = realloc(buf, size)
-			}
-			copy(buf[hl:], lenStr)
-			hl += len(lenStr)
-			copy(buf[hl:], "\r\n")
-			hl += 2
-			copy(buf[hl:], data)
-			hl += l
-			copy(buf[hl:], "\r\n")
+			buf = append(buf, lenStr...)
+			buf = append(buf, "\r\n"...)
+			buf = append(buf, data...)
+			buf = append(buf, "\r\n"...)
 			res.buffer = buf
 			return l, nil
 		}
@@ -119,14 +110,11 @@ func (res *Response) Write(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		size -= hl
-		buf = malloc(size)
-		copy(buf, lenStr)
-		copy(buf[len(lenStr):], "\r\n")
-		hl = len(lenStr) + 2
-		copy(buf[hl:], data)
-		hl += l
-		copy(buf[hl:], "\r\n")
+		buf = mempool.Malloc(0)
+		buf = append(buf, lenStr...)
+		buf = append(buf, "\r\n"...)
+		buf = append(buf, data...)
+		buf = append(buf, "\r\n"...)
 		if len(buf) < maxPacketSize {
 			res.buffer = buf
 			return l, nil
@@ -141,19 +129,16 @@ func (res *Response) Write(data []byte) (int, error) {
 	res.eoncodeHead()
 
 	buf := res.buffer
-	hl := len(buf)
 	res.buffer = nil
-	if hl+l >= maxPacketSize {
-		_, err := conn.Write(buf)
-		if err != nil {
-			return 0, err
-		}
-		buf = malloc(l)
-		hl = 0
-	} else {
-		buf = realloc(buf, hl+l)
-	}
-	copy(buf[hl:], data)
+	// if len(buf)+l >= maxPacketSize {
+	// 	_, err := conn.Write(buf)
+	// 	if err != nil {
+	// 		return 0, err
+	// 	}
+	// 	// may be double freed if OnWriteBufferRelease
+	// 	return conn.Write(data)
+	// }
+	buf = append(buf, data...)
 	return conn.Write(buf)
 }
 
@@ -231,9 +216,6 @@ func (res *Response) eoncodeHead() {
 		return
 	}
 
-	malloc := res.parser.Server.Malloc
-	realloc := res.parser.Server.Realloc
-
 	res.headEncoded = true
 
 	res.checkChunked()
@@ -241,58 +223,37 @@ func (res *Response) eoncodeHead() {
 	status := res.status
 	statusCode := res.statusCode
 
-	data := malloc(4096)
+	data := mempool.Malloc(1024)[0:0]
 
-	proto := res.request.Proto
-	i := 0
-	copy(data, proto)
-	i += len(proto)
-
-	data[i] = ' '
-	i++
-	data[i] = '0' + byte(statusCode/100)
-	i++
-	data[i] = '0' + byte(statusCode%100)/10
-	i++
-	data[i] = '0' + byte(statusCode%10)
-	i++
-	data[i] = ' '
-	i++
-	copy(data[i:], status)
-	i += len(status)
-	data[i] = '\r'
-	i++
-	data[i] = '\n'
-	i++
+	data = append(data, res.request.Proto...)
+	data = append(data, ' ', '0'+byte(statusCode/100), '0'+byte(statusCode%100)/10, '0'+byte(statusCode%10), ' ')
+	data = append(data, status...)
+	data = append(data, '\r', '\n')
 
 	if res.hasBody && len(res.header["Content-Type"]) == 0 {
 		const contentType = "Content-Type: text/plain; charset=utf-8\r\n"
-		copy(data[i:], contentType)
-		i += len(contentType)
+		data = append(data, contentType...)
 	}
 	if !res.chunked {
 		if !res.hasBody {
 			const contentLenthZero = "Content-Length: 0\r\n"
-			copy(data[i:], contentLenthZero)
-			i += len(contentLenthZero)
+			data = append(data, contentLenthZero...)
 		}
 	}
 	if res.request.Close && len(res.header["Connection"]) == 0 {
 		const connection = "Connection: close\r\n"
-		copy(data[i:], connection)
-		i += len(connection)
+		data = append(data, connection...)
 	}
 
 	if len(res.header["Date"]) == 0 {
 		const days = "SunMonTueWedThuFriSat"
 		const months = "JanFebMarAprMayJunJulAugSepOctNovDec"
-		data = data[:i]
 		t := time.Now().UTC()
 		yy, mm, dd := t.Date()
 		hh, mn, ss := t.Clock()
 		day := days[3*t.Weekday():]
 		mon := months[3*(mm-1):]
-		_ = append(data[i:],
+		data = append(data,
 			'D', 'a', 't', 'e', ':', ' ',
 			day[0], day[1], day[2], ',', ' ',
 			byte('0'+dd/10), byte('0'+dd%10), ' ',
@@ -303,7 +264,6 @@ func (res *Response) eoncodeHead() {
 			byte('0'+ss/10), byte('0'+ss%10), ' ',
 			'G', 'M', 'T',
 			'\r', '\n')
-		i += 37
 	}
 
 	res.trailer = map[string]string{}
@@ -314,20 +274,10 @@ func (res *Response) eoncodeHead() {
 	for k, vv := range res.header {
 		if _, ok := res.trailer[k]; !ok {
 			for _, v := range vv {
-				// v := strings.Join(vv, ",")
-				data = realloc(data, i+len(k)+len(v)+4)
-				copy(data[i:], k)
-				i += len(k)
-				data[i] = ':'
-				i++
-				data[i] = ' '
-				i++
-				copy(data[i:], v)
-				i += len(v)
-				data[i] = '\r'
-				i++
-				data[i] = '\n'
-				i++
+				data = append(data, k...)
+				data = append(data, ':', ' ')
+				data = append(data, v...)
+				data = append(data, '\r', '\n')
 			}
 		} else if len(vv) > 0 {
 			v := res.header.Get(k)
@@ -336,9 +286,7 @@ func (res *Response) eoncodeHead() {
 		}
 	}
 
-	data = realloc(data, i+2)
-	copy(data[i:], "\r\n")
-
+	data = append(data, '\r', '\n')
 	res.buffer = data
 }
 
@@ -354,38 +302,45 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 		return err
 	}
 
-	malloc := res.parser.Server.Malloc
-	realloc := res.parser.Server.Realloc
+	// malloc := res.parser.Server.Malloc
+	// realloc := res.parser.Server.Realloc
 
 	data := res.buffer
 	res.buffer = nil
 	i := len(data)
-	if data == nil {
-		data = malloc(res.trailerSize + 5)
-	} else {
-		data = realloc(data, len(data)+res.trailerSize+5)
-	}
+	// if data == nil {
+	// 	data = malloc(res.trailerSize + 5)
+	// } else {
+	// 	data = realloc(data, len(data)+res.trailerSize+5)
+	// }
 	if len(res.trailer) == 0 {
-		copy(data[i:], "0\r\n\r\n")
+		// copy(data[i:], "0\r\n\r\n")
+		data = append(data, "0\r\n\r\n"...)
 	} else {
-		copy(data[i:], "0\r\n")
+		// copy(data[i:], "0\r\n")
+		data = append(data, "0\r\n"...)
 		i += 3
 		for k, v := range res.trailer {
-			copy(data[i:], k)
+			// copy(data[i:], k)
+			data = append(data, k...)
 			i += len(k)
-			data[i] = ':'
-			i++
-			data[i] = ' '
-			i++
-			copy(data[i:], v)
+			// data[i] = ':'
+			// i++
+			// data[i] = ' '
+			// i++
+			data = append(data, ": "...)
+			// copy(data[i:], v)
+			data = append(data, v...)
 			i += len(v)
-			data[i] = '\r'
-			i++
-			data[i] = '\n'
-			i++
+			// data[i] = '\r'
+			// i++
+			// data[i] = '\n'
+			// i++
+			data = append(data, "\r\n"...)
 		}
-		data = realloc(data, i+2)
-		copy(data[i:], "\r\n")
+		// data = realloc(data, i+2)
+		// copy(data[i:], "\r\n")
+		data = append(data, "\r\n"...)
 	}
 	_, err = conn.Write(data)
 	return err

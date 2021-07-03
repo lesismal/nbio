@@ -46,10 +46,14 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 }
 
 // Append .
-func (br *BodyReader) Append(b []byte) {
-	if len(b) > 0 {
-		br.buffer = mempool.Realloc(br.buffer, len(br.buffer)+len(b))
-		copy(br.buffer[len(br.buffer)-len(b):], b)
+func (br *BodyReader) Append(data []byte) {
+	if len(data) > 0 {
+		if br.buffer == nil {
+			br.buffer = mempool.Malloc(len(data))
+			copy(br.buffer, data)
+		} else {
+			br.buffer = append(br.buffer, data...)
+		}
 	}
 }
 
@@ -85,9 +89,12 @@ func (br *BodyReader) close() error {
 }
 
 // NewBodyReader creates a BodyReader
-func NewBodyReader(buffer []byte) *BodyReader {
+func NewBodyReader(data []byte) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
+	if len(data) > 0 {
+		br.buffer = mempool.Malloc(len(data))
+		copy(br.buffer, data)
+	}
 	br.index = 0
-	br.buffer = buffer
 	return br
 }

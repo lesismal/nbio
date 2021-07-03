@@ -123,9 +123,9 @@ type Server struct {
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
 
-	Malloc  func(size int) []byte
-	Realloc func(buf []byte, size int) []byte
-	Free    func(buf []byte) error
+	// Malloc  func(size int) []byte
+	// Realloc func(buf []byte, size int) []byte
+	// Free    func(buf []byte) error
 }
 
 // OnOpen registers callback for new connection
@@ -295,9 +295,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
 
-		Malloc:  mempool.Malloc,
-		Realloc: mempool.Realloc,
-		Free:    mempool.Free,
+		// Malloc:  mempool.Malloc,
+		// Realloc: mempool.Realloc,
+		// Free:    mempool.Free,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -329,9 +329,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		newData := svr.Malloc(len(data))
-		copy(newData, data)
-		data = newData
+		// newData := svr.Malloc(len(data))
+		// copy(newData, data)
+		// data = newData
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			logging.Error("nil parser")
@@ -445,7 +445,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	g := nbio.NewGopher(gopherConf)
 
-	nativeAllocator := &mempool.NativeAllocator{}
 	svr := &Server{
 		Gopher:                 g,
 		_onOpen:                func(c *nbio.Conn) {},
@@ -457,9 +456,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
 
-		Malloc:  nativeAllocator.Malloc,
-		Realloc: nativeAllocator.Realloc,
-		Free:    nativeAllocator.Free,
+		// Malloc:  mempool.Malloc,
+		// Realloc: mempool.Realloc,
+		// Free:    mempool.Free,
 		// Malloc:  mempool.Malloc,
 		// Realloc: mempool.Realloc,
 		// Free:    mempool.Free,
@@ -477,7 +476,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize)
+		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize, mempool.DefaultMemPool)
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		parser.Server = svr
@@ -506,9 +505,12 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			return
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
+			// tmp := append([]byte{}, data...)
+			// tlsConn.Append(tmp)
 			tlsConn.Append(data)
 			svr.ParserExecutor(c.Hash(), func() {
 				buffer := parser.TLSBuffer
+				// buffer := make([]byte, 4096)
 				for {
 					n, err := tlsConn.Read(buffer)
 					if err != nil {
@@ -535,9 +537,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	// 	return mempool.Malloc(int(conf.ReadBufferSize))
 	// })
 	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
-	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-	// 	mempool.Free(buffer)
-	// })
+	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+		mempool.Free(buffer)
+	})
 
 	g.OnStop(func() {
 		svr._onStop()

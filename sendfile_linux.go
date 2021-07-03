@@ -32,7 +32,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = stat.Size()
 	}
 
-	if len(c.writeBuffers) > 0 {
+	if len(c.writeBuffer) > 0 {
 		if c.chWaitWrite == nil {
 			c.chWaitWrite = make(chan struct{}, 1)
 		}
