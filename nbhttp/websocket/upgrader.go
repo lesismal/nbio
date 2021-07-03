@@ -175,19 +175,35 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if u.opcode == 0 {
 				u.opcode = opcode
 			}
-			if bl > 0 {
-				if u.message == nil {
-					u.message = mempool.Malloc(len(body))
+			if u.conn.dataFrameHandler != nil {
+				messageBackup := u.message
+				u.message = nil
+				if bl > 0 {
+					u.message = mempool.Malloc(bl)
 					copy(u.message, body)
-				} else {
-					u.message = append(u.message, body...)
 				}
+				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
+					u.conn.Close()
+				} else {
+					u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
+				}
+				u.message = messageBackup
 			}
-			if fin {
-				u.handleMessage()
-				u.expectingFragments = false
-			} else {
-				u.expectingFragments = true
+			if u.conn.messageHandler != nil {
+				if bl > 0 {
+					if u.message == nil {
+						u.message = mempool.Malloc(len(body))
+						copy(u.message, body)
+					} else {
+						u.message = append(u.message, body...)
+					}
+				}
+				if fin {
+					u.handleMessage()
+					u.expectingFragments = false
+				} else {
+					u.expectingFragments = true
+				}
 			}
 		} else {
 			opcodeBackup := u.opcode
