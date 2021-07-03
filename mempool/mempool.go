@@ -206,12 +206,15 @@ func (c *ChosMemPool) Realloc(buf []byte, size int) []byte {
 	}
 	newBuf := c.Malloc(size)
 	copy(newBuf, buf)
-	// c.pool.Put(buf)
+	c.pool.Put(buf)
 	return newBuf[:size]
 }
 
 // Free .
 func (c *ChosMemPool) Free(buf []byte) error {
+	if cap(buf) < c.minSize {
+		return nil
+	}
 	atomic.AddInt64(&freeCnt, 1)
 	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
 	c.pool.Put(buf)
