@@ -383,18 +383,26 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	conf.EnableSendfile = false
 
-	var messageHandlerExecutePool *taskpool.MixedPool
-	parserExecutor := func(index int, f func()) {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
+	buffers := make([][]byte, conf.NParser)
+	for i := 0; i < len(buffers); i++ {
+		buffers[i] = make([]byte, conf.ReadBufferSize)
 	}
+	getBuffer := func(c *nbio.Conn) []byte {
+		return buffers[uint64(c.Hash())%uint64(conf.NParser)]
+	}
+	if runtime.GOOS == "windows" {
+		getBuffer = func(c *nbio.Conn) []byte {
+			parser := c.Session().(*Parser)
+			if parser.TLSBuffer == nil {
+				parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
+			}
+			return parser.TLSBuffer
+		}
+	}
+	parserHandlerExecutePool := taskpool.NewFixedPool(conf.NParser, 1024)
+	parserExecutor := parserHandlerExecutePool.GoByIndex
+
+	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = conf.NPoller * 256
@@ -482,22 +490,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		delete(svr.conns, c)
 		svr.mux.Unlock()
 	})
-	buffers := make([][]byte, conf.NPoller)
-	for i := 0; i < len(buffers); i++ {
-		buffers[i] = make([]byte, conf.ReadBufferSize)
-	}
-	getBuffer := func(c *nbio.Conn) []byte {
-		return buffers[uint64(c.Hash())%uint64(conf.NPoller)]
-	}
-	if runtime.GOOS == "windows" {
-		getBuffer = func(c *nbio.Conn) []byte {
-			parser := c.Session().(*Parser)
-			if parser.TLSBuffer == nil {
-				parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
-			}
-			return parser.TLSBuffer
-		}
-	}
+
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
@@ -543,6 +536,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr._onStop()
 		svr.MessageHandlerExecutor = func(index int, f func()) {}
 		svr.ParserExecutor = func(index int, f func()) {}
+		parserHandlerExecutePool.Stop()
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}
