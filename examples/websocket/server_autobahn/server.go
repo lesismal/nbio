@@ -3,23 +3,18 @@ package main
 import (
 	"fmt"
 	"log"
-	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio/examples/sticky/proxy"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-var (
-	svr *nbhttp.Server
-)
-
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
+func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
 	isTLS := true
 	upgrader := websocket.NewUpgrader(isTLS)
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -27,24 +22,38 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
+	isFirst := true
+	conn.SetDeadline(time.Time{})
+	mtx := &sync.Mutex{}
+	wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+		mtx.Lock()
+		defer mtx.Unlock()
+		err := c.WriteFrame(messageType, isFirst, fin, data)
+		if err != nil {
+			c.Close()
+			return
+		}
+		if fin {
+			isFirst = true
+		}
+	})
+}
+
+func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
+	isTLS := true
+	upgrader := websocket.NewUpgrader(isTLS)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
+	conn.SetDeadline(time.Time{})
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		c.WriteMessage(messageType, data)
 	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-	})
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 
 func main() {
-	go proxy.Run("localhost:8888", "localhost:9999", time.Nanosecond, func(max int) int {
-		n := rand.Intn(max) % max
-		if n == 0 {
-			n = 1
-		}
-		return n
-	})
-
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
@@ -56,19 +65,36 @@ func main() {
 	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/wss", onWebsocket)
+	mux.HandleFunc("/echo/message", onWebsocketMessage)
+	mux.HandleFunc("/echo/frame", onWebsocketFrame)
 
-	svr = nbhttp.NewServerTLS(nbhttp.Config{
+	log.Printf("calling new server tls\n")
+
+	//messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
+	svrTLS := nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:9999"},
 	}, mux, nil, tlsConfig)
+	svr := nbhttp.NewServer(nbhttp.Config{
+		Network: "tcp",
+		Addrs:   []string{"localhost:9998"},
+	}, mux, nil)
 
+	log.Printf("calling start non-tls\n")
 	err = svr.Start()
 	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
+		fmt.Printf("nbio.Start non-tls failed: %v\n", err)
 		return
 	}
 	defer svr.Stop()
+
+	log.Printf("calling start tls\n")
+	err = svrTLS.Start()
+	if err != nil {
+		fmt.Printf("nbio.Start tls failed: %v\n", err)
+		return
+	}
+	defer svrTLS.Stop()
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)

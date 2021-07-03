@@ -2,7 +2,6 @@ package websocket
 
 import (
 	"encoding/binary"
-	"fmt"
 	"net"
 	"sync"
 
@@ -150,7 +149,8 @@ func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, fin, data)
-				c.Server.Free(data)
+				// do not free data because application layer may need to use it in another goroutine.
+				// mempool.Free(data)
 			})
 		}
 	}
@@ -232,7 +232,6 @@ func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []
 	}
 
 	_, err := c.Conn.Write(buf)
-	fmt.Printf("frame called %s\n", data)
 	return err
 }
 
@@ -247,7 +246,7 @@ func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {
 		index:            index,
 		subprotocol:      subprotocol,
 		pongHandler:      func(*Conn, string) {},
-		messageHandler:   func(*Conn, MessageType, []byte) {},
+		messageHandler:   nil,
 		dataFrameHandler: nil,
 		onClose:          func(*Conn, error) {},
 	}

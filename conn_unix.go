@@ -8,7 +8,6 @@ package nbio
 
 import (
 	"errors"
-	"fmt"
 	"net"
 	"sync"
 	"syscall"
@@ -322,9 +321,6 @@ func (c *Conn) write(b []byte) (int, error) {
 
 	if len(c.writeBuffer) == 0 {
 		n, err := syscall.Write(int(c.fd), b)
-		if n > 0 {
-			fmt.Printf("syscall write called %s\n", b)
-		}
 		if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 			return n, err
 		}
@@ -351,15 +347,6 @@ func (c *Conn) flush() error {
 		return errClosed
 	}
 
-	// <<<<<<< HEAD
-	// 	buffer := c.writeBuffer
-	// 	if len(buffer) > 0 {
-	// 		fmt.Printf("flush called %d\n", len(buffer))
-	// 	}
-	// 	c.leftSize = 0
-	// 	c.writeBuffer = nil
-	// 	_, err := c.write(buffer)
-	// =======
 	if len(c.writeBuffer) == 0 {
 		c.mux.Unlock()
 		return nil
@@ -368,7 +355,6 @@ func (c *Conn) flush() error {
 	old := c.writeBuffer
 
 	n, err := syscall.Write(int(c.fd), old)
-	//>>>>>>> master
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
