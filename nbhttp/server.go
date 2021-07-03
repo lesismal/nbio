@@ -97,7 +97,7 @@ type Config struct {
 	MessageHandlerPoolSize int
 
 	// MessageHandlerTaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
-	MessageHandlerTaskIdleTime time.Duration
+	// MessageHandlerTaskIdleTime time.Duration
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
@@ -122,10 +122,6 @@ type Server struct {
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
-
-	// Malloc  func(size int) []byte
-	// Realloc func(buf []byte, size int) []byte
-	// Free    func(buf []byte) error
 }
 
 // OnOpen registers callback for new connection
@@ -239,8 +235,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
 
-	var messageHandlerExecutePool *taskpool.MixedPool
-	parserExecutor := func(index int, f func()) {
+	var parserExecutor = func(index int, f func()) {
 		defer func() {
 			if err := recover(); err != nil {
 				const size = 64 << 10
@@ -252,22 +247,12 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		f()
 	}
 
+	var messageHandlerExecutePool *taskpool.FixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 256
+			conf.MessageHandlerPoolSize = conf.NPoller * 64
 		}
-		if conf.MessageHandlerTaskIdleTime <= 0 {
-			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
-		}
-		nativeSize := conf.MaxLoad / 8
-		if nativeSize <= 0 {
-			nativeSize = 1024
-		}
-		bufferSize := conf.MaxLoad - nativeSize + 1
-		if bufferSize <= 0 {
-			bufferSize = 1024
-		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
+		messageHandlerExecutePool = taskpool.NewFixedPool(conf.MessageHandlerPoolSize, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
@@ -294,10 +279,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
-
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -329,14 +310,14 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		// newData := svr.Malloc(len(data))
-		// copy(newData, data)
-		// data = newData
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			logging.Error("nil parser")
 			return
 		}
+		// because the data if poller buffer,
+		// do not set svr.ParserExecutor with a func executed in another goroutine,
+		// or the memory of data buffer would be dirty
 		svr.ParserExecutor(c.Hash(), func() {
 			err := parser.Read(data)
 			if err != nil {
@@ -347,10 +328,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
-	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
@@ -391,34 +368,32 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	conf.EnableSendfile = false
 
-	var messageHandlerExecutePool *taskpool.MixedPool
-	parserExecutor := func(index int, f func()) {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
+	buffers := make([][]byte, conf.NParser)
+	for i := 0; i < len(buffers); i++ {
+		buffers[i] = make([]byte, conf.ReadBufferSize)
 	}
+	getBuffer := func(c *nbio.Conn) []byte {
+		return buffers[uint64(c.Hash())%uint64(conf.NParser)]
+	}
+	if runtime.GOOS == "windows" {
+		getBuffer = func(c *nbio.Conn) []byte {
+			parser := c.Session().(*Parser)
+			if parser.TLSBuffer == nil {
+				parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
+			}
+			return parser.TLSBuffer
+		}
+	}
+
+	var parserHandlerExecutePool = taskpool.NewFixedPool(conf.NParser, 1024)
+	var parserExecutor = parserHandlerExecutePool.GoByIndex
+
+	var messageHandlerExecutePool *taskpool.FixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 256
+			conf.MessageHandlerPoolSize = conf.NPoller * 64
 		}
-		if conf.MessageHandlerTaskIdleTime <= 0 {
-			conf.MessageHandlerTaskIdleTime = DefaultMessageHandlerTaskIdleTime
-		}
-		nativeSize := conf.MaxLoad / 8
-		if nativeSize <= 0 {
-			nativeSize = 1024
-		}
-		bufferSize := conf.MaxLoad - nativeSize + 1
-		if bufferSize <= 0 {
-			bufferSize = 1024
-		}
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, bufferSize)
+		messageHandlerExecutePool = taskpool.NewFixedPool(conf.MessageHandlerPoolSize, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
@@ -455,13 +430,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ParserExecutor:         parserExecutor,
 		MessageHandlerExecutor: messageHandlerExecutor,
 		conns:                  map[*nbio.Conn]struct{}{},
-
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
 	}
 
 	isClient := false
@@ -497,6 +465,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		delete(svr.conns, c)
 		svr.mux.Unlock()
 	})
+
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		parser := c.Session().(*Parser)
 		if parser == nil {
@@ -505,12 +474,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			return
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
-			// tmp := append([]byte{}, data...)
-			// tlsConn.Append(tmp)
 			tlsConn.Append(data)
 			svr.ParserExecutor(c.Hash(), func() {
-				buffer := parser.TLSBuffer
-				// buffer := make([]byte, 4096)
+				buffer := getBuffer(c)
 				for {
 					n, err := tlsConn.Read(buffer)
 					if err != nil {
@@ -533,10 +499,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 		}
 	})
-	// g.OnReadBufferAlloc(func(c *nbio.Conn) []byte {
-	// 	return mempool.Malloc(int(conf.ReadBufferSize))
-	// })
-	// g.OnReadBufferFree(func(c *nbio.Conn, buffer []byte) {})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
@@ -545,6 +507,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr._onStop()
 		svr.MessageHandlerExecutor = func(index int, f func()) {}
 		svr.ParserExecutor = func(index int, f func()) {}
+		parserHandlerExecutePool.Stop()
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}

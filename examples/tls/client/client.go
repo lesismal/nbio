@@ -10,7 +10,6 @@ import (
 
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/extension/tls"
-	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -56,7 +55,7 @@ func main() {
 	for i := 0; i < 100; i++ {
 		go func() {
 			// step 1: make a tls.Conn by tls.Dial
-			tlsConn, err := tls.Dial("tcp", addr, tlsConfig, mempool.DefautAllocator{})
+			tlsConn, err := tls.Dial("tcp", addr, tlsConfig)
 			if err != nil {
 				log.Fatalf("Dial failed: %v\n", err)
 			}

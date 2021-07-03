@@ -28,7 +28,6 @@ type Conn struct {
 	rTimer *htimer
 	wTimer *htimer
 
-	leftSize    int
 	writeBuffer []byte
 
 	closed   bool
@@ -70,10 +69,11 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write implements Write
 func (c *Conn) Write(b []byte) (int, error) {
+	defer c.g.onWriteBufferFree(c, b)
+
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		c.g.onWriteBufferFree(c, b)
 		return -1, errClosed
 	}
 
@@ -100,12 +100,15 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Writev implements Writev
 func (c *Conn) Writev(in [][]byte) (int, error) {
-	c.mux.Lock()
-	if c.closed {
-		c.mux.Unlock()
+	defer func() {
 		for _, v := range in {
 			c.g.onWriteBufferFree(c, v)
 		}
+	}()
+	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+
 		return 0, errClosed
 	}
 
@@ -312,7 +315,6 @@ func (c *Conn) write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
 	}
-	defer c.g.onWriteBufferFree(c, b)
 
 	if c.overflow(len(b)) {
 		return -1, syscall.EINVAL
@@ -331,14 +333,12 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		left := len(b) - n
 		if left > 0 {
-			c.leftSize += left
 			c.writeBuffer = mempool.Malloc(left)
 			copy(c.writeBuffer, b[n:])
 			c.modWrite()
 		}
-		return len(b), err
+		return len(b), nil
 	}
-	c.leftSize += len(b)
 	c.writeBuffer = append(c.writeBuffer, b...)
 
 	return len(b), nil
@@ -351,19 +351,42 @@ func (c *Conn) flush() error {
 		return errClosed
 	}
 
-	buffer := c.writeBuffer
-	if len(buffer) > 0 {
-		fmt.Printf("flush called %d\n", len(buffer))
+	// <<<<<<< HEAD
+	// 	buffer := c.writeBuffer
+	// 	if len(buffer) > 0 {
+	// 		fmt.Printf("flush called %d\n", len(buffer))
+	// 	}
+	// 	c.leftSize = 0
+	// 	c.writeBuffer = nil
+	// 	_, err := c.write(buffer)
+	// =======
+	if len(c.writeBuffer) == 0 {
+		c.mux.Unlock()
+		return nil
 	}
-	c.leftSize = 0
-	c.writeBuffer = nil
-	_, err := c.write(buffer)
+
+	old := c.writeBuffer
+
+	n, err := syscall.Write(int(c.fd), old)
+	//>>>>>>> master
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
 		c.closeWithErrorWithoutLock(err)
 		c.mux.Unlock()
 		return err
 	}
-	if len(c.writeBuffer) == 0 {
+	if n < 0 {
+		n = 0
+	}
+	left := len(old) - n
+	if left > 0 {
+		if n > 0 {
+			c.writeBuffer = mempool.Malloc(left)
+			copy(c.writeBuffer, old[n:])
+			mempool.Free(old)
+		}
+		// c.modWrite()
+	} else {
+		c.writeBuffer = nil
 		if c.wTimer != nil {
 			c.wTimer.Stop()
 		}
@@ -374,8 +397,6 @@ func (c *Conn) flush() error {
 			default:
 			}
 		}
-	} else {
-		c.modWrite()
 	}
 
 	c.mux.Unlock()
@@ -388,15 +409,11 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		size += len(v)
 	}
 	if c.overflow(size) {
-		for _, v := range in {
-			c.g.onWriteBufferFree(c, v)
-		}
 		return -1, syscall.EINVAL
 	}
 	if len(c.writeBuffer) > 0 {
 		for _, v := range in {
 			c.writeBuffer = append(c.writeBuffer, v...)
-			c.g.onWriteBufferFree(c, v)
 		}
 		return size, nil
 	}
@@ -407,21 +424,17 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		for _, v := range in {
 			copy(b[copied:], v)
 			copied += len(v)
-			c.g.onWriteBufferFree(c, v)
 		}
 		return c.write(b)
 	}
 
 	nwrite := 0
-	for i, b := range in {
+	for _, b := range in {
 		n, err := c.write(b)
 		if n > 0 {
 			nwrite += n
 		}
 		if err != nil {
-			for j := i + 1; j < len(in); j++ {
-				c.g.onWriteBufferFree(c, in[j])
-			}
 			return nwrite, err
 		}
 	}
@@ -429,7 +442,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 }
 
 func (c *Conn) overflow(n int) bool {
-	return c.g.maxWriteBufferSize > 0 && (c.leftSize+n > int(c.g.maxWriteBufferSize))
+	return c.g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > int(c.g.maxWriteBufferSize))
 }
 
 func (c *Conn) closeWithError(err error) error {

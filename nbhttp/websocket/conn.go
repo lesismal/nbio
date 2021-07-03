@@ -138,7 +138,8 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, data)
-				mempool.Free(data)
+				// do not free data because application layer may need to use it in another goroutine.
+				// mempool.Free(data)
 			})
 		}
 	}
