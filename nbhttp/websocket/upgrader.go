@@ -420,20 +420,7 @@ func equalASCIIFold(s, t string) bool {
 	return s == t
 }
 
-// parseExtensions parses WebSocket extensions from a header.
 func parseExtensions(header http.Header) []map[string]string {
-	// From RFC 6455:
-	//
-	//  Sec-WebSocket-Extensions = extension-list
-	//  extension-list = 1#extension
-	//  extension = extension-token *( ";" extension-param )
-	//  extension-token = registered-token
-	//  registered-token = token
-	//  extension-param = token [ "=" (token | quoted-string) ]
-	//     ;When using the quoted-string syntax variant, the value
-	//     ;after quoted-string unescaping MUST conform to the
-	//     ;'token' ABNF.
-
 	var result []map[string]string
 headers:
 	for _, s := range header["Sec-Websocket-Extensions"] {
@@ -478,7 +465,6 @@ headers:
 	return result
 }
 
-// Token octets per RFC 2616.
 var isTokenOctet = [256]bool{
 	'!':  true,
 	'#':  true,
@@ -559,8 +545,6 @@ var isTokenOctet = [256]bool{
 	'~':  true,
 }
 
-// skipSpace returns a slice of the string s with all leading RFC 2616 linear
-// whitespace removed.
 func skipSpace(s string) (rest string) {
 	i := 0
 	for ; i < len(s); i++ {
@@ -571,8 +555,6 @@ func skipSpace(s string) (rest string) {
 	return s[i:]
 }
 
-// nextToken returns the leading RFC 2616 token of s and the string following
-// the token.
 func nextToken(s string) (token, rest string) {
 	i := 0
 	for ; i < len(s); i++ {
@@ -583,8 +565,6 @@ func nextToken(s string) (token, rest string) {
 	return s[:i], s[i:]
 }
 
-// nextTokenOrQuoted returns the leading token or quoted string per RFC 2616
-// and the string following the token or quoted string.
 func nextTokenOrQuoted(s string) (value string, rest string) {
 	if !strings.HasPrefix(s, "\"") {
 		return nextToken(s)
