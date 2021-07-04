@@ -114,7 +114,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	if subprotocol != "" {
 		w.Header().Add("Sec-WebSocket-Protocol", subprotocol)
 	}
-
 	for k, vv := range responseHeader {
 		if k != "Sec-Websocket-Protocol" {
 			for _, v := range vv {
