@@ -21,8 +21,7 @@ var (
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	isTLS := false
-	upgrader := websocket.NewUpgrader(isTLS)
+	upgrader := &websocket.Upgrader{EnableCompression: true}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)

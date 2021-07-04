@@ -15,8 +15,7 @@ import (
 )
 
 func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
-	isTLS := true
-	upgrader := websocket.NewUpgrader(isTLS)
+	upgrader := &websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
@@ -40,8 +39,7 @@ func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
 }
 
 func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
-	isTLS := true
-	upgrader := websocket.NewUpgrader(isTLS)
+	upgrader := &websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)

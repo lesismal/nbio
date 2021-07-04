@@ -1,10 +1,12 @@
 package websocket
 
 import (
+	"bytes"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -30,7 +32,8 @@ type Upgrader struct {
 	ReadLimit        int64
 	HandshakeTimeout time.Duration
 
-	Subprotocols []string
+	EnableCompression bool
+	Subprotocols      []string
 
 	CheckOrigin func(r *http.Request) bool
 
@@ -79,6 +82,18 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	subprotocol := u.selectSubprotocol(r, responseHeader)
 
+	// Negotiate PMCE
+	var compress bool
+	if u.EnableCompression {
+		for _, ext := range parseExtensions(r.Header) {
+			if ext[""] != "permessage-deflate" {
+				continue
+			}
+			compress = true
+			break
+		}
+	}
+
 	h, ok := w.(nbhttp.Hijacker)
 	if !ok {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
@@ -114,7 +129,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	if subprotocol != "" {
 		w.Header().Add("Sec-WebSocket-Protocol", subprotocol)
 	}
-
+	if compress {
+		w.Header().Add("Sec-WebSocket-Extensions", "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
+	}
 	for k, vv := range responseHeader {
 		if k != "Sec-Websocket-Protocol" {
 			for _, v := range vv {
@@ -133,8 +150,11 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	return u.conn, nil
 }
 
-func validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
-	if res1 || res2 || res3 {
+func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
+	if res1 && !u.EnableCompression {
+		return ErrReserveBitSet
+	}
+	if res2 || res3 {
 		return ErrReserveBitSet
 	}
 	if opcode > BinaryMessage && opcode < CloseMessage {
@@ -150,7 +170,7 @@ func validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bo
 }
 
 // Read .
-func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
+func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) (err error) {
 	bufLen := len(u.buffer)
 	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
 		return nbhttp.ErrTooLong
@@ -164,23 +184,36 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 
 	for i := 0; true; i++ {
 		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
-		if err := validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
+		if err = u.validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
 			return err
 		}
 		if !ok {
 			break
 		}
-		bl := len(body)
 		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
 			if u.opcode == 0 {
 				u.opcode = opcode
 			}
+			if res1 {
+				body = append(body, flateReaderTail...)
+				rc := decompressReader(bytes.NewBuffer(body))
+				body, err = readAll(rc, len(body))
+				rc.Close()
+				if err != nil {
+					return err
+				}
+			}
+			bl := len(body)
 			if u.conn.dataFrameHandler != nil {
 				messageBackup := u.message
 				u.message = nil
 				if bl > 0 {
-					u.message = mempool.Malloc(bl)
-					copy(u.message, body)
+					if res1 {
+						u.message = body
+					} else {
+						u.message = mempool.Malloc(bl)
+						copy(u.message, body)
+					}
 				}
 				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
 					u.conn.Close()
@@ -192,8 +225,12 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if u.conn.messageHandler != nil {
 				if bl > 0 {
 					if u.message == nil {
-						u.message = mempool.Malloc(len(body))
-						copy(u.message, body)
+						if res1 {
+							u.message = body
+						} else {
+							u.message = mempool.Malloc(len(body))
+							copy(u.message, body)
+						}
 					} else {
 						u.message = append(u.message, body...)
 					}
@@ -318,13 +355,6 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 	return ""
 }
 
-// NewUpgrader .
-func NewUpgrader(isTLS bool) *Upgrader {
-	return &Upgrader{
-		expectingFragments: false,
-	}
-}
-
 func subprotocols(r *http.Request) []string {
 	h := strings.TrimSpace(r.Header.Get("Sec-Websocket-Protocol"))
 	if h == "" {
@@ -388,4 +418,221 @@ func equalASCIIFold(s, t string) bool {
 		}
 	}
 	return s == t
+}
+
+// parseExtensions parses WebSocket extensions from a header.
+func parseExtensions(header http.Header) []map[string]string {
+	// From RFC 6455:
+	//
+	//  Sec-WebSocket-Extensions = extension-list
+	//  extension-list = 1#extension
+	//  extension = extension-token *( ";" extension-param )
+	//  extension-token = registered-token
+	//  registered-token = token
+	//  extension-param = token [ "=" (token | quoted-string) ]
+	//     ;When using the quoted-string syntax variant, the value
+	//     ;after quoted-string unescaping MUST conform to the
+	//     ;'token' ABNF.
+
+	var result []map[string]string
+headers:
+	for _, s := range header["Sec-Websocket-Extensions"] {
+		for {
+			var t string
+			t, s = nextToken(skipSpace(s))
+			if t == "" {
+				continue headers
+			}
+			ext := map[string]string{"": t}
+			for {
+				s = skipSpace(s)
+				if !strings.HasPrefix(s, ";") {
+					break
+				}
+				var k string
+				k, s = nextToken(skipSpace(s[1:]))
+				if k == "" {
+					continue headers
+				}
+				s = skipSpace(s)
+				var v string
+				if strings.HasPrefix(s, "=") {
+					v, s = nextTokenOrQuoted(skipSpace(s[1:]))
+					s = skipSpace(s)
+				}
+				if s != "" && s[0] != ',' && s[0] != ';' {
+					continue headers
+				}
+				ext[k] = v
+			}
+			if s != "" && s[0] != ',' {
+				continue headers
+			}
+			result = append(result, ext)
+			if s == "" {
+				continue headers
+			}
+			s = s[1:]
+		}
+	}
+	return result
+}
+
+// Token octets per RFC 2616.
+var isTokenOctet = [256]bool{
+	'!':  true,
+	'#':  true,
+	'$':  true,
+	'%':  true,
+	'&':  true,
+	'\'': true,
+	'*':  true,
+	'+':  true,
+	'-':  true,
+	'.':  true,
+	'0':  true,
+	'1':  true,
+	'2':  true,
+	'3':  true,
+	'4':  true,
+	'5':  true,
+	'6':  true,
+	'7':  true,
+	'8':  true,
+	'9':  true,
+	'A':  true,
+	'B':  true,
+	'C':  true,
+	'D':  true,
+	'E':  true,
+	'F':  true,
+	'G':  true,
+	'H':  true,
+	'I':  true,
+	'J':  true,
+	'K':  true,
+	'L':  true,
+	'M':  true,
+	'N':  true,
+	'O':  true,
+	'P':  true,
+	'Q':  true,
+	'R':  true,
+	'S':  true,
+	'T':  true,
+	'U':  true,
+	'W':  true,
+	'V':  true,
+	'X':  true,
+	'Y':  true,
+	'Z':  true,
+	'^':  true,
+	'_':  true,
+	'`':  true,
+	'a':  true,
+	'b':  true,
+	'c':  true,
+	'd':  true,
+	'e':  true,
+	'f':  true,
+	'g':  true,
+	'h':  true,
+	'i':  true,
+	'j':  true,
+	'k':  true,
+	'l':  true,
+	'm':  true,
+	'n':  true,
+	'o':  true,
+	'p':  true,
+	'q':  true,
+	'r':  true,
+	's':  true,
+	't':  true,
+	'u':  true,
+	'v':  true,
+	'w':  true,
+	'x':  true,
+	'y':  true,
+	'z':  true,
+	'|':  true,
+	'~':  true,
+}
+
+// skipSpace returns a slice of the string s with all leading RFC 2616 linear
+// whitespace removed.
+func skipSpace(s string) (rest string) {
+	i := 0
+	for ; i < len(s); i++ {
+		if b := s[i]; b != ' ' && b != '\t' {
+			break
+		}
+	}
+	return s[i:]
+}
+
+// nextToken returns the leading RFC 2616 token of s and the string following
+// the token.
+func nextToken(s string) (token, rest string) {
+	i := 0
+	for ; i < len(s); i++ {
+		if !isTokenOctet[s[i]] {
+			break
+		}
+	}
+	return s[:i], s[i:]
+}
+
+// nextTokenOrQuoted returns the leading token or quoted string per RFC 2616
+// and the string following the token or quoted string.
+func nextTokenOrQuoted(s string) (value string, rest string) {
+	if !strings.HasPrefix(s, "\"") {
+		return nextToken(s)
+	}
+	s = s[1:]
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '"':
+			return s[:i], s[i+1:]
+		case '\\':
+			p := make([]byte, len(s)-1)
+			j := copy(p, s[:i])
+			escape := true
+			for i = i + 1; i < len(s); i++ {
+				b := s[i]
+				switch {
+				case escape:
+					escape = false
+					p[j] = b
+					j++
+				case b == '\\':
+					escape = true
+				case b == '"':
+					return string(p[:j]), s[i+1:]
+				default:
+					p[j] = b
+					j++
+				}
+			}
+			return "", ""
+		}
+	}
+	return "", ""
+}
+
+func readAll(r io.Reader, size int) ([]byte, error) {
+	buf := mempool.Malloc(size)[0:0]
+	for {
+		if len(buf) == cap(buf) {
+			buf = append(buf, 0)[:len(buf)]
+		}
+		n, err := r.Read(buf[len(buf):cap(buf)])
+		buf = buf[:len(buf)+n]
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return buf, err
+		}
+	}
 }
