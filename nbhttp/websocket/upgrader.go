@@ -195,8 +195,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) (err error) {
 				u.opcode = opcode
 			}
 			if res1 {
-				body = append(body, flateReaderTail...)
-				rc := decompressReader(bytes.NewBuffer(body))
+				rc := decompressReader(io.MultiReader(bytes.NewBuffer(body), strings.NewReader(flateReaderTail)))
 				body, err = readAll(rc, len(body))
 				rc.Close()
 				if err != nil {
