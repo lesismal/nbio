@@ -18,7 +18,7 @@ import (
 const (
 	maxFrameHeaderSize         = 14
 	maxControlFramePayloadSize = 125
-	framePayloadSize           = 65535
+	framePayloadSize           = 4096
 )
 
 type MessageType int8
@@ -40,8 +40,9 @@ type Conn struct {
 
 	index int
 
-	enableWriteCompression bool
-	compressionLevel       int
+	remoteCompressionEnabled bool
+	enableWriteCompression   bool
+	compressionLevel         int
 
 	subprotocol string
 
@@ -185,8 +186,25 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	default:
 	}
 
+	compress := c.enableWriteCompression && (messageType == TextMessage || messageType == BinaryMessage)
+	if compress {
+		compress = true
+		w := &writeBuffer{
+			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
+		}
+		defer w.Close()
+		w.Reset()
+		cw := compressWriter(w, c.compressionLevel)
+		_, err := cw.Write(data)
+		if err != nil {
+			return err
+		}
+		cw.Close()
+		data = w.Bytes()
+	}
+
 	if len(data) == 0 {
-		return c.WriteFrame(messageType, true, true, []byte{})
+		return c.writeFrame(messageType, true, true, []byte{}, compress)
 	} else {
 		sendOpcode := true
 		for len(data) > 0 {
@@ -194,7 +212,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 			if n > framePayloadSize {
 				n = framePayloadSize
 			}
-			err := c.WriteFrame(messageType, sendOpcode, n == len(data), data[:n])
+			err := c.writeFrame(messageType, sendOpcode, n == len(data), data[:n], compress)
 			if err != nil {
 				return err
 			}
@@ -216,23 +234,10 @@ func (w *writeBuffer) Close() error {
 }
 
 func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
-	commpress := c.enableWriteCompression && (messageType == TextMessage || messageType == BinaryMessage)
-	if commpress {
-		commpress = true
-		w := &writeBuffer{
-			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
-		}
-		defer w.Close()
-		w.Reset()
-		cw := compressWriter(w, c.compressionLevel)
-		_, err := cw.Write(data)
-		if err != nil {
-			return err
-		}
-		cw.Close()
-		data = w.Bytes()
-	}
+	return c.writeFrame(messageType, sendOpcode, fin, data, false)
+}
 
+func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []byte, compress bool) error {
 	var (
 		buf     []byte
 		offset  = 2
@@ -264,7 +269,7 @@ func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []
 		buf[0] = 0
 	}
 
-	if commpress {
+	if compress {
 		buf[0] |= 0x40
 	}
 
@@ -283,7 +288,13 @@ func (c *Conn) Write(data []byte) (int, error) {
 }
 
 func (c *Conn) EnableWriteCompression(enable bool) {
-	c.enableWriteCompression = enable
+	if enable {
+		if c.remoteCompressionEnabled {
+			c.enableWriteCompression = enable
+		}
+	} else {
+		c.enableWriteCompression = enable
+	}
 }
 
 func (c *Conn) SetCompressionLevel(level int) error {
@@ -294,15 +305,17 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {
+func newConn(c net.Conn, index int, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
 	conn := &Conn{
-		Conn:             c,
-		index:            index,
-		subprotocol:      subprotocol,
-		pongHandler:      func(*Conn, string) {},
-		messageHandler:   nil,
-		dataFrameHandler: nil,
-		onClose:          func(*Conn, error) {},
+		Conn:                     c,
+		index:                    index,
+		subprotocol:              subprotocol,
+		remoteCompressionEnabled: remoteCompressionEnabled,
+		compressionLevel:         defaultCompressionLevel,
+		pongHandler:              func(*Conn, string) {},
+		messageHandler:           nil,
+		dataFrameHandler:         nil,
+		onClose:                  func(*Conn, error) {},
 	}
 	conn.pingHandler = func(c *Conn, data string) {
 		if len(data) > 125 {

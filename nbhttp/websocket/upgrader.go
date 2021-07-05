@@ -38,6 +38,7 @@ type Upgrader struct {
 	CheckOrigin func(r *http.Request) bool
 
 	expectingFragments bool
+	compress           bool
 	opcode             MessageType
 	buffer             []byte
 	message            []byte
@@ -144,7 +145,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(conn, nbc.Hash(), false, subprotocol)
+	u.conn = newConn(conn, nbc.Hash(), false, subprotocol, compress)
 	u.Server = parser.Server
 	u.conn.Server = parser.Server
 	return u.conn, nil
@@ -170,21 +171,23 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 }
 
 // Read .
-func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) (err error) {
+func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
 	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
 		return nbhttp.ErrTooLong
 	}
 
+	var oldBuffer []byte
 	if bufLen == 0 {
 		u.buffer = data
 	} else {
 		u.buffer = append(u.buffer, data...)
+		oldBuffer = u.buffer
 	}
 
 	for i := 0; true; i++ {
 		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
-		if err = u.validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
+		if err := u.validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
 			return err
 		}
 		if !ok {
@@ -193,26 +196,15 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) (err error) {
 		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
 			if u.opcode == 0 {
 				u.opcode = opcode
-			}
-			if res1 {
-				rc := decompressReader(io.MultiReader(bytes.NewBuffer(body), strings.NewReader(flateReaderTail)))
-				body, err = readAll(rc, len(body))
-				rc.Close()
-				if err != nil {
-					return err
-				}
+				u.compress = res1
 			}
 			bl := len(body)
 			if u.conn.dataFrameHandler != nil {
 				messageBackup := u.message
 				u.message = nil
 				if bl > 0 {
-					if res1 {
-						u.message = body
-					} else {
-						u.message = mempool.Malloc(bl)
-						copy(u.message, body)
-					}
+					u.message = mempool.Malloc(bl)
+					copy(u.message, body)
 				}
 				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
 					u.conn.Close()
@@ -224,19 +216,26 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) (err error) {
 			if u.conn.messageHandler != nil {
 				if bl > 0 {
 					if u.message == nil {
-						if res1 {
-							u.message = body
-						} else {
-							u.message = mempool.Malloc(len(body))
-							copy(u.message, body)
-						}
+						u.message = mempool.Malloc(len(body))
+						copy(u.message, body)
 					} else {
 						u.message = append(u.message, body...)
 					}
 				}
 				if fin {
+					if u.compress {
+						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
+						b, err := readAll(rc)
+						mempool.Free(u.message)
+						u.message = b
+						rc.Close()
+						if err != nil {
+							return err
+						}
+					}
 					u.handleMessage()
 					u.expectingFragments = false
+					u.compress = false
 				} else {
 					u.expectingFragments = true
 				}
@@ -260,6 +259,13 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) (err error) {
 		tmp := u.buffer
 		u.buffer = mempool.Malloc(len(tmp))
 		copy(u.buffer, tmp)
+	} else {
+		if len(u.buffer) < len(oldBuffer) {
+			tmp := u.buffer
+			u.buffer = mempool.Malloc(len(tmp))
+			copy(u.buffer, tmp)
+			mempool.Free(oldBuffer)
+		}
 	}
 
 	return nil
@@ -599,19 +605,29 @@ func nextTokenOrQuoted(s string) (value string, rest string) {
 	return "", ""
 }
 
-func readAll(r io.Reader, size int) ([]byte, error) {
-	buf := mempool.Malloc(size)[0:0]
+func readAll(r io.Reader) ([]byte, error) {
+	const maxAppendSize = 1024 * 1024 * 4
+	buf := mempool.Malloc(1024)[0:0]
 	for {
-		if len(buf) == cap(buf) {
-			buf = append(buf, 0)[:len(buf)]
-		}
 		n, err := r.Read(buf[len(buf):cap(buf)])
-		buf = buf[:len(buf)+n]
+		if n > 0 {
+			buf = buf[:len(buf)+n]
+		}
 		if err != nil {
 			if err == io.EOF {
 				err = nil
 			}
 			return buf, err
+		}
+		if len(buf) == cap(buf) {
+			l := len(buf)
+			al := l
+			if al > maxAppendSize {
+				al = maxAppendSize
+			}
+			tail := mempool.Malloc(al)
+			buf = append(buf, tail...)[:l]
+			mempool.Free(tail)
 		}
 	}
 }
