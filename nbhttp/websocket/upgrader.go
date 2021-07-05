@@ -225,7 +225,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				if fin {
 					if u.compress {
 						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-						b, err := readAll(rc)
+						b, err := readAll(rc, len(u.message)*2)
 						mempool.Free(u.message)
 						u.message = b
 						rc.Close()
@@ -605,9 +605,9 @@ func nextTokenOrQuoted(s string) (value string, rest string) {
 	return "", ""
 }
 
-func readAll(r io.Reader) ([]byte, error) {
+func readAll(r io.Reader, size int) ([]byte, error) {
 	const maxAppendSize = 1024 * 1024 * 4
-	buf := mempool.Malloc(1024)[0:0]
+	buf := mempool.Malloc(size)[0:0]
 	for {
 		n, err := r.Read(buf[len(buf):cap(buf)])
 		if n > 0 {
