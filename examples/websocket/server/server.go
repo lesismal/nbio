@@ -21,13 +21,13 @@ var (
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	isTLS := false
-	upgrader := websocket.NewUpgrader(isTLS)
+	upgrader := &websocket.Upgrader{EnableCompression: true}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
+	wsConn.EnableWriteCompression(true)
 	wsConn.SetReadDeadline(time.Time{})
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo

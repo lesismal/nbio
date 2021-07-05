@@ -23,8 +23,7 @@ var (
 )
 
 func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWriter, r *http.Request) {
-	isTLS := false
-	upgrader := websocket.NewUpgrader(isTLS)
+	upgrader := &websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)

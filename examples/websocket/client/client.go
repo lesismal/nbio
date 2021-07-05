@@ -21,7 +21,7 @@ func main() {
 
 	u := url.URL{Scheme: "ws", Host: *addr, Path: *path}
 	log.Printf("connecting to %s", u.String())
-
+	websocket.DefaultDialer.EnableCompression = true
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
