@@ -5,7 +5,9 @@
 package websocket
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
 	"net"
 	"sync"
 
@@ -34,9 +36,12 @@ const (
 type Conn struct {
 	net.Conn
 
+	mux sync.Mutex
+
 	index int
 
-	mux sync.Mutex
+	enableWriteCompression bool
+	compressionLevel       int
 
 	subprotocol string
 
@@ -201,22 +206,51 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	return nil
 }
 
+type writeBuffer struct {
+	*bytes.Buffer
+}
+
+func (w *writeBuffer) Close() error {
+	mempool.Free(w.Bytes())
+	return nil
+}
+
 func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
+	commpress := c.enableWriteCompression && (messageType == TextMessage || messageType == BinaryMessage)
+	if commpress {
+		commpress = true
+		w := &writeBuffer{
+			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
+		}
+		defer w.Close()
+		w.Reset()
+		cw := compressWriter(w, c.compressionLevel)
+		_, err := cw.Write(data)
+		if err != nil {
+			return err
+		}
+		cw.Close()
+		data = w.Bytes()
+	}
+
 	var (
 		buf     []byte
-		bodyLen = len(data)
 		offset  = 2
+		bodyLen = len(data)
 	)
 	if bodyLen < 126 {
 		buf = mempool.Malloc(len(data) + 2)
+		buf[0] = 0
 		buf[1] = byte(bodyLen)
 	} else if bodyLen <= 65535 {
 		buf = mempool.Malloc(len(data) + 4)
+		binary.LittleEndian.PutUint16(buf, 0)
 		buf[1] = 126
 		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
 		offset = 4
 	} else {
 		buf = mempool.Malloc(len(data) + 10)
+		binary.LittleEndian.PutUint16(buf, 0)
 		buf[1] = 127
 		binary.BigEndian.PutUint64(buf[2:10], uint64(bodyLen))
 		offset = 10
@@ -228,6 +262,10 @@ func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []
 		buf[0] = byte(messageType)
 	} else {
 		buf[0] = 0
+	}
+
+	if commpress {
+		buf[0] |= 0x40
 	}
 
 	// fin
@@ -242,6 +280,18 @@ func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []
 // overwrite nbio.Conn.Write
 func (c *Conn) Write(data []byte) (int, error) {
 	return -1, ErrInvalidWriteCalling
+}
+
+func (c *Conn) EnableWriteCompression(enable bool) {
+	c.enableWriteCompression = enable
+}
+
+func (c *Conn) SetCompressionLevel(level int) error {
+	if !isValidCompressionLevel(level) {
+		return errors.New("websocket: invalid compression level")
+	}
+	c.compressionLevel = level
+	return nil
 }
 
 func newConn(c net.Conn, index int, compress bool, subprotocol string) *Conn {

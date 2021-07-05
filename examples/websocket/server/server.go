@@ -27,6 +27,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
+	wsConn.EnableWriteCompression(true)
 	wsConn.SetReadDeadline(time.Time{})
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
