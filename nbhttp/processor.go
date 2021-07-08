@@ -207,40 +207,35 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 
 	res := NewResponse(p.parser, request, p.enableSendfile)
 
-	if !p.isUpgrade {
-		var executing bool
-		p.mux.Lock()
-		p.resQueue = append(p.resQueue, res)
-		executing = (p.resQueue[0] != res)
-		p.mux.Unlock()
+	var executing bool
+	p.mux.Lock()
+	p.resQueue = append(p.resQueue, res)
+	executing = (p.resQueue[0] != res)
+	p.mux.Unlock()
 
-		index := 0
-		c, ok := p.conn.(*nbio.Conn)
-		if ok {
-			index = c.Hash()
-		}
-		if !executing {
-			f := func() {
-				for {
-					p.handler.ServeHTTP(res, res.request)
-					p.flushResponse(res)
+	index := 0
+	c, ok := p.conn.(*nbio.Conn)
+	if ok {
+		index = c.Hash()
+	}
+	if !executing {
+		f := func() {
+			for {
+				p.handler.ServeHTTP(res, res.request)
+				p.flushResponse(res)
 
-					p.mux.Lock()
-					p.resQueue = p.resQueue[1:]
-					if len(p.resQueue) == 0 {
-						p.resQueue = nil
-						p.mux.Unlock()
-						return
-					}
-					res = p.resQueue[0]
+				p.mux.Lock()
+				p.resQueue = p.resQueue[1:]
+				if len(p.resQueue) == 0 {
+					p.resQueue = nil
 					p.mux.Unlock()
+					return
 				}
+				res = p.resQueue[0]
+				p.mux.Unlock()
 			}
-			p.executor(index, f)
 		}
-	} else {
-		p.handler.ServeHTTP(res, request)
-		p.flushResponse(res)
+		p.executor(index, f)
 	}
 }
 
