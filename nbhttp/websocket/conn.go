@@ -46,6 +46,8 @@ type Conn struct {
 
 	subprotocol string
 
+	session interface{}
+
 	pingHandler      func(c *Conn, appData string)
 	pongHandler      func(c *Conn, appData string)
 	messageHandler   func(c *Conn, messageType MessageType, data []byte)
@@ -222,6 +224,16 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	}
 
 	return nil
+}
+
+// Session returns user session
+func (c *Conn) Session() interface{} {
+	return c.session
+}
+
+// SetSession sets user session
+func (c *Conn) SetSession(session interface{}) {
+	c.session = session
 }
 
 type writeBuffer struct {

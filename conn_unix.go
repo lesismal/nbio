@@ -280,18 +280,8 @@ func (c *Conn) Session() interface{} {
 }
 
 // SetSession sets user session
-func (c *Conn) SetSession(session interface{}) bool {
-	if session == nil {
-		return false
-	}
-	c.mux.Lock()
-	if c.session == nil {
-		c.session = session
-		c.mux.Unlock()
-		return true
-	}
-	c.mux.Unlock()
-	return false
+func (c *Conn) SetSession(session interface{}) {
+	c.session = session
 }
 
 func (c *Conn) modWrite() {
