@@ -247,12 +247,17 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		f()
 	}
 
-	var messageHandlerExecutePool *taskpool.FixedPool
+	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 64
+			conf.MessageHandlerPoolSize = conf.NPoller * 256
 		}
-		messageHandlerExecutePool = taskpool.NewFixedPool(conf.MessageHandlerPoolSize, 1024)
+		nativeSize := conf.MessageHandlerPoolSize - conf.NPoller
+		if nativeSize <= 0 {
+			nativeSize = 1024
+		}
+
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
@@ -388,12 +393,17 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	var parserHandlerExecutePool = taskpool.NewFixedPool(conf.NParser, 1024)
 	var parserExecutor = parserHandlerExecutePool.GoByIndex
 
-	var messageHandlerExecutePool *taskpool.FixedPool
+	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 64
+			conf.MessageHandlerPoolSize = conf.NPoller * 256
 		}
-		messageHandlerExecutePool = taskpool.NewFixedPool(conf.MessageHandlerPoolSize, 1024)
+		nativeSize := conf.MessageHandlerPoolSize - conf.NPoller
+		if nativeSize <= 0 {
+			nativeSize = 1024
+		}
+
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, 1024)
 		messageHandlerExecutor = messageHandlerExecutePool.GoByIndex
 	}
 
