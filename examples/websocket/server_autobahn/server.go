@@ -6,16 +6,16 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
+	"github.com/lesismal/nbio/taskpool"
 )
 
 func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
-	upgrader := &websocket.Upgrader{EnableCompression: true}
+	upgrader := &websocket.Upgrader{}
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
@@ -23,10 +23,7 @@ func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
 	wsConn := conn.(*websocket.Conn)
 	isFirst := true
 	conn.SetDeadline(time.Time{})
-	mtx := &sync.Mutex{}
 	wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
-		mtx.Lock()
-		defer mtx.Unlock()
 		err := c.WriteFrame(messageType, isFirst, fin, data)
 		if err != nil {
 			c.Close()
@@ -68,17 +65,17 @@ func main() {
 
 	log.Printf("calling new server tls\n")
 
-	//messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
+	messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
 	svrTLS := nbhttp.NewServerTLS(nbhttp.Config{
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9999"},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, nil, tlsConfig)
+	}, mux, messageHandlerExecutePool.GoByIndex, tlsConfig)
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9998"},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, nil)
+	}, mux, messageHandlerExecutePool.GoByIndex)
 
 	log.Printf("calling start non-tls\n")
 	err = svr.Start()

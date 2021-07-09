@@ -157,9 +157,14 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	}
 }
 
+var initDataFrameWarning = false
+
 func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
-		logging.Warn("If you use a DataFrame handler, please make sure the `messageHandlerExecutor` you passed to `nbhttp.NewServer/NewServerTLS` could promise to handle the frames in order. If you are sure about that, ignore this warning!")
+		if !initDataFrameWarning {
+			initDataFrameWarning = true
+			logging.Warn("If you use a DataFrame handler, please make sure the `messageHandlerExecutor` you passed to `nbhttp.NewServer/NewServerTLS` could promise to handle the frames in order, and please make sure that the Upgrader must not set `EnableCompression` to `true`. If you are sure about that, ignore this warning!")
+		}
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, fin, data)
