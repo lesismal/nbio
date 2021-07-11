@@ -19,7 +19,6 @@ import (
 const (
 	maxFrameHeaderSize         = 14
 	maxControlFramePayloadSize = 125
-	framePayloadSize           = 4096
 )
 
 type MessageType int8
@@ -218,8 +217,8 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		sendOpcode := true
 		for len(data) > 0 {
 			n := len(data)
-			if n > framePayloadSize {
-				n = framePayloadSize
+			if n > c.Server.MaxWebsocketFramePayloadSize {
+				n = c.Server.MaxWebsocketFramePayloadSize
 			}
 			err := c.writeFrame(messageType, sendOpcode, n == len(data), data[:n], compress)
 			if err != nil {

@@ -34,6 +34,9 @@ var (
 	// DefaultHTTPWriteBufferSize .
 	DefaultHTTPWriteBufferSize = 1024 * 2
 
+	// DefaultMaxWebsocketFramePayloadSize
+	DefaultMaxWebsocketFramePayloadSize = 1024 * 32
+
 	// DefaultMessageHandlerPoolSize .
 	// DefaultMessageHandlerPoolSize = runtime.NumCPU() * 256
 
@@ -87,6 +90,9 @@ type Config struct {
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize int
 
+	// MaxWebsocketFramePayloadSize represents max payload size of websocket frame.
+	MaxWebsocketFramePayloadSize int
+
 	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
 	LockListener bool
 
@@ -110,8 +116,9 @@ type Config struct {
 type Server struct {
 	*nbio.Gopher
 
-	MaxLoad   int
-	CheckUtf8 func(data []byte) bool
+	MaxLoad                      int
+	MaxWebsocketFramePayloadSize int
+	CheckUtf8                    func(data []byte) bool
 
 	_onOpen  func(c *nbio.Conn)
 	_onClose func(c *nbio.Conn, err error)
@@ -234,6 +241,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
+	if conf.MaxWebsocketFramePayloadSize <= 0 {
+		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
+	}
 
 	var parserExecutor = func(index int, f func()) {
 		defer func() {
@@ -275,15 +285,16 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	g := nbio.NewGopher(gopherConf)
 
 	svr := &Server{
-		Gopher:                 g,
-		_onOpen:                func(c *nbio.Conn) {},
-		_onClose:               func(c *nbio.Conn, err error) {},
-		_onStop:                func() {},
-		MaxLoad:                conf.MaxLoad,
-		CheckUtf8:              utf8.Valid,
-		ParserExecutor:         parserExecutor,
-		MessageHandlerExecutor: messageHandlerExecutor,
-		conns:                  map[*nbio.Conn]struct{}{},
+		Gopher:                       g,
+		_onOpen:                      func(c *nbio.Conn) {},
+		_onClose:                     func(c *nbio.Conn, err error) {},
+		_onStop:                      func() {},
+		MaxLoad:                      conf.MaxLoad,
+		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
+		CheckUtf8:                    utf8.Valid,
+		ParserExecutor:               parserExecutor,
+		MessageHandlerExecutor:       messageHandlerExecutor,
+		conns:                        map[*nbio.Conn]struct{}{},
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -371,6 +382,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
+	if conf.MaxWebsocketFramePayloadSize <= 0 {
+		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
+	}
 	conf.EnableSendfile = false
 
 	buffers := make([][]byte, conf.NParser)
@@ -427,19 +441,21 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ReadBufferSize:     conf.ReadBufferSize,
 		MaxWriteBufferSize: conf.MaxWriteBufferSize,
 		LockPoller:         conf.LockPoller,
+		LockListener:       conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
 
 	svr := &Server{
-		Gopher:                 g,
-		_onOpen:                func(c *nbio.Conn) {},
-		_onClose:               func(c *nbio.Conn, err error) {},
-		_onStop:                func() {},
-		MaxLoad:                conf.MaxLoad,
-		CheckUtf8:              utf8.Valid,
-		ParserExecutor:         parserExecutor,
-		MessageHandlerExecutor: messageHandlerExecutor,
-		conns:                  map[*nbio.Conn]struct{}{},
+		Gopher:                       g,
+		_onOpen:                      func(c *nbio.Conn) {},
+		_onClose:                     func(c *nbio.Conn, err error) {},
+		_onStop:                      func() {},
+		MaxLoad:                      conf.MaxLoad,
+		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
+		CheckUtf8:                    utf8.Valid,
+		ParserExecutor:               parserExecutor,
+		MessageHandlerExecutor:       messageHandlerExecutor,
+		conns:                        map[*nbio.Conn]struct{}{},
 	}
 
 	isClient := false
