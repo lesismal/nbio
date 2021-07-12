@@ -80,8 +80,9 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 	n, err := c.write(b)
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(err)
+		c.closed = true
 		c.mux.Unlock()
+		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 
@@ -122,8 +123,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		n, err = c.writev(in)
 	}
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(err)
+		c.closed = true
 		c.mux.Unlock()
+		c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 	if len(c.writeBuffer) == 0 {
@@ -346,8 +348,9 @@ func (c *Conn) flush() error {
 
 	n, err := syscall.Write(int(c.fd), old)
 	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
-		c.closeWithErrorWithoutLock(err)
+		c.closed = true
 		c.mux.Unlock()
+		c.closeWithErrorWithoutLock(err)
 		return err
 	}
 	if n < 0 {
@@ -424,17 +427,15 @@ func (c *Conn) overflow(n int) bool {
 func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
 	if !c.closed {
-		err = c.closeWithErrorWithoutLock(err)
+		c.closed = true
 		c.mux.Unlock()
-		return err
+		return c.closeWithErrorWithoutLock(err)
 	}
 	c.mux.Unlock()
 	return nil
 }
 
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
-	c.closed = true
-
 	c.closeErr = err
 
 	if c.wTimer != nil {

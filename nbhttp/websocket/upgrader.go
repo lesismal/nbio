@@ -274,6 +274,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 // Close .
 func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
+		u.conn.Close()
 		u.conn.onClose(u.conn, err)
 	}
 }
