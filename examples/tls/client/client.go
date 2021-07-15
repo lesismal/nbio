@@ -30,7 +30,7 @@ func main() {
 	g := nbio.NewGopher(nbio.Config{})
 
 	isClient := true
-	g.OnOpen(tls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+	g.OnOpen(tls.WrapOpen(tlsConfig, isClient, func(c *nbio.Conn, tlsConn *tls.Conn) {
 		log.Println("OnOpen:", c.RemoteAddr().String())
 		// tlsConn.Write(wbuf)
 	}))
@@ -66,10 +66,9 @@ func main() {
 				log.Fatalf("AddConn failed: %v\n", err)
 			}
 			// step 3: set tls.Conn and nbio.Conn to each other, and add nbio.Conn to the gopher
+			isNonblock := true
 			nbConn.SetSession(tlsConn)
-			nonBlock := true
-			readBufferSize := 8192
-			tlsConn.ResetConn(nbConn, nonBlock, readBufferSize)
+			tlsConn.ResetConn(nbConn, isNonblock)
 			g.AddConn(nbConn)
 
 			// step 4: write data here or in the OnOpen handler or anywhere

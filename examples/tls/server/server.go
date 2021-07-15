@@ -24,7 +24,7 @@ func main() {
 		Addrs:   []string{"localhost:8888"},
 	})
 	isClient := false
-	g.OnOpen(ntls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+	g.OnOpen(ntls.WrapOpen(tlsConfig, isClient, func(c *nbio.Conn, tlsConn *tls.Conn) {
 		log.Println("OnOpen:", c.RemoteAddr().String())
 	}))
 	g.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {

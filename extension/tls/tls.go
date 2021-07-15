@@ -22,7 +22,7 @@ func Dial(network, addr string, config *Config, v ...interface{}) (*tls.Conn, er
 }
 
 // WrapOpen returns an opening handler of nbio.Gopher
-func WrapOpen(tlsConfig *Config, isClient bool, readBufferSize int, h func(c *nbio.Conn, tlsConn *Conn)) func(c *nbio.Conn) {
+func WrapOpen(tlsConfig *Config, isClient bool, h func(c *nbio.Conn, tlsConn *Conn)) func(c *nbio.Conn) {
 	return func(c *nbio.Conn) {
 		var tlsConn *tls.Conn
 		sesseion := c.Session()
@@ -30,7 +30,7 @@ func WrapOpen(tlsConfig *Config, isClient bool, readBufferSize int, h func(c *nb
 			tlsConn = sesseion.(*tls.Conn)
 		}
 		if tlsConn == nil && !isClient {
-			tlsConn := tls.NewConn(c, tlsConfig, isClient, true, readBufferSize)
+			tlsConn := tls.NewConn(c, tlsConfig, isClient, true)
 			c.SetSession((*Conn)(tlsConn))
 		}
 		if h != nil {
@@ -53,19 +53,28 @@ func WrapClose(h func(c *nbio.Conn, tlsConn *Conn, err error)) func(c *nbio.Conn
 }
 
 // WrapData returns a data handler of nbio.Gopher
-func WrapData(h func(c *nbio.Conn, tlsConn *Conn, data []byte)) func(c *nbio.Conn, data []byte) {
+func WrapData(h func(c *nbio.Conn, tlsConn *Conn, data []byte), args ...interface{}) func(c *nbio.Conn, data []byte) {
+	getBuffer := func() []byte {
+		return make([]byte, 2048)
+	}
+	if len(args) > 0 {
+		if bh, ok := args[0].(func() []byte); ok {
+			getBuffer = bh
+		}
+	}
 	return func(c *nbio.Conn, data []byte) {
 		if session := c.Session(); session != nil {
 			if tlsConn, ok := session.(*Conn); ok {
 				tlsConn.Append(data)
+				buffer := getBuffer()
 				for {
-					n, err := tlsConn.Read(tlsConn.ReadBuffer)
+					n, err := tlsConn.Read(buffer)
 					if err != nil {
 						c.Close()
 						return
 					}
 					if h != nil && n > 0 {
-						h(c, tlsConn, tlsConn.ReadBuffer[:n])
+						h(c, tlsConn, buffer[:n])
 					}
 					if n == 0 {
 						return

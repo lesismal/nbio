@@ -10,6 +10,7 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lesismal/nbio/mempool"
 )
@@ -40,6 +41,9 @@ type Parser struct {
 	readLimit     int
 	minBufferSize int
 
+	active   int32
+	errClose error
+
 	Processor Processor
 
 	Upgrader Upgrader
@@ -56,11 +60,28 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
+func (p *Parser) releaseObj() {
+	if p.Upgrader != nil {
+		p.Upgrader.Close(p, p.errClose)
+	}
+}
+
+func (p *Parser) releaseCache() {
+	if len(p.cache) > 0 {
+		mempool.Free(p.cache)
+		p.cache = nil
+	}
+}
+
 func (p *Parser) onClose(err error) {
 	p.state = stateClose
-	if p.Upgrader != nil {
-		p.Upgrader.Close(p, err)
+	p.errClose = err
+	active := atomic.AddInt32(&p.active, 1)
+	if active&0x2 == 0x2 {
+		return
 	}
+	p.releaseObj()
+	p.releaseCache()
 }
 
 // Read .
@@ -68,6 +89,19 @@ func (p *Parser) Read(data []byte) error {
 	if len(data) == 0 {
 		return nil
 	}
+
+	active := atomic.AddInt32(&p.active, 2)
+	if active&0x1 == 0x1 {
+		p.releaseCache()
+		return ErrClosed
+	}
+	defer func() {
+		active = atomic.AddInt32(&p.active, -2)
+		if active&0x1 == 0x1 {
+			p.releaseObj()
+			p.releaseCache()
+		}
+	}()
 
 	var c byte
 	var start = 0

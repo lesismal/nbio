@@ -256,9 +256,11 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	if bufLen == 0 {
-		tmp := u.buffer
-		u.buffer = mempool.Malloc(len(tmp))
-		copy(u.buffer, tmp)
+		if len(u.buffer) > 0 {
+			tmp := u.buffer
+			u.buffer = mempool.Malloc(len(tmp))
+			copy(u.buffer, tmp)
+		}
 	} else {
 		if len(u.buffer) < len(oldBuffer) {
 			tmp := u.buffer
@@ -276,6 +278,14 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
 		u.conn.Close()
 		u.conn.onClose(u.conn, err)
+	}
+	if len(u.buffer) > 0 {
+		mempool.Free(u.buffer)
+		u.buffer = nil
+	}
+	if len(u.message) > 0 {
+		mempool.Free(u.message)
+		u.message = nil
 	}
 }
 

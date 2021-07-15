@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -28,14 +29,20 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
+	wsConn.SetReadDeadline(time.Time{})
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		c.SetReadDeadline(time.Now().Add(time.Second * 60))
 		c.WriteMessage(messageType, data)
 		atomic.AddUint64(&qps, 1)
 	})
 }
 
 func main() {
+	go func() {
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			panic(err)
+		}
+	}()
+
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
@@ -52,9 +59,10 @@ func main() {
 	// to improve performance if you need
 	// pool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   addrs,
-		MaxLoad: 1000000,
+		Network:                 "tcp",
+		Addrs:                   addrs,
+		MaxLoad:                 1000000,
+		ReleaseWebsocketPayload: true,
 	}, mux, nil, tlsConfig)
 	// svr.ParserExecutor = pool.GoByIndex
 

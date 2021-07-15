@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"net/url"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/lesismal/nbio/taskpool"
 )
 
 var (
@@ -19,7 +21,8 @@ var (
 	totalSuccess uint64 = 0
 	totalFailed  uint64 = 0
 
-	numClient    = flag.Int("c", 200000, "client num")
+	sleepTime    = flag.Int("s", 2, "sleep time for each loop in a goroutine")
+	numClient    = flag.Int("c", 50000, "client num")
 	numGoroutine = flag.Int("g", 500, "goroutine num")
 )
 
@@ -29,9 +32,41 @@ func main() {
 	connNum := *numClient
 	goroutineNum := *numGoroutine
 
-	for i := 0; i < goroutineNum; i++ {
-		go loop(addrs[i%len(addrs)], connNum/goroutineNum)
-	}
+	wg := sync.WaitGroup{}
+	conns := make([]*websocket.Conn, connNum)
+	pool := taskpool.NewFixedNoOrderPool(8, 1024)
+
+	go func() {
+		for i := 0; i < connNum; i++ {
+			addr := addrs[i%len(addrs)]
+			u := url.URL{Scheme: "wss", Host: addr, Path: "/wss"}
+			dialer := websocket.DefaultDialer
+			dialer.TLSClientConfig = &tls.Config{
+				InsecureSkipVerify: true,
+			}
+			idx := i
+			wg.Add(1)
+			pool.Go(func() {
+				defer wg.Done()
+				for {
+					conn, _, err := dialer.Dial(u.String(), nil)
+					if err == nil {
+						conns[idx] = conn
+						atomic.AddUint64(&connected, 1)
+						break
+					}
+					time.Sleep(time.Second / 10)
+				}
+			})
+		}
+		wg.Wait()
+
+		for i := 0; i < goroutineNum; i++ {
+			subConns := conns[:connNum/goroutineNum]
+			conns = conns[connNum/goroutineNum:]
+			go loop(subConns)
+		}
+	}()
 
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {
@@ -44,29 +79,13 @@ func main() {
 	}
 }
 
-func loop(addr string, connNum int) {
-	u := url.URL{Scheme: "wss", Host: addr, Path: "/wss"}
-	addr = u.String()
-	conns := make([]*websocket.Conn, connNum)
-	dialer := websocket.DefaultDialer
-	dialer.TLSClientConfig = &tls.Config{
-		InsecureSkipVerify: true,
-	}
-	for i := 0; i < connNum; i++ {
-		for {
-			conn, _, err := dialer.Dial(addr, nil)
-			if err == nil {
-				conns[i] = conn
-				atomic.AddUint64(&connected, 1)
-				break
-			}
-			time.Sleep(time.Second / 10)
-		}
-	}
+func loop(conns []*websocket.Conn) {
 	for {
-		for i := 0; i < connNum; i++ {
-			echo(conns[i])
-			// return
+		for _, conn := range conns {
+			echo(conn)
+		}
+		if *sleepTime > 0 {
+			time.Sleep(time.Second * time.Duration(*sleepTime))
 		}
 	}
 }
@@ -77,19 +96,20 @@ func echo(c *websocket.Conn) {
 	if err != nil {
 		fmt.Println("WriteMessage failed 111:", err)
 		atomic.AddUint64(&failed, 1)
-		return
+		panic(err)
 	}
 
 	_, message, err := c.ReadMessage()
 	if err != nil {
 		fmt.Println("ReadMessage failed 222:", err)
 		atomic.AddUint64(&failed, 1)
-		return
+		panic(err)
 	}
 
 	if string(message) != text {
 		fmt.Println("ReadMessage failed 333:", string(message))
 		atomic.AddUint64(&failed, 1)
+		panic(err)
 	} else {
 		atomic.AddUint64(&success, 1)
 	}

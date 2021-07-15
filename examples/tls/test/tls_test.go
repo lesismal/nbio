@@ -54,7 +54,7 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 	})
 	isClient := false
 	count := 0
-	g.OnOpen(ntls.WrapOpen(tlsConfig, isClient, 0, func(c *nbio.Conn, tlsConn *ltls.Conn) {
+	g.OnOpen(ntls.WrapOpen(tlsConfig, isClient, func(c *nbio.Conn, tlsConn *ltls.Conn) {
 		log.Println("OnOpen:", c.RemoteAddr().String())
 	}))
 	g.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *ltls.Conn, err error) {
