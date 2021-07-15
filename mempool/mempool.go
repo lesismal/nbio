@@ -166,6 +166,22 @@ func New(maxSize int) *MemPool {
 func State() (int64, int64, int64, int64, string) {
 	n1, n2, n3, n4 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
 	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
+
+	// s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\nmallocStack: %v\nfreeStack  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4, len(mallocStacks), len(freeStacks))
+
+	// stackMux.Lock()
+	// defer stackMux.Unlock()
+	// i := 0
+	// for k, v := range mallocStacks {
+	// 	i++
+	// 	s += fmt.Sprintf("malloc stack %v: %v\n%v\n", i, v, k)
+	// }
+	// i = 0
+	// for k, v := range freeStacks {
+	// 	i++
+	// 	s += fmt.Sprintf("free stack %v: %v\n%v\n", i, v, k)
+	// }
+
 	return n1, n2, n3, n4, s
 }
 
@@ -188,12 +204,36 @@ func NewChosMemPool(minSize int) *ChosMemPool {
 	return c
 }
 
+// var (
+// 	stackMux     = sync.Mutex{}
+// 	mallocStacks = map[string]int{}
+// 	freeStacks   = map[string]int{}
+// )
+
+// func getStack() string {
+// 	i := 2
+// 	str := ""
+// 	for ; i < 10; i++ {
+// 		pc, file, line, ok := runtime.Caller(i)
+// 		if !ok {
+// 			break
+// 		}
+// 		str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+// 	}
+// 	return str
+// }
+
 func (c *ChosMemPool) Malloc(size int) []byte {
 	buf := c.pool.Get().([]byte)
 	if cap(buf) < size {
 		c.Free(buf)
 		buf = make([]byte, size)
 	}
+
+	// stackMux.Lock()
+	// defer stackMux.Unlock()
+	// mallocStacks[getStack()] = mallocStacks[getStack()] + 1
+
 	atomic.AddInt64(&mallocCnt, 1)
 	atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
 	return buf[:size]
@@ -218,5 +258,10 @@ func (c *ChosMemPool) Free(buf []byte) error {
 	atomic.AddInt64(&freeCnt, 1)
 	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
 	c.pool.Put(buf)
+
+	// stackMux.Lock()
+	// defer stackMux.Unlock()
+	// freeStacks[getStack()] = freeStacks[getStack()] + 1
+
 	return nil
 }

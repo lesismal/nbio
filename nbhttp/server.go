@@ -93,12 +93,6 @@ type Config struct {
 	// MaxWebsocketFramePayloadSize represents max payload size of websocket frame.
 	MaxWebsocketFramePayloadSize int
 
-	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
-	LockListener bool
-
-	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
-	LockPoller bool
-
 	// MessageHandlerPoolSize represents max http server's task pool goroutine num, it's set to runtime.NumCPU() * 256 by default.
 	MessageHandlerPoolSize int
 
@@ -108,8 +102,17 @@ type Config struct {
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
 
+	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
+	LockListener bool
+
+	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
+	LockPoller bool
+
 	// EnableSendfile .
 	EnableSendfile bool
+
+	// ReleaseWebsocketPayload .
+	ReleaseWebsocketPayload bool
 }
 
 // Server .
@@ -118,6 +121,7 @@ type Server struct {
 
 	MaxLoad                      int
 	MaxWebsocketFramePayloadSize int
+	ReleaseWebsocketPayload      bool
 	CheckUtf8                    func(data []byte) bool
 
 	_onOpen  func(c *nbio.Conn)
@@ -291,6 +295,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		_onStop:                      func() {},
 		MaxLoad:                      conf.MaxLoad,
 		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
+		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		ParserExecutor:               parserExecutor,
 		MessageHandlerExecutor:       messageHandlerExecutor,
@@ -452,6 +457,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		_onStop:                      func() {},
 		MaxLoad:                      conf.MaxLoad,
 		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
+		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		ParserExecutor:               parserExecutor,
 		MessageHandlerExecutor:       messageHandlerExecutor,
@@ -474,7 +480,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		parser.Server = svr
-		parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))

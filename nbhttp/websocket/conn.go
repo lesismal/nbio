@@ -149,8 +149,10 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, data)
-				// do not free data because application layer may need to use it in another goroutine.
-				// mempool.Free(data)
+				// do not free data if application layer need to use it in another goroutine.
+				if c.Server.ReleaseWebsocketPayload {
+					mempool.Free(data)
+				}
 			})
 		}
 	}
@@ -167,8 +169,10 @@ func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, fin, data)
-				// do not free data because application layer may need to use it in another goroutine.
-				// mempool.Free(data)
+				// do not free data if application layer need to use it in another goroutine.
+				if c.Server.ReleaseWebsocketPayload {
+					mempool.Free(data)
+				}
 			})
 		}
 	}

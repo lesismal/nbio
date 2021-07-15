@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -54,6 +55,12 @@ func serve(addrs []string) {
 	}
 }
 func main() {
+	go func() {
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			panic(err)
+		}
+	}()
+
 	serve(addrs)
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {
