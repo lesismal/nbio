@@ -168,7 +168,6 @@ func State() (int64, int64, int64, int64, string) {
 	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
 
 	// s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\nmallocStack: %v\nfreeStack  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4, len(mallocStacks), len(freeStacks))
-
 	// stackMux.Lock()
 	// defer stackMux.Unlock()
 	// i := 0
@@ -226,7 +225,9 @@ func NewChosMemPool(minSize int) *ChosMemPool {
 func (c *ChosMemPool) Malloc(size int) []byte {
 	buf := c.pool.Get().([]byte)
 	if cap(buf) < size {
-		c.Free(buf)
+		if cap(buf) >= c.minSize {
+			c.pool.Put(buf)
+		}
 		buf = make([]byte, size)
 	}
 
@@ -246,7 +247,7 @@ func (c *ChosMemPool) Realloc(buf []byte, size int) []byte {
 	}
 	newBuf := c.Malloc(size)
 	copy(newBuf, buf)
-	c.pool.Put(buf)
+	c.Free(buf)
 	return newBuf[:size]
 }
 
