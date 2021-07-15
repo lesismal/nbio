@@ -35,7 +35,7 @@ func main() {
 		Addrs:   []string{"localhost:9999"},
 	})
 
-	g.OnOpen(ntls.WrapOpen(tlsConfig, false, 0, func(c *nbio.Conn, tlsConn *tls.Conn) {
+	g.OnOpen(ntls.WrapOpen(tlsConfig, false, func(c *nbio.Conn, tlsConn *tls.Conn) {
 		log.Println("OnOpen:", c.RemoteAddr().String())
 	}))
 	g.OnClose(ntls.WrapClose(func(c *nbio.Conn, tlsConn *tls.Conn, err error) {

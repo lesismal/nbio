@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -33,6 +34,10 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		c.WriteMessage(messageType, data)
 		atomic.AddUint64(&qps, 1)
+	})
+	wsConn.OnClose(func(c *websocket.Conn, err error) {
+		fmt.Println("OnClose:", err)
+		os.Exit(0)
 	})
 }
 

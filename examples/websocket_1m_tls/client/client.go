@@ -96,19 +96,20 @@ func echo(c *websocket.Conn) {
 	if err != nil {
 		fmt.Println("WriteMessage failed 111:", err)
 		atomic.AddUint64(&failed, 1)
-		return
+		panic(err)
 	}
 
 	_, message, err := c.ReadMessage()
 	if err != nil {
 		fmt.Println("ReadMessage failed 222:", err)
 		atomic.AddUint64(&failed, 1)
-		return
+		panic(err)
 	}
 
 	if string(message) != text {
 		fmt.Println("ReadMessage failed 333:", string(message))
 		atomic.AddUint64(&failed, 1)
+		panic(err)
 	} else {
 		atomic.AddUint64(&success, 1)
 	}

@@ -476,7 +476,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, conf.ReadBufferSize, mempool.DefaultMemPool)
+		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
 		parser.Server = svr
