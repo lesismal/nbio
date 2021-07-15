@@ -55,16 +55,17 @@ func wrapData(h func(c *nbio.Conn, tlsConn *tls.Conn, data []byte)) func(c *nbio
 		if isession := c.Session(); isession != nil {
 			if session, ok := isession.(*Session); ok {
 				session.Conn.Append(data)
+				buffer := make([]byte, 2048)
 				for {
-					n, err := session.Conn.Read(session.Conn.ReadBuffer)
+					n, err := session.Conn.Read(buffer)
 					if err != nil {
 						c.Close()
 						return
 					}
 					if h != nil && n > 0 {
-						h(c, session.Conn, session.Conn.ReadBuffer[:n])
+						h(c, session.Conn, buffer[:n])
 					}
-					if n < len(session.Conn.ReadBuffer) {
+					if n < len(buffer) {
 						return
 					}
 				}
@@ -124,8 +125,7 @@ func main() {
 				Buffer: bytes.NewBuffer(),
 			})
 			nonBlock := true
-			readBufferSize := 8192
-			tlsConn.ResetConn(nbConn, nonBlock, readBufferSize)
+			tlsConn.ResetConn(nbConn, nonBlock)
 			g.AddConn(nbConn)
 
 			tlsConn.Write(data)
