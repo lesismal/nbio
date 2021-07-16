@@ -89,21 +89,25 @@ func NewGopher(conf Config) *Gopher {
 	if conf.MinConnCacheSize == 0 {
 		conf.MinConnCacheSize = DefaultMinConnCacheSize
 	}
+	if conf.MaxReadTimesPerEventLoop <= 0 {
+		conf.MaxReadTimesPerEventLoop = DefaultMaxReadTimesPerEventLoop
+	}
 
 	g := &Gopher{
-		Name:               conf.Name,
-		network:            conf.Network,
-		addrs:              conf.Addrs,
-		pollerNum:          conf.NPoller,
-		backlogSize:        conf.Backlog,
-		readBufferSize:     conf.ReadBufferSize,
-		maxWriteBufferSize: conf.MaxWriteBufferSize,
-		minConnCacheSize:   conf.MinConnCacheSize,
-		lockListener:       conf.LockListener,
-		lockPoller:         conf.LockPoller,
-		listeners:          make([]*poller, len(conf.Addrs)),
-		pollers:            make([]*poller, conf.NPoller),
-		connsUnix:          make([]*Conn, MaxOpenFiles),
+		Name:                     conf.Name,
+		network:                  conf.Network,
+		addrs:                    conf.Addrs,
+		pollerNum:                conf.NPoller,
+		backlogSize:              conf.Backlog,
+		readBufferSize:           conf.ReadBufferSize,
+		maxWriteBufferSize:       conf.MaxWriteBufferSize,
+		maxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
+		minConnCacheSize:         conf.MinConnCacheSize,
+		lockListener:             conf.LockListener,
+		lockPoller:               conf.LockPoller,
+		listeners:                make([]*poller, len(conf.Addrs)),
+		pollers:                  make([]*poller, conf.NPoller),
+		connsUnix:                make([]*Conn, MaxOpenFiles),
 
 		trigger: time.NewTimer(timeForever),
 		chTimer: make(chan struct{}),

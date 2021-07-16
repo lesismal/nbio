@@ -195,7 +195,7 @@ func (p *poller) readWrite(ev *syscall.EpollEvent) {
 		}
 
 		if ev.Events&epoollEventsRead != 0 {
-			for i := 0; i < 3; i++ {
+			for i := 0; i < p.g.maxReadTimesPerEventLoop; i++ {
 				buffer := p.g.borrow(c)
 				n, err := c.Read(buffer)
 				if n > 0 {

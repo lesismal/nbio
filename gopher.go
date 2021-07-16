@@ -21,6 +21,9 @@ const (
 	// DefaultMaxWriteBufferSize .
 	DefaultMaxWriteBufferSize = 1024 * 1024
 
+	// DefaultMaxReadTimesPerEventLoop .
+	DefaultMaxReadTimesPerEventLoop = 3
+
 	// DefaultMinConnCacheSize .
 	DefaultMinConnCacheSize = 1024 * 2
 )
@@ -64,6 +67,9 @@ type Config struct {
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize int
 
+	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
+	MaxReadTimesPerEventLoop int
+
 	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
 	LockListener bool
 
@@ -79,15 +85,16 @@ type Gopher struct {
 
 	Name string
 
-	network            string
-	addrs              []string
-	pollerNum          int
-	backlogSize        int
-	readBufferSize     int
-	maxWriteBufferSize int
-	minConnCacheSize   int
-	lockListener       bool
-	lockPoller         bool
+	network                  string
+	addrs                    []string
+	pollerNum                int
+	backlogSize              int
+	readBufferSize           int
+	maxWriteBufferSize       int
+	maxReadTimesPerEventLoop int
+	minConnCacheSize         int
+	lockListener             bool
+	lockPoller               bool
 
 	lfds []int
 

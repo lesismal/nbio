@@ -23,7 +23,7 @@ import (
 
 var (
 	// DefaultMaxLoad .
-	DefaultMaxLoad = 1024 * 500
+	DefaultMaxLoad = 1024 * 1024
 
 	// DefaultHTTPReadLimit .
 	DefaultHTTPReadLimit = 1024 * 1024 * 64
@@ -113,6 +113,9 @@ type Config struct {
 
 	// ReleaseWebsocketPayload .
 	ReleaseWebsocketPayload bool
+
+	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
+	MaxReadTimesPerEventLoop int
 }
 
 // Server .
@@ -276,15 +279,16 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	}
 
 	gopherConf := nbio.Config{
-		Name:               conf.Name,
-		Network:            conf.Network,
-		Addrs:              conf.Addrs,
-		NPoller:            conf.NPoller,
-		NListener:          conf.NListener,
-		ReadBufferSize:     conf.ReadBufferSize,
-		MaxWriteBufferSize: conf.MaxWriteBufferSize,
-		LockPoller:         conf.LockPoller,
-		LockListener:       conf.LockListener,
+		Name:                     conf.Name,
+		Network:                  conf.Network,
+		Addrs:                    conf.Addrs,
+		NPoller:                  conf.NPoller,
+		NListener:                conf.NListener,
+		ReadBufferSize:           conf.ReadBufferSize,
+		MaxWriteBufferSize:       conf.MaxWriteBufferSize,
+		MaxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
+		LockPoller:               conf.LockPoller,
+		LockListener:             conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
 
@@ -438,15 +442,16 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 
 	gopherConf := nbio.Config{
-		Name:               conf.Name,
-		Network:            conf.Network,
-		Addrs:              conf.Addrs,
-		NPoller:            conf.NPoller,
-		NListener:          conf.NListener,
-		ReadBufferSize:     conf.ReadBufferSize,
-		MaxWriteBufferSize: conf.MaxWriteBufferSize,
-		LockPoller:         conf.LockPoller,
-		LockListener:       conf.LockListener,
+		Name:                     conf.Name,
+		Network:                  conf.Network,
+		Addrs:                    conf.Addrs,
+		NPoller:                  conf.NPoller,
+		NListener:                conf.NListener,
+		ReadBufferSize:           conf.ReadBufferSize,
+		MaxWriteBufferSize:       conf.MaxWriteBufferSize,
+		MaxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
+		LockPoller:               conf.LockPoller,
+		LockListener:             conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
 
