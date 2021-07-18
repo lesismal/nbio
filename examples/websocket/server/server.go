@@ -21,7 +21,8 @@ var (
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := &websocket.Upgrader{EnableCompression: true}
+	upgrader := websocket.NewUpgrader()
+	upgrader.EnableCompression = true
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)

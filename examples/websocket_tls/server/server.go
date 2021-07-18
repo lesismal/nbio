@@ -21,7 +21,7 @@ var (
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	flag.Parse()
-	upgrader := &websocket.Upgrader{}
+	upgrader := websocket.NewUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)

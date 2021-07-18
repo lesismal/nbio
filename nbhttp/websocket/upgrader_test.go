@@ -28,7 +28,8 @@ func Test_validFrame(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := (&Upgrader{}).validFrame(tt.args.opcode, tt.args.fin, tt.args.res1, tt.args.res2, tt.args.res3, tt.args.expectingFragments); (err != nil) != tt.wantErr {
+			upgrader := NewUpgrader()
+			if err := upgrader.validFrame(tt.args.opcode, tt.args.fin, tt.args.res1, tt.args.res2, tt.args.res3, tt.args.expectingFragments); (err != nil) != tt.wantErr {
 				t.Errorf("validFrame() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
