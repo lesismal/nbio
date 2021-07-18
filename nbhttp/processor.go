@@ -252,7 +252,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 
 				p.mux.Lock()
 				p.resQueue = p.resQueue[1:]
-				if atomic.LoadInt32(&p.active)&0x1 == 0x1 {
+				if (atomic.LoadInt32(&p.active) & 0x1) == 0x1 {
 					defer p.release()
 					p.mux.Unlock()
 					return
