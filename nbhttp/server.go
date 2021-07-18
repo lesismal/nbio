@@ -82,9 +82,6 @@ type Config struct {
 	// ReadBufferSize represents buffer size for reading, it's set to 2k by default.
 	ReadBufferSize int
 
-	// MinBufferSize represents buffer size for http request parsing and response encoding, it's set to 2k by default.
-	MinBufferSize int
-
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
 	// if the connection's Send-Q is full and the data cached by nbio is
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
@@ -131,7 +128,6 @@ type Server struct {
 	_onClose func(c *nbio.Conn, err error)
 	_onStop  func()
 
-	ParserExecutor         func(index int, f func())
 	MessageHandlerExecutor func(index int, f func())
 
 	mux   sync.Mutex
@@ -239,9 +235,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	if conf.ReadLimit <= 0 {
 		conf.ReadLimit = DefaultHTTPReadLimit
 	}
-	if conf.MinBufferSize <= 0 {
-		conf.MinBufferSize = DefaultMinBufferSize
-	}
 	if conf.KeepaliveTime <= 0 {
 		conf.KeepaliveTime = DefaultKeepaliveTime
 	}
@@ -250,18 +243,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	}
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
-	}
-
-	var parserExecutor = func(index int, f func()) {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
 	}
 
 	var messageHandlerExecutePool *taskpool.MixedPool
@@ -301,7 +282,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
-		ParserExecutor:               parserExecutor,
 		MessageHandlerExecutor:       messageHandlerExecutor,
 		conns:                        map[*nbio.Conn]struct{}{},
 	}
@@ -316,8 +296,8 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
-		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.KeepaliveTime, conf.EnableSendfile)
+		parser := NewParser(processor, false, conf.ReadLimit)
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -328,28 +308,33 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		if parser == nil {
 			logging.Error("nil parser")
 		}
-		parser.onClose(err)
+		parser.Close(err)
 		svr._onClose(c, err)
 		svr.mux.Lock()
 		delete(svr.conns, c)
 		svr.mux.Unlock()
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+		}()
+
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			logging.Error("nil parser")
 			return
 		}
-		// because the data if poller buffer,
-		// do not set svr.ParserExecutor with a func executed in another goroutine,
-		// or the memory of data buffer would be dirty
-		svr.ParserExecutor(c.Hash(), func() {
-			err := parser.Read(data)
-			if err != nil {
-				logging.Debug("parser.Read failed: %v", err)
-				c.CloseWithError(err)
-			}
-		})
+
+		err := parser.Read(data)
+		if err != nil {
+			logging.Debug("parser.Read failed: %v", err)
+			c.CloseWithError(err)
+		}
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 
@@ -360,7 +345,6 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	g.OnStop(func() {
 		svr._onStop()
 		svr.MessageHandlerExecutor = func(index int, f func()) {}
-		svr.ParserExecutor = func(index int, f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}
@@ -382,9 +366,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	if conf.ReadLimit <= 0 {
 		conf.ReadLimit = DefaultHTTPReadLimit
 	}
-	if conf.MinBufferSize <= 0 {
-		conf.MinBufferSize = DefaultMinBufferSize
-	}
 	if conf.KeepaliveTime <= 0 {
 		conf.KeepaliveTime = DefaultKeepaliveTime
 	}
@@ -404,17 +385,19 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		return buffers[uint64(c.Hash())%uint64(conf.NParser)]
 	}
 	if runtime.GOOS == "windows" {
+		bufferMux := sync.Mutex{}
+		buffers := map[*nbio.Conn][]byte{}
 		getBuffer = func(c *nbio.Conn) []byte {
-			parser := c.Session().(*Parser)
-			if parser.TLSBuffer == nil {
-				parser.TLSBuffer = make([]byte, conf.ReadBufferSize)
+			bufferMux.Lock()
+			defer bufferMux.Unlock()
+			buf, ok := buffers[c]
+			if !ok {
+				buf = make([]byte, 4096)
+				buffers[c] = buf
 			}
-			return parser.TLSBuffer
+			return buf
 		}
 	}
-
-	var parserHandlerExecutePool = taskpool.NewFixedPool(conf.NParser, 1024)
-	var parserExecutor = parserHandlerExecutePool.GoByIndex
 
 	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
@@ -464,7 +447,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
-		ParserExecutor:               parserExecutor,
 		MessageHandlerExecutor:       messageHandlerExecutor,
 		conns:                        map[*nbio.Conn]struct{}{},
 	}
@@ -482,8 +464,8 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.mux.Unlock()
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
-		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.MinBufferSize, conf.KeepaliveTime, conf.EnableSendfile)
-		parser := NewParser(processor, false, conf.ReadLimit, conf.MinBufferSize)
+		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.KeepaliveTime, conf.EnableSendfile)
+		parser := NewParser(processor, false, conf.ReadLimit)
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -495,7 +477,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			logging.Error("nil parser")
 			return
 		}
-		parser.onClose(err)
+		parser.Close(err)
 		svr._onClose(c, err)
 		svr.mux.Lock()
 		delete(svr.conns, c)
@@ -503,6 +485,15 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	})
 
 	g.OnData(func(c *nbio.Conn, data []byte) {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+		}()
+
 		parser := c.Session().(*Parser)
 		if parser == nil {
 			logging.Error("nil parser")
@@ -511,27 +502,25 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
 			tlsConn.Append(data)
-			svr.ParserExecutor(c.Hash(), func() {
-				buffer := getBuffer(c)
-				for {
-					n, err := tlsConn.Read(buffer)
+			buffer := getBuffer(c)
+			for {
+				n, err := tlsConn.Read(buffer)
+				if err != nil {
+					c.CloseWithError(err)
+					return
+				}
+				if n > 0 {
+					err := parser.Read(buffer[:n])
 					if err != nil {
+						logging.Debug("parser.Read failed: %v", err)
 						c.CloseWithError(err)
 						return
 					}
-					if n > 0 {
-						err := parser.Read(buffer[:n])
-						if err != nil {
-							logging.Debug("parser.Read failed: %v", err)
-							c.CloseWithError(err)
-							return
-						}
-					}
-					if n == 0 {
-						return
-					}
 				}
-			})
+				if n == 0 {
+					return
+				}
+			}
 			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 		}
 	})
@@ -542,8 +531,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	g.OnStop(func() {
 		svr._onStop()
 		svr.MessageHandlerExecutor = func(index int, f func()) {}
-		svr.ParserExecutor = func(index int, f func()) {}
-		parserHandlerExecutePool.Stop()
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}

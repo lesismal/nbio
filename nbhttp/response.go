@@ -10,24 +10,9 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/lesismal/nbio/mempool"
-)
-
-var (
-	requestPool = sync.Pool{
-		New: func() interface{} {
-			return &http.Request{}
-		},
-	}
-
-	responsePool = sync.Pool{
-		New: func() interface{} {
-			return &Response{}
-		},
-	}
 )
 
 // Response represents the server side of an HTTP response.

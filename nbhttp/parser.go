@@ -10,9 +10,20 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/lesismal/nbio/mempool"
+)
+
+var (
+	emptyParser = Parser{}
+
+	parserPool = sync.Pool{
+		New: func() interface{} {
+			return &Parser{}
+		},
+	}
 )
 
 // Parser .
@@ -48,8 +59,7 @@ type Parser struct {
 
 	Upgrader Upgrader
 
-	TLSBuffer []byte
-	Server    *Server
+	Server *Server
 }
 
 func (p *Parser) nextState(state int8) {
@@ -60,28 +70,28 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
-func (p *Parser) releaseObj() {
+func (p *Parser) release() {
 	if p.Upgrader != nil {
 		p.Upgrader.Close(p, p.errClose)
 	}
-}
-
-func (p *Parser) releaseCache() {
+	if p.Processor != nil {
+		p.Processor.Close()
+	}
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)
-		p.cache = nil
 	}
+	*p = emptyParser
+	parserPool.Put(p)
 }
 
-func (p *Parser) onClose(err error) {
+func (p *Parser) Close(err error) {
 	p.state = stateClose
 	p.errClose = err
 	active := atomic.AddInt32(&p.active, 1)
-	if active&0x2 == 0x2 {
+	if (active & 0x2) == 0x2 {
 		return
 	}
-	p.releaseObj()
-	p.releaseCache()
+	p.release()
 }
 
 // Read .
@@ -91,15 +101,13 @@ func (p *Parser) Read(data []byte) error {
 	}
 
 	active := atomic.AddInt32(&p.active, 2)
-	if active&0x1 == 0x1 {
-		p.releaseCache()
+	if (active & 0x1) == 0x1 {
 		return ErrClosed
 	}
 	defer func() {
 		active = atomic.AddInt32(&p.active, -2)
-		if active&0x1 == 0x1 {
-			p.releaseObj()
-			p.releaseCache()
+		if (active & 0x1) == 0x1 {
+			p.release()
 		}
 	}()
 
@@ -738,7 +746,7 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser .
-func NewParser(processor Processor, isClient bool, readLimit int, minBufferSize int) *Parser {
+func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
 	}
@@ -749,14 +757,10 @@ func NewParser(processor Processor, isClient bool, readLimit int, minBufferSize 
 	if readLimit <= 0 {
 		readLimit = DefaultHTTPReadLimit
 	}
-	if minBufferSize <= 0 {
-		minBufferSize = DefaultMinBufferSize
-	}
-	return &Parser{
-		state:         state,
-		readLimit:     readLimit,
-		minBufferSize: minBufferSize,
-		isClient:      isClient,
-		Processor:     processor,
-	}
+	p := parserPool.Get().(*Parser)
+	p.state = state
+	p.readLimit = readLimit
+	p.isClient = isClient
+	p.Processor = processor
+	return p
 }
