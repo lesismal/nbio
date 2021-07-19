@@ -12,10 +12,10 @@ import (
 )
 
 var (
-	mallocCnt     int64
-	mallocCntSize int64
-	freeCnt       int64
-	freeCntSize   int64
+	mallocCnt int64
+	freeCnt   int64
+	// mallocCntSize int64
+	// freeCntSize   int64
 )
 
 var DefaultMemPool = NewChosMemPool(64)
@@ -84,7 +84,7 @@ func (pool *MemPool) Malloc(size int) []byte {
 	}
 	buf := pool.buffers[pool.maxBits(allocSize)].Get().([]byte)[:size]
 	atomic.AddInt64(&mallocCnt, 1)
-	atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
+	// atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
 	// fmt.Println("+++ Malloc:", cap(buf))
 	printStack(size, cap(buf))
 
@@ -111,7 +111,7 @@ func (pool *MemPool) Free(buf []byte) error {
 	}
 	printStack(len(buf), cap(buf))
 	atomic.AddInt64(&freeCnt, 1)
-	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
+	// atomic.AddInt64(&freeCntSize, int64(cap(buf)))
 	pool.buffers[bits].Put(buf)
 	// fmt.Println("--- Free:", cap(buf))
 	// debug.PrintStack()
@@ -163,9 +163,12 @@ func New(maxSize int) *MemPool {
 	return pool
 }
 
-func State() (int64, int64, int64, int64, string) {
-	n1, n2, n3, n4 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
-	s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
+func State() (int64, int64, string) {
+	// n1, n2, n3, n4 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&mallocCntSize), atomic.LoadInt64(&freeCnt), atomic.LoadInt64(&freeCntSize)
+	// s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4)
+
+	n1, n2 := atomic.LoadInt64(&mallocCnt), atomic.LoadInt64(&freeCnt)
+	s := fmt.Sprintf("malloc num : %v\nfree num   : %v\nleft times : %v\n", n1, n2, n1-n2)
 
 	// s := fmt.Sprintf("malloc num : %v\nmalloc size: %v\nfree num   : %v\nfree size  : %v\nleft times : %v\nleft size  : %v\nmallocStack: %v\nfreeStack  : %v\n", n1, n2, n3, n4, n1-n3, n2-n4, len(mallocStacks), len(freeStacks))
 	// stackMux.Lock()
@@ -181,7 +184,7 @@ func State() (int64, int64, int64, int64, string) {
 	// 	s += fmt.Sprintf("free stack %v: %v\n%v\n", i, v, k)
 	// }
 
-	return n1, n2, n3, n4, s
+	return n1, n2, s
 }
 
 // ChosMemPool
@@ -236,7 +239,7 @@ func (c *ChosMemPool) Malloc(size int) []byte {
 	// mallocStacks[getStack()] = mallocStacks[getStack()] + 1
 
 	atomic.AddInt64(&mallocCnt, 1)
-	atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
+	// atomic.AddInt64(&mallocCntSize, int64(cap(buf)))
 	return buf[:size]
 }
 
@@ -257,7 +260,7 @@ func (c *ChosMemPool) Free(buf []byte) error {
 		return nil
 	}
 	atomic.AddInt64(&freeCnt, 1)
-	atomic.AddInt64(&freeCntSize, int64(cap(buf)))
+	// atomic.AddInt64(&freeCntSize, int64(cap(buf)))
 	c.pool.Put(buf)
 
 	// stackMux.Lock()
