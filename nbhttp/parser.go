@@ -6,6 +6,7 @@ package nbhttp
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/textproto"
 	"strconv"
@@ -60,6 +61,8 @@ type Parser struct {
 	Upgrader Upgrader
 
 	Server *Server
+
+	Conn net.Conn
 }
 
 func (p *Parser) nextState(state int8) {

@@ -466,6 +466,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
 		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit)
+		parser.Conn = tlsConn
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -477,6 +478,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			logging.Error("nil parser")
 			return
 		}
+		parser.Conn.Close()
 		parser.Close(err)
 		svr._onClose(c, err)
 		svr.mux.Lock()
