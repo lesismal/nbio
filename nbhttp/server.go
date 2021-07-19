@@ -503,23 +503,23 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			return
 		}
 		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
-			tlsConn.Append(data)
 			buffer := getBuffer(c)
 			for {
-				n, err := tlsConn.Read(buffer)
+				_, nread, err := tlsConn.AppendAndRead(data, buffer)
+				data = nil
 				if err != nil {
 					c.CloseWithError(err)
 					return
 				}
-				if n > 0 {
-					err := parser.Read(buffer[:n])
+				if nread > 0 {
+					err := parser.Read(buffer[:nread])
 					if err != nil {
 						logging.Debug("parser.Read failed: %v", err)
 						c.CloseWithError(err)
 						return
 					}
 				}
-				if n == 0 {
+				if nread == 0 {
 					return
 				}
 			}
