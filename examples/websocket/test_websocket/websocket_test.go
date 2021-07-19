@@ -23,7 +23,7 @@ var (
 )
 
 func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWriter, r *http.Request) {
-	upgrader := &websocket.Upgrader{}
+	upgrader := websocket.NewUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)

@@ -20,7 +20,7 @@ var (
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := &websocket.Upgrader{}
+	upgrader := websocket.NewUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
@@ -38,9 +38,10 @@ func main() {
 	mux.HandleFunc("/ws", onWebsocket)
 
 	svr = nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   addrs,
-		MaxLoad: 1000000,
+		Network:                 "tcp",
+		Addrs:                   addrs,
+		MaxLoad:                 1000000,
+		ReleaseWebsocketPayload: true,
 	}, mux, nil)
 
 	err := svr.Start()

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -25,8 +26,18 @@ type Hijacker interface {
 	Hijack() (net.Conn, error)
 }
 
-// Upgrader .
-type Upgrader struct {
+var (
+	emptyUpgrader = upgrader{}
+
+	upgraderPool = sync.Pool{
+		New: func() interface{} {
+			return &upgrader{}
+		},
+	}
+)
+
+// upgrader .
+type upgrader struct {
 	conn *Conn
 
 	ReadLimit        int64
@@ -46,8 +57,12 @@ type Upgrader struct {
 	Server *nbhttp.Server
 }
 
+func NewUpgrader() *upgrader {
+	return upgraderPool.Get().(*upgrader)
+}
+
 // Upgrade .
-func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
+func (u *upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
 	if !headerContains(r.Header, "Connection", "upgrade") {
 		return nil, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}
@@ -151,7 +166,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	return u.conn, nil
 }
 
-func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
+func (u *upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
 	if res1 && !u.EnableCompression {
 		return ErrReserveBitSet
 	}
@@ -171,7 +186,7 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 }
 
 // Read .
-func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
+func (u *upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
 	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
 		return nbhttp.ErrTooLong
@@ -274,22 +289,22 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 }
 
 // Close .
-func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
+func (u *upgrader) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
-		u.conn.Close()
+		// u.conn.Close()
 		u.conn.onClose(u.conn, err)
 	}
 	if len(u.buffer) > 0 {
 		mempool.Free(u.buffer)
-		u.buffer = nil
 	}
 	if len(u.message) > 0 {
 		mempool.Free(u.message)
-		u.message = nil
 	}
+	*u = emptyUpgrader
+	upgraderPool.Put(u)
 }
 
-func (u *Upgrader) handleMessage() {
+func (u *upgrader) handleMessage() {
 	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
@@ -299,7 +314,7 @@ func (u *Upgrader) handleMessage() {
 	u.opcode = 0
 }
 
-func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
+func (u *upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
@@ -349,13 +364,13 @@ func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, 
 	return opcode, body, ok, fin, res1, res2, res3
 }
 
-func (u *Upgrader) returnError(w http.ResponseWriter, r *http.Request, status int, err error) error {
+func (u *upgrader) returnError(w http.ResponseWriter, r *http.Request, status int, err error) error {
 	w.Header().Set("Sec-Websocket-Version", "13")
 	http.Error(w, http.StatusText(status), status)
 	return err
 }
 
-func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
+func (u *upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
 	if u.Subprotocols != nil {
 		clientProtocols := subprotocols(r)
 		for _, serverProtocol := range u.Subprotocols {

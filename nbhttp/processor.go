@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/nbio"
@@ -20,6 +21,24 @@ import (
 var (
 	emptyRequest  = http.Request{}
 	emptyResponse = Response{}
+
+	requestPool = sync.Pool{
+		New: func() interface{} {
+			return &http.Request{}
+		},
+	}
+
+	responsePool = sync.Pool{
+		New: func() interface{} {
+			return &Response{}
+		},
+	}
+
+	serverProcessorPool = sync.Pool{
+		New: func() interface{} {
+			return &ServerProcessor{}
+		},
+	}
 )
 
 func releaseRequest(req *http.Request) {
@@ -54,11 +73,13 @@ type Processor interface {
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
 	HandleExecute(executor func(index int, f func()))
-	Clear()
+	Close()
 }
 
 // ServerProcessor .
 type ServerProcessor struct {
+	active int32
+
 	mux      sync.Mutex
 	conn     net.Conn
 	parser   *Parser
@@ -67,12 +88,9 @@ type ServerProcessor struct {
 	executor func(index int, f func())
 
 	resQueue       []*Response
-	sequence       uint64
-	responsedSeq   uint64
-	minBufferSize  int
 	keepaliveTime  time.Duration
 	enableSendfile bool
-	isUpgrade      bool
+	// isUpgrade      bool
 }
 
 // Conn .
@@ -124,7 +142,7 @@ func (p *ServerProcessor) OnHeader(key, value string) {
 	values := p.request.Header[key]
 	values = append(values, value)
 	p.request.Header[key] = values
-	p.isUpgrade = (key == "Connection" && value == "upgrade")
+	// p.isUpgrade = (key == "Connection" && value == "upgrade")
 }
 
 // OnContentLength .
@@ -151,7 +169,11 @@ func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ServerProcessor) OnComplete(parser *Parser) {
-	// clear guard
+	active := atomic.AddInt32(&p.active, 2)
+	if (active & 0x1) == 0x1 {
+		return
+	}
+
 	p.mux.Lock()
 	request := p.request
 	p.request = nil
@@ -195,11 +217,11 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	// http 2.0
-	if request.Method == "PRI" && len(request.Header) == 0 && request.URL.Path == "*" && request.Proto == "HTTP/2.0" {
-		p.isUpgrade = true
-		p.parser.Upgrader = &Http2Upgrader{}
-		return
-	}
+	// if request.Method == "PRI" && len(request.Header) == 0 && request.URL.Path == "*" && request.Proto == "HTTP/2.0" {
+	// 	p.isUpgrade = true
+	// 	p.parser.Upgrader = &Http2Upgrader{}
+	// 	return
+	// }
 
 	if request.Body == nil {
 		request.Body = NewBodyReader(nil)
@@ -218,14 +240,24 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	if ok {
 		index = c.Hash()
 	}
+
 	if !executing {
 		f := func() {
+			defer func() {
+				atomic.AddInt32(&p.active, -2)
+			}()
 			for {
 				p.handler.ServeHTTP(res, res.request)
 				p.flushResponse(res)
 
 				p.mux.Lock()
 				p.resQueue = p.resQueue[1:]
+				if (atomic.LoadInt32(&p.active) & 0x1) == 0x1 {
+					defer p.release()
+					p.mux.Unlock()
+					return
+				}
+
 				if len(p.resQueue) == 0 {
 					p.resQueue = nil
 					p.mux.Unlock()
@@ -236,6 +268,8 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 			}
 		}
 		p.executor(index, f)
+	} else {
+		atomic.AddInt32(&p.active, -2)
 	}
 }
 
@@ -265,16 +299,35 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 	}
 }
 
-// Clear .
-func (p *ServerProcessor) Clear() {
-	// p.mux.Lock()
-	// defer p.mux.Unlock()
+// Close .
+func (p *ServerProcessor) Close() {
+	active := atomic.AddInt32(&p.active, 1)
+	if (active & 0x2) > 0x1 {
+		return
+	}
+	p.release()
+}
+
+func (p *ServerProcessor) release() {
+	if p.request != nil {
+		releaseRequest(p.request)
+	}
 	for _, res := range p.resQueue {
 		releaseRequest(res.request)
 		releaseResponse(res)
-		p.responsedSeq++
 	}
+
+	p.conn = nil
+	p.parser = nil
+	p.request = nil
+	p.handler = nil
+	p.executor = nil
 	p.resQueue = nil
+	p.enableSendfile = false
+	// p.isUpgrade = false
+	p.active = 0
+
+	serverProcessorPool.Put(p)
 }
 
 // HandleMessage .
@@ -285,24 +338,20 @@ func (p *ServerProcessor) HandleMessage(handler http.Handler) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index int, f func()), minBufferSize int, keepaliveTime time.Duration, enableSendfile bool) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index int, f func()), keepaliveTime time.Duration, enableSendfile bool) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
 	}
 	if executor == nil {
 		executor = func(index int, f func()) { f() }
 	}
-	if minBufferSize <= 0 {
-		minBufferSize = DefaultMinBufferSize
-	}
-	return &ServerProcessor{
-		conn:           conn,
-		handler:        handler,
-		executor:       executor,
-		minBufferSize:  minBufferSize,
-		keepaliveTime:  keepaliveTime,
-		enableSendfile: enableSendfile,
-	}
+	p := serverProcessorPool.Get().(*ServerProcessor)
+	p.conn = conn
+	p.handler = handler
+	p.executor = executor
+	p.keepaliveTime = keepaliveTime
+	p.enableSendfile = enableSendfile
+	return p
 }
 
 // ClientProcessor .
@@ -389,8 +438,8 @@ func (p *ClientProcessor) HandleExecute(executor func(index int, f func())) {
 
 }
 
-// Clear .
-func (p *ClientProcessor) Clear() {
+// Close .
+func (p *ClientProcessor) Close() {
 
 }
 
@@ -470,8 +519,8 @@ func (p *EmptyProcessor) HandleExecute(executor func(index int, f func())) {
 
 }
 
-// Clear .
-func (p *EmptyProcessor) Clear() {
+// Close .
+func (p *EmptyProcessor) Close() {
 
 }
 
