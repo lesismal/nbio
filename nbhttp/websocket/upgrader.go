@@ -420,10 +420,25 @@ func checkSameOrigin(r *http.Request) bool {
 }
 
 func headerContains(header http.Header, name string, value string) bool {
-	value = strings.ToLower(value)
-	for _, v := range header[name] {
-		if strings.ToLower(v) == value {
-			return true
+	t := ""
+	values := header[name]
+	for _, s := range values {
+		for {
+			t, s = nextToken(skipSpace(s))
+			if t == "" {
+				continue
+			}
+			s = skipSpace(s)
+			if s != "" && s[0] != ',' {
+				continue
+			}
+			if equalASCIIFold(t, value) {
+				return true
+			}
+			if s == "" {
+				continue
+			}
+			s = s[1:]
 		}
 	}
 	return false
