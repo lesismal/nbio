@@ -64,10 +64,6 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 		Addrs:   []string{":8889"},
 	}, mux, nil, tlsConfig)
 
-	// to improve performance if you need
-	// parserPool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
-	// svr.ParserExecutor = parserPool.GoByIndex
-
 	err = svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)

@@ -56,15 +56,12 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
-	// to improve performance if you need
-	// pool := taskpool.NewFixedPool(runtime.NumCPU()*4, 1024)
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network:                 "tcp",
 		Addrs:                   addrs,
 		MaxLoad:                 1000000,
 		ReleaseWebsocketPayload: true,
 	}, mux, nil, tlsConfig)
-	// svr.ParserExecutor = pool.GoByIndex
 
 	err = svr.Start()
 	if err != nil {
