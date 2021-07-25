@@ -11,21 +11,20 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lesismal/nbio/mempool"
 )
 
-var (
-	emptyParser = Parser{}
+// var (
+// 	emptyParser = Parser{}
 
-	parserPool = sync.Pool{
-		New: func() interface{} {
-			return &Parser{}
-		},
-	}
-)
+// 	parserPool = sync.Pool{
+// 		New: func() interface{} {
+// 			return &Parser{}
+// 		},
+// 	}
+// )
 
 // Parser .
 type Parser struct {
@@ -83,8 +82,8 @@ func (p *Parser) release() {
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)
 	}
-	*p = emptyParser
-	parserPool.Put(p)
+	// *p = emptyParser
+	// parserPool.Put(p)
 }
 
 func (p *Parser) Close(err error) {
@@ -760,10 +759,11 @@ func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
 	if readLimit <= 0 {
 		readLimit = DefaultHTTPReadLimit
 	}
-	p := parserPool.Get().(*Parser)
-	p.state = state
-	p.readLimit = readLimit
-	p.isClient = isClient
-	p.Processor = processor
+	p := &Parser{
+		state:     state,
+		readLimit: readLimit,
+		isClient:  isClient,
+		Processor: processor,
+	}
 	return p
 }

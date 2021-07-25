@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/nbio"
@@ -78,7 +77,7 @@ type Processor interface {
 
 // ServerProcessor .
 type ServerProcessor struct {
-	active int32
+	// active int32
 
 	mux      sync.Mutex
 	conn     net.Conn
@@ -91,6 +90,7 @@ type ServerProcessor struct {
 	keepaliveTime  time.Duration
 	enableSendfile bool
 	// isUpgrade      bool
+	remoteAddr string
 }
 
 // Conn .
@@ -169,11 +169,6 @@ func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ServerProcessor) OnComplete(parser *Parser) {
-	active := atomic.AddInt32(&p.active, 2)
-	if (active & 0x1) == 0x1 {
-		return
-	}
-
 	p.mux.Lock()
 	request := p.request
 	p.request = nil
@@ -184,7 +179,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	if p.conn != nil {
-		request.RemoteAddr = p.conn.RemoteAddr().String()
+		request.RemoteAddr = p.remoteAddr
 	}
 
 	if request.URL.Host == "" {
@@ -243,21 +238,12 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 
 	if !executing {
 		f := func() {
-			defer func() {
-				atomic.AddInt32(&p.active, -2)
-			}()
 			for {
 				p.handler.ServeHTTP(res, res.request)
 				p.flushResponse(res)
 
 				p.mux.Lock()
 				p.resQueue = p.resQueue[1:]
-				if (atomic.LoadInt32(&p.active) & 0x1) == 0x1 {
-					defer p.release()
-					p.mux.Unlock()
-					return
-				}
-
 				if len(p.resQueue) == 0 {
 					p.resQueue = nil
 					p.mux.Unlock()
@@ -268,8 +254,6 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 			}
 		}
 		p.executor(index, f)
-	} else {
-		atomic.AddInt32(&p.active, -2)
 	}
 }
 
@@ -301,11 +285,11 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 
 // Close .
 func (p *ServerProcessor) Close() {
-	active := atomic.AddInt32(&p.active, 1)
-	if (active & 0x2) > 0x1 {
-		return
-	}
-	p.release()
+	// active := atomic.AddInt32(&p.active, 1)
+	// if (active & 0x2) > 0x1 {
+	// 	return
+	// }
+	// p.release()
 }
 
 func (p *ServerProcessor) release() {
@@ -325,7 +309,7 @@ func (p *ServerProcessor) release() {
 	p.resQueue = nil
 	p.enableSendfile = false
 	// p.isUpgrade = false
-	p.active = 0
+	// p.active = 0
 
 	serverProcessorPool.Put(p)
 }
@@ -351,6 +335,7 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index
 	p.executor = executor
 	p.keepaliveTime = keepaliveTime
 	p.enableSendfile = enableSendfile
+	p.remoteAddr = conn.RemoteAddr().String()
 	return p
 }
 
