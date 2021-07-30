@@ -356,7 +356,7 @@ func NewResponse(parser *Parser, request *http.Request, enableSendfile bool) *Re
 	res := responsePool.Get().(*Response)
 	res.parser = parser
 	res.request = request
-	res.header = http.Header{"Server": []string{"nbio"}}
+	res.header = http.Header{ /*"Server": []string{"nbio"}*/ }
 	res.enableSendfile = enableSendfile
 	return res
 }
