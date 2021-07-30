@@ -11,6 +11,7 @@ import (
 	"net"
 	"sync"
 
+	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
@@ -180,7 +181,19 @@ func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 
 func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h != nil {
-		c.onClose = h
+		c.onClose = func(c *Conn, err error) {
+			h(c, err)
+		}
+
+		nbc, ok := c.Conn.(*nbio.Conn)
+		if ok {
+			nbc.Lock()
+			defer nbc.Unlock()
+			closed, err := nbc.IsClosed()
+			if closed {
+				h(c, err)
+			}
+		}
 	}
 }
 

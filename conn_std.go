@@ -37,6 +37,21 @@ func (c *Conn) Hash() int {
 	return c.hash
 }
 
+// Lock .
+func (c *Conn) Lock() {
+	c.mux.Lock()
+}
+
+// Unlock .
+func (c *Conn) Unlock() {
+	c.mux.Unlock()
+}
+
+// IsClosed .
+func (c *Conn) IsClosed() (bool, error) {
+	return c.closed, c.closeErr
+}
+
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
 	c.g.beforeRead(c)

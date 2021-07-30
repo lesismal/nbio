@@ -43,6 +43,21 @@ type Conn struct {
 	chWaitWrite chan struct{}
 }
 
+// Lock .
+func (c *Conn) Lock() {
+	c.mux.Lock()
+}
+
+// Unlock .
+func (c *Conn) Unlock() {
+	c.mux.Unlock()
+}
+
+// IsClosed .
+func (c *Conn) IsClosed() (bool, error) {
+	return c.closed, c.closeErr
+}
+
 // Hash returns a hash code
 func (c *Conn) Hash() int {
 	return c.fd
