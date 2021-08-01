@@ -162,6 +162,7 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 	res.hasBody = true
 	res.eoncodeHead()
 	_, err = c.Write(res.buffer)
+	res.buffer = nil
 	if err != nil {
 		return 0, err
 	}
@@ -315,12 +316,14 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 
 	if !res.chunked {
 		if res.buffer != nil {
+			if res.bodyBuffer != nil {
+				res.buffer = append(res.buffer, res.bodyBuffer...)
+				mempool.Free(res.bodyBuffer)
+				res.bodyBuffer = nil
+			}
 			_, err = conn.Write(res.buffer)
 			res.buffer = nil
 			if err != nil {
-				if res.bodyBuffer != nil {
-					mempool.Free(res.bodyBuffer)
-				}
 				return err
 			}
 		}
@@ -334,18 +337,17 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 
 	data := res.buffer
 	res.buffer = nil
-	i := len(data)
+	if data == nil {
+		data = mempool.Malloc(0)
+	}
 	if len(res.trailer) == 0 {
 		data = append(data, "0\r\n\r\n"...)
 	} else {
 		data = append(data, "0\r\n"...)
-		i += 3
 		for k, v := range res.trailer {
 			data = append(data, k...)
-			i += len(k)
 			data = append(data, ": "...)
 			data = append(data, v...)
-			i += len(v)
 			data = append(data, "\r\n"...)
 		}
 		data = append(data, "\r\n"...)
