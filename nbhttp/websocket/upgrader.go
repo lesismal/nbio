@@ -110,11 +110,11 @@ func (u *upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 	}
 
-	h, ok := w.(nbhttp.Hijacker)
+	h, ok := w.(http.Hijacker)
 	if !ok {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
 	}
-	conn, err := h.Hijack()
+	conn, _, err := h.Hijack()
 	if err != nil {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
@@ -138,26 +138,45 @@ func (u *upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	parser.Upgrader = u
 
-	w.WriteHeader(http.StatusSwitchingProtocols)
-	w.Header().Add("Upgrade", "websocket")
-	w.Header().Add("Connection", "Upgrade")
-	w.Header().Add("Sec-WebSocket-Accept", string(acceptKey(challengeKey)))
+	buf := mempool.Malloc(1024)[0:0]
+	buf = append(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "...)
+	buf = append(buf, acceptKeyBytes(challengeKey)...)
+	buf = append(buf, "\r\n"...)
 	if subprotocol != "" {
-		w.Header().Add("Sec-WebSocket-Protocol", subprotocol)
+		buf = append(buf, "Sec-WebSocket-Protocol: "...)
+		buf = append(buf, subprotocol...)
+		buf = append(buf, "\r\n"...)
 	}
 	if compress {
-		w.Header().Add("Sec-WebSocket-Extensions", "permessage-deflate; server_no_context_takeover; client_no_context_takeover")
+		buf = append(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n"...)
 	}
-	for k, vv := range responseHeader {
-		if k != "Sec-Websocket-Protocol" {
-			for _, v := range vv {
-				w.Header().Add(k, v)
+	for k, vs := range responseHeader {
+		if k == "Sec-Websocket-Protocol" {
+			continue
+		}
+		for _, v := range vs {
+			buf = append(buf, k...)
+			buf = append(buf, ": "...)
+			for i := 0; i < len(v); i++ {
+				b := v[i]
+				if b <= 31 {
+					// prevent response splitting.
+					b = ' '
+				}
+				buf = append(buf, b)
 			}
+			buf = append(buf, "\r\n"...)
 		}
 	}
+	buf = append(buf, "\r\n"...)
 
 	if u.HandshakeTimeout > 0 {
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
+	}
+
+	if _, err = conn.Write(buf); err != nil {
+		conn.Close()
+		return nil, err
 	}
 
 	u.conn = newConn(conn, nbc.Hash(), false, subprotocol, compress)
@@ -400,11 +419,14 @@ func subprotocols(r *http.Request) []string {
 
 var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
-func acceptKey(challengeKey string) string {
+func acceptKeyBytes(challengeKey string) []byte {
 	h := sha1.New()
 	h.Write([]byte(challengeKey))
 	h.Write(keyGUID)
-	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+	sum := h.Sum(nil)
+	buf := make([]byte, base64.StdEncoding.EncodedLen(len(sum)))
+	base64.StdEncoding.Encode(buf, sum)
+	return buf
 }
 
 func checkSameOrigin(r *http.Request) bool {

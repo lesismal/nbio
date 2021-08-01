@@ -5,6 +5,7 @@
 package nbhttp
 
 import (
+	"bufio"
 	"errors"
 	"io"
 	"net"
@@ -36,14 +37,16 @@ type Response struct {
 	headEncoded    bool
 	hasBody        bool
 	enableSendfile bool
+	hijacked       bool
 }
 
 // Hijack .
-func (res *Response) Hijack() (net.Conn, error) {
+func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if res.parser.Processor == nil {
-		return nil, errors.New("nil Proccessor")
+		return nil, nil, errors.New("nil Proccessor")
 	}
-	return res.parser.Processor.Conn(), nil
+	res.hijacked = true
+	return res.parser.Processor.Conn(), nil, nil
 }
 
 // Header .

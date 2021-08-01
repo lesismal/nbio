@@ -267,10 +267,14 @@ func (p *ServerProcessor) HandleExecute(executor func(index int, f func())) {
 func (p *ServerProcessor) flushResponse(res *Response) {
 	if p.conn != nil {
 		req := res.request
-		res.eoncodeHead()
-		if err := res.flushTrailer(p.conn); err != nil {
-			p.conn.Close()
-			return
+		if !res.hijacked {
+			res.eoncodeHead()
+			if err := res.flushTrailer(p.conn); err != nil {
+				p.conn.Close()
+				releaseRequest(req)
+				releaseResponse(res)
+				return
+			}
 		}
 		if req.Close {
 			// the data may still in the send queue

@@ -1,13 +1,14 @@
 package nbhttp
 
 import (
+	"bufio"
 	"net"
 	"net/http"
 )
 
 // Hijacker .
 type Hijacker interface {
-	Hijack() (net.Conn, error)
+	Hijack() (net.Conn, *bufio.ReadWriter, error)
 }
 
 // Upgrader .
