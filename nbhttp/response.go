@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/nbio/mempool"
 )
@@ -66,6 +67,13 @@ func (res *Response) WriteHeader(statusCode int) {
 }
 
 const maxPacketSize = 65536
+
+func (res *Response) WriteString(s string) (int, error) {
+	x := (*[2]uintptr)(unsafe.Pointer(&s))
+	h := [3]uintptr{x[0], x[1], x[1]}
+	data := *(*[]byte)(unsafe.Pointer(&h))
+	return res.Write(data)
+}
 
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
