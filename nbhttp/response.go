@@ -228,6 +228,8 @@ func (res *Response) eoncodeHead() {
 		return
 	}
 
+	res.WriteHeader(http.StatusOK)
+
 	res.headEncoded = true
 
 	status := res.status
