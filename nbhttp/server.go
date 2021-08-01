@@ -248,7 +248,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 256
+			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - conf.NPoller
 		if nativeSize <= 0 {
@@ -402,7 +402,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = conf.NPoller * 256
+			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - conf.NPoller
 		if nativeSize <= 0 {
