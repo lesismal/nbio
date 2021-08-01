@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
-	"runtime"
+	"os"
+	"os/signal"
 	"sync/atomic"
 	"time"
 
@@ -21,7 +24,10 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Trailer", "Trailer_key_02")
 	w.Header().Add("Trailer_key_01", "Trailer_value_01")
 	w.Header().Add("Trailer_key_02", "Trailer_value_02")
-	data := r.Body.(*nbhttp.BodyReader).RawBody()
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		panic(err)
+	}
 	if len(data) > 0 {
 		w.Write(data)
 	} else {
@@ -51,13 +57,12 @@ func main() {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
 	}
-	defer svr.Stop()
 
-	ticker := time.NewTicker(time.Second)
-	for i := 1; true; i++ {
-		<-ticker.C
-		n := atomic.SwapUint64(&qps, 0)
-		total += n
-		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
-	}
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	<-interrupt
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	svr.Shutdown(ctx)
 }

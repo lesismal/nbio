@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -23,10 +22,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(resp.Status)
-	_, err = io.Copy(os.Stdout, resp.Body)
+	fmt.Println("status:", resp.Status)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println("\ntrailer:", resp.Trailer)
+	fmt.Println("body:", string(body))
+	fmt.Println("trailer:", resp.Trailer)
 }
