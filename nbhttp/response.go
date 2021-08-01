@@ -11,9 +11,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 	"unsafe"
 
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -31,6 +33,7 @@ type Response struct {
 	trailerSize int
 
 	buffer       []byte
+	bodyBuffer   []byte
 	intFormatBuf [10]byte
 
 	chunked        bool
@@ -57,12 +60,23 @@ func (res *Response) Header() http.Header {
 
 // WriteHeader .
 func (res *Response) WriteHeader(statusCode int) {
-	if res.statusCode == 0 {
+	if !res.hijacked && res.statusCode == 0 && res.statusCode != statusCode {
 		status := http.StatusText(statusCode)
 		if status != "" {
 			res.status = status
 			res.statusCode = statusCode
 		}
+
+		if cl := res.header.Get("Content-Length"); cl != "" {
+			v, err := strconv.ParseInt(cl, 10, 64)
+			if err == nil && v >= 0 {
+			} else {
+				logging.Error("http: invalid Content-Length of %q", cl)
+				res.header.Del("Content-Length")
+			}
+		}
+
+		res.checkChunked()
 	}
 }
 
@@ -83,12 +97,13 @@ func (res *Response) Write(data []byte) (int, error) {
 		return 0, nil
 	}
 
-	res.hasBody = true
+	res.WriteHeader(http.StatusOK)
 
-	res.checkChunked()
+	res.hasBody = true
 
 	if res.chunked {
 		res.eoncodeHead()
+
 		buf := res.buffer
 		hl := len(buf)
 		res.buffer = nil
@@ -118,24 +133,24 @@ func (res *Response) Write(data []byte) (int, error) {
 		return conn.Write(buf)
 	}
 
-	if len(res.header["Content-Length"]) == 0 {
-		res.header["Content-Length"] = []string{res.formatInt(l, 10)}
+	if len(res.header["Content-Length"]) > 0 {
+		res.eoncodeHead()
+
+		buf := res.buffer
+		res.buffer = nil
+		if buf == nil {
+			buf = mempool.Malloc(l)[0:0]
+		}
+		buf = append(buf, data...)
+		return conn.Write(buf)
+	}
+	if res.bodyBuffer == nil {
+		res.bodyBuffer = mempool.Malloc(l)[0:0]
 	}
 
-	res.eoncodeHead()
-
-	buf := res.buffer
-	res.buffer = nil
-	// if len(buf)+l >= maxPacketSize {
-	// 	_, err := conn.Write(buf)
-	// 	if err != nil {
-	// 		return 0, err
-	// 	}
-	// 	// may be double freed if OnWriteBufferRelease
-	// 	return conn.Write(data)
-	// }
-	buf = append(buf, data...)
-	return conn.Write(buf)
+	res.bodyBuffer = append(res.bodyBuffer, data...)
+	// res.header["Content-Length"] = []string{res.formatInt(l, 10)}
+	return l, nil
 }
 
 func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
@@ -183,7 +198,7 @@ func (res *Response) checkChunked() error {
 
 	res.chunkChecked = true
 
-	res.WriteHeader(http.StatusOK)
+	// res.WriteHeader(http.StatusOK)
 
 	if res.request.ProtoAtLeast(1, 1) {
 		for _, v := range res.header["Transfer-Encoding"] {
@@ -214,8 +229,6 @@ func (res *Response) eoncodeHead() {
 
 	res.headEncoded = true
 
-	res.checkChunked()
-
 	status := res.status
 	statusCode := res.statusCode
 
@@ -231,9 +244,20 @@ func (res *Response) eoncodeHead() {
 		data = append(data, contentType...)
 	}
 	if !res.chunked {
+		const contentLenthKey = "Content-Length: "
 		if !res.hasBody {
-			const contentLenthZero = "Content-Length: 0\r\n"
-			data = append(data, contentLenthZero...)
+			data = append(data, contentLenthKey...)
+			data = append(data, '0', '\r', '\n')
+		} else {
+			data = append(data, contentLenthKey...)
+			l := len(res.bodyBuffer)
+			if l > 0 {
+				s := strconv.FormatInt(int64(l), 10)
+				data = append(data, s...)
+				data = append(data, '\r', '\n')
+			} else {
+				data = append(data, '0', '\r', '\n')
+			}
 		}
 	}
 	if res.request.Close && len(res.header["Connection"]) == 0 {
@@ -293,49 +317,37 @@ func (res *Response) flushTrailer(conn net.Conn) error {
 		if res.buffer != nil {
 			_, err = conn.Write(res.buffer)
 			res.buffer = nil
+			if err != nil {
+				if res.bodyBuffer != nil {
+					mempool.Free(res.bodyBuffer)
+				}
+				return err
+			}
+		}
+		if res.bodyBuffer != nil {
+			_, err = conn.Write(res.bodyBuffer)
+			res.bodyBuffer = nil
 		}
 
 		return err
 	}
 
-	// malloc := res.parser.Server.Malloc
-	// realloc := res.parser.Server.Realloc
-
 	data := res.buffer
 	res.buffer = nil
 	i := len(data)
-	// if data == nil {
-	// 	data = malloc(res.trailerSize + 5)
-	// } else {
-	// 	data = realloc(data, len(data)+res.trailerSize+5)
-	// }
 	if len(res.trailer) == 0 {
-		// copy(data[i:], "0\r\n\r\n")
 		data = append(data, "0\r\n\r\n"...)
 	} else {
-		// copy(data[i:], "0\r\n")
 		data = append(data, "0\r\n"...)
 		i += 3
 		for k, v := range res.trailer {
-			// copy(data[i:], k)
 			data = append(data, k...)
 			i += len(k)
-			// data[i] = ':'
-			// i++
-			// data[i] = ' '
-			// i++
 			data = append(data, ": "...)
-			// copy(data[i:], v)
 			data = append(data, v...)
 			i += len(v)
-			// data[i] = '\r'
-			// i++
-			// data[i] = '\n'
-			// i++
 			data = append(data, "\r\n"...)
 		}
-		// data = realloc(data, i+2)
-		// copy(data[i:], "\r\n")
 		data = append(data, "\r\n"...)
 	}
 	_, err = conn.Write(data)
