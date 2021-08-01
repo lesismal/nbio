@@ -51,6 +51,7 @@
   - [Websocket TLS Examples](#websocket-tls-examples)
   - [Websocket 1M Connections Examples](#websocket-1m-connections-examples)
   - [Bench Examples](#bench-examples)
+  - [Use With Other STD Based Frameworkds](#use-with-other-std-based-frameworkds)
 
 ## Features
 - [x] linux: epoll
@@ -337,3 +338,7 @@ g.OnData(func(c *Conn, data []byte) {
 
 - [bench-server](https://github.com/lesismal/nbio/blob/master/examples/bench/server/server.go)
 - [bench-client](https://github.com/lesismal/nbio/blob/master/examples/bench/client/client.go)
+
+## Use With Other STD Based Frameworkds
+
+- [gin-http-and-websocket-server](https://github.com/lesismal/nbio/blob/master/examples/gin/gin_server.go)
