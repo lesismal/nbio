@@ -8,7 +8,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/julienschmidt/httprouter"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -17,7 +16,7 @@ var (
 	total uint64 = 0
 )
 
-func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func onEcho(w http.ResponseWriter, r *http.Request) {
 	data := r.Body.(*nbhttp.BodyReader).RawBody()
 	if len(data) > 0 {
 		w.Write(data)
@@ -34,14 +33,15 @@ func main() {
 		}
 	}()
 
-	router := httprouter.New()
-	router.POST("/echo", onEcho)
+	mux := &http.ServeMux{}
+	mux.HandleFunc("/echo", onEcho)
+
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   addrs,
 		MaxLoad: 1000000,
 		NPoller: runtime.NumCPU() * 2,
-	}, router, nil)
+	}, mux, nil)
 
 	err := svr.Start()
 	if err != nil {

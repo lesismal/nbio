@@ -33,11 +33,11 @@ var (
 		},
 	}
 
-	serverProcessorPool = sync.Pool{
-		New: func() interface{} {
-			return &ServerProcessor{}
-		},
-	}
+	// serverProcessorPool = sync.Pool{
+	// 	New: func() interface{} {
+	// 		return &ServerProcessor{}
+	// 	},
+	// }
 )
 
 func releaseRequest(req *http.Request) {
@@ -224,10 +224,9 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 
 	res := NewResponse(p.parser, request, p.enableSendfile)
 
-	var executing bool
 	p.mux.Lock()
+	isHead := p.resQueue == nil
 	p.resQueue = append(p.resQueue, res)
-	executing = (p.resQueue[0] != res)
 	p.mux.Unlock()
 
 	index := 0
@@ -236,19 +235,19 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		index = c.Hash()
 	}
 
-	if !executing {
+	if isHead {
 		f := func() {
-			for {
+			for res != nil && res.request != nil {
 				p.handler.ServeHTTP(res, res.request)
 				p.flushResponse(res)
 
 				p.mux.Lock()
-				p.resQueue = p.resQueue[1:]
-				if len(p.resQueue) == 0 {
+				if len(p.resQueue) <= 1 {
 					p.resQueue = nil
 					p.mux.Unlock()
 					return
 				}
+				p.resQueue = p.resQueue[1:]
 				res = p.resQueue[0]
 				p.mux.Unlock()
 			}
@@ -297,25 +296,25 @@ func (p *ServerProcessor) Close() {
 }
 
 func (p *ServerProcessor) release() {
-	if p.request != nil {
-		releaseRequest(p.request)
-	}
-	for _, res := range p.resQueue {
-		releaseRequest(res.request)
-		releaseResponse(res)
-	}
+	// if p.request != nil {
+	// 	releaseRequest(p.request)
+	// }
+	// for _, res := range p.resQueue {
+	// 	releaseRequest(res.request)
+	// 	releaseResponse(res)
+	// }
 
-	p.conn = nil
-	p.parser = nil
-	p.request = nil
-	p.handler = nil
-	p.executor = nil
-	p.resQueue = nil
-	p.enableSendfile = false
-	// p.isUpgrade = false
-	// p.active = 0
+	// p.conn = nil
+	// p.parser = nil
+	// p.request = nil
+	// p.handler = nil
+	// p.executor = nil
+	// p.resQueue = nil
+	// p.enableSendfile = false
+	// // p.isUpgrade = false
+	// // p.active = 0
 
-	serverProcessorPool.Put(p)
+	// serverProcessorPool.Put(p)
 }
 
 // HandleMessage .
@@ -333,13 +332,21 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index
 	if executor == nil {
 		executor = func(index int, f func()) { f() }
 	}
-	p := serverProcessorPool.Get().(*ServerProcessor)
-	p.conn = conn
-	p.handler = handler
-	p.executor = executor
-	p.keepaliveTime = keepaliveTime
-	p.enableSendfile = enableSendfile
-	p.remoteAddr = conn.RemoteAddr().String()
+	// p := serverProcessorPool.Get().(*ServerProcessor)
+	// p.conn = conn
+	// p.handler = handler
+	// p.executor = executor
+	// p.keepaliveTime = keepaliveTime
+	// p.enableSendfile = enableSendfile
+	// p.remoteAddr = conn.RemoteAddr().String()
+	p := &ServerProcessor{
+		conn:           conn,
+		handler:        handler,
+		executor:       executor,
+		keepaliveTime:  keepaliveTime,
+		enableSendfile: enableSendfile,
+		remoteAddr:     conn.RemoteAddr().String(),
+	}
 	return p
 }
 

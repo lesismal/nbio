@@ -8,8 +8,6 @@ import (
 	"runtime"
 	"sync/atomic"
 	"time"
-
-	"github.com/julienschmidt/httprouter"
 )
 
 var (
@@ -17,7 +15,7 @@ var (
 	total uint64 = 0
 )
 
-func onEcho(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func onEcho(w http.ResponseWriter, r *http.Request) {
 	data, _ := io.ReadAll(r.Body)
 	if len(data) > 0 {
 		w.Write(data)
@@ -33,8 +31,9 @@ func serve(addrs []string) {
 			// mux := &http.ServeMux{}
 			// mux.HandleFunc("/echo", onEcho)
 
-			router := httprouter.New()
-			router.POST("/echo", onEcho)
+			mux := &http.ServeMux{}
+			mux.HandleFunc("/echo", onEcho)
+
 			server := http.Server{
 				Addr:    addr,
 				Handler: router,
