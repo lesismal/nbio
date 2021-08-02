@@ -172,7 +172,10 @@ func (s *Server) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 			sp := parser.Processor.(*ServerProcessor)
 			sp.mux.Lock()
 			if len(sp.resQueue) == 0 {
-				chCloseQueue <- c
+				select {
+				case chCloseQueue <- c:
+				default:
+				}
 			}
 			sp.mux.Unlock()
 		}
