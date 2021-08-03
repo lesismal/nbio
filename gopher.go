@@ -115,9 +115,10 @@ type Gopher struct {
 	beforeWrite       func(c *Conn)
 	onStop            func()
 
-	timers  timerHeap
-	trigger *time.Timer
-	chTimer chan struct{}
+	callings  []func()
+	chCalling chan struct{}
+	timers    timerHeap
+	trigger   *time.Timer
 }
 
 // Stop pollers
@@ -125,7 +126,7 @@ func (g *Gopher) Stop() {
 	g.onStop()
 
 	g.trigger.Stop()
-	close(g.chTimer)
+	close(g.chCalling)
 
 	for _, l := range g.listeners {
 		l.stop()
@@ -177,7 +178,11 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onClose = h
+	g.onClose = func(c *Conn, err error) {
+		g.atOnce(func() {
+			h(c, err)
+		})
+	}
 }
 
 // OnData registers callback for data
@@ -262,6 +267,18 @@ func (g *Gopher) AfterFunc(timeout time.Duration, f func()) *Timer {
 	return &Timer{htimer: ht}
 }
 
+func (g *Gopher) atOnce(f func()) {
+	if f != nil {
+		g.tmux.Lock()
+		g.callings = append(g.callings, f)
+		g.tmux.Unlock()
+		select {
+		case g.chCalling <- struct{}{}:
+		default:
+		}
+	}
+}
+
 func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
 	g.tmux.Lock()
 	defer g.tmux.Unlock()
@@ -326,6 +343,30 @@ func (g *Gopher) timerLoop() {
 	defer logging.Debug("Gopher[%v] timer stopped", g.Name)
 	for {
 		select {
+		case _, ok := <-g.chCalling:
+			if !ok {
+				return
+			}
+			for {
+				g.tmux.Lock()
+				if len(g.callings) == 0 {
+					g.tmux.Unlock()
+					break
+				}
+				f := g.callings[0]
+				g.callings = g.callings[1:]
+				g.tmux.Unlock()
+				func() {
+					defer func() {
+						err := recover()
+						if err != nil {
+							logging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
+							debug.PrintStack()
+						}
+					}()
+					f()
+				}()
+			}
 		case <-g.trigger.C:
 			for {
 				g.tmux.Lock()
@@ -348,15 +389,12 @@ func (g *Gopher) timerLoop() {
 						}()
 						it.f()
 					}()
-
 				} else {
 					g.trigger.Reset(it.expire.Sub(now))
 					g.tmux.Unlock()
 					break
 				}
 			}
-		case <-g.chTimer:
-			return
 		}
 	}
 }

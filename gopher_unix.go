@@ -108,9 +108,9 @@ func NewGopher(conf Config) *Gopher {
 		listeners:                make([]*poller, len(conf.Addrs)),
 		pollers:                  make([]*poller, conf.NPoller),
 		connsUnix:                make([]*Conn, MaxOpenFiles),
-
-		trigger: time.NewTimer(timeForever),
-		chTimer: make(chan struct{}),
+		callings:                 []func(){},
+		chCalling:                make(chan struct{}, 1),
+		trigger:                  time.NewTimer(timeForever),
 	}
 
 	g.initHandlers()
