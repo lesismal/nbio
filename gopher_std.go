@@ -97,6 +97,7 @@ func NewGopher(conf Config) *Gopher {
 		callings:           []func(){},
 		chCalling:          make(chan struct{}, 1),
 		trigger:            time.NewTimer(timeForever),
+		chTimer:            make(chan struct{}),
 	}
 
 	g.initHandlers()

@@ -119,6 +119,7 @@ type Gopher struct {
 	chCalling chan struct{}
 	timers    timerHeap
 	trigger   *time.Timer
+	chTimer   chan struct{}
 }
 
 // Stop pollers
@@ -126,7 +127,7 @@ func (g *Gopher) Stop() {
 	g.onStop()
 
 	g.trigger.Stop()
-	close(g.chCalling)
+	close(g.chTimer)
 
 	for _, l := range g.listeners {
 		l.stop()
@@ -343,10 +344,7 @@ func (g *Gopher) timerLoop() {
 	defer logging.Debug("Gopher[%v] timer stopped", g.Name)
 	for {
 		select {
-		case _, ok := <-g.chCalling:
-			if !ok {
-				return
-			}
+		case <-g.chCalling:
 			for {
 				g.tmux.Lock()
 				if len(g.callings) == 0 {
@@ -395,6 +393,8 @@ func (g *Gopher) timerLoop() {
 					break
 				}
 			}
+		case <-g.chTimer:
+			return
 		}
 	}
 }
