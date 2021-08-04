@@ -151,7 +151,6 @@ func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	logging.Warn(`websocket.Conn.OnMessage will be deperacated in the future because it may leads to a message leak when the message arrive before this handler is set. Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.`)
 	if h != nil {
-
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, data)
@@ -390,11 +389,30 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 	}
 
 	if u.messageHandler != nil {
-		conn.messageHandler = u.messageHandler
+		h := u.messageHandler
+		conn.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
+			c.Server.MessageHandlerExecutor(c.index, func() {
+				h(c, messageType, data)
+				// do not free data if application layer need to use it in another goroutine.
+				if c.Server.ReleaseWebsocketPayload {
+					mempool.Free(data)
+				}
+			})
+		}
+
 	}
 
 	if u.dataFrameHandler != nil {
-		conn.dataFrameHandler = u.dataFrameHandler
+		h := u.dataFrameHandler
+		conn.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
+			c.Server.MessageHandlerExecutor(c.index, func() {
+				h(c, messageType, fin, data)
+				// do not free data if application layer need to use it in another goroutine.
+				if c.Server.ReleaseWebsocketPayload {
+					mempool.Free(data)
+				}
+			})
+		}
 	}
 
 	conn.OnClose(u.onClose)
