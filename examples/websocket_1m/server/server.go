@@ -19,18 +19,23 @@ var (
 	svr *nbhttp.Server
 )
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+func newUpgrader() *websocket.Upgrader {
+	u := websocket.NewUpgrader()
+	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		c.SetReadDeadline(time.Now().Add(time.Second * 60))
 		c.WriteMessage(messageType, data)
 		atomic.AddUint64(&qps, 1)
 	})
+
+	return u
+}
+
+func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	upgrader := newUpgrader()
+	_, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main() {

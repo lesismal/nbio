@@ -76,15 +76,10 @@ BpA7MNLxiqss+rCbwf3NbWxEMiDQ2zRwVoafVFys7tjmv6t2Xck=
 -----END RSA PRIVATE KEY-----
 `)
 
-func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
+func newUpgrader(cancelFunc context.CancelFunc, maxCount int) *websocket.Upgrader {
+	u := websocket.NewUpgrader()
 	count := int32(0)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		fmt.Println("OnMessage:", messageType, string(data))
 		if int(atomic.AddInt32(&count, 1)) == maxCount {
@@ -92,9 +87,21 @@ func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWri
 		}
 		c.SetReadDeadline(time.Now().Add(time.Second * 60))
 	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
+	u.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 	})
+
+	return u
+}
+
+func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWriter, r *http.Request) {
+	upgrader := newUpgrader(cancelFunc, maxCount)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
+
 	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 

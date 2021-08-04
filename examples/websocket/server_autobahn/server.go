@@ -14,39 +14,47 @@ import (
 	"github.com/lesismal/nbio/taskpool"
 )
 
+func newUpgrader(isDataFrame bool) *websocket.Upgrader {
+	u := websocket.NewUpgrader()
+	u.EnableWriteCompression(true)
+	if !isDataFrame {
+		isFirst := true
+		u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+			err := c.WriteFrame(messageType, isFirst, fin, data)
+			if err != nil {
+				c.Close()
+				return
+			}
+			if fin {
+				isFirst = true
+			}
+		})
+	} else {
+		u.EnableCompression(true)
+		u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+			c.WriteMessage(messageType, data)
+		})
+	}
+
+	return u
+}
+
 func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
+	upgrader := newUpgrader(true)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
-	wsConn := conn.(*websocket.Conn)
-	isFirst := true
 	conn.SetDeadline(time.Time{})
-	wsConn.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
-		err := c.WriteFrame(messageType, isFirst, fin, data)
-		if err != nil {
-			c.Close()
-			return
-		}
-		if fin {
-			isFirst = true
-		}
-	})
 }
 
 func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
-	upgrader.EnableCompression = true
+	upgrader := newUpgrader(false)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
-	wsConn := conn.(*websocket.Conn)
 	conn.SetDeadline(time.Time{})
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		c.WriteMessage(messageType, data)
-	})
 }
 
 func main() {

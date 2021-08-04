@@ -17,21 +17,26 @@ var (
 	svr *nbhttp.Server
 )
 
+func newUpgrader() *websocket.Upgrader {
+	u := websocket.NewUpgrader()
+	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+		// echo
+		c.WriteMessage(messageType, data)
+		fmt.Println("OnMessage:", messageType, string(data))
+	})
+	u.OnClose(func(c *websocket.Conn, err error) {
+		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+	})
+
+	return u
+}
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
+	upgrader := newUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		// echo
-		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
-	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-	})
 	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 

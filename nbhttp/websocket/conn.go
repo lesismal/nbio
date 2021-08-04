@@ -51,9 +51,9 @@ type Conn struct {
 
 	pingHandler      func(c *Conn, appData string)
 	pongHandler      func(c *Conn, appData string)
+	closeHandler     func(c *Conn, code int, text string)
 	messageHandler   func(c *Conn, messageType MessageType, data []byte)
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
-	closeHandler     func(c *Conn, code int, text string)
 
 	onClose func(c *Conn, err error)
 	Server  *nbhttp.Server
@@ -127,12 +127,6 @@ func (c *Conn) handleMessage(opcode MessageType, data []byte) {
 	}
 }
 
-func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
-	if h != nil {
-		c.closeHandler = h
-	}
-}
-
 func (c *Conn) SetPingHandler(h func(*Conn, string)) {
 	if h != nil {
 		c.pingHandler = h
@@ -145,8 +139,19 @@ func (c *Conn) SetPongHandler(h func(*Conn, string)) {
 	}
 }
 
-func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
+func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
 	if h != nil {
+		c.closeHandler = h
+	}
+}
+
+// Deperacated:
+// OnMessage may leads to a message leak when the message arrive before this handler is set.
+// Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.
+func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
+	logging.Warn(`websocket.Conn.OnMessage will be deperacated in the future because it may leads to a message leak when the message arrive before this handler is set. Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.`)
+	if h != nil {
+
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, data)
@@ -159,14 +164,12 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	}
 }
 
-var initDataFrameWarning = false
-
+// Deperacated:
+// OnDataFrame may leads to a dataframe leak when the message arrive before this handler is set.
+// Please use Upgrader.OnDataFrame to set the handler during Upgrade before the response to websocket client's handshake.
 func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
+	logging.Warn(`websocket.Conn.OnDataFrame will be deperacated in the future because it may leads to a dataframe leak when the message arrive before this handler is set. Please use Upgrader.OnDataFrame to set the handler during Upgrade before the response to websocket client's handshake.`)
 	if h != nil {
-		if !initDataFrameWarning {
-			initDataFrameWarning = true
-			logging.Warn("If you use a DataFrame handler, please make sure the `messageHandlerExecutor` you passed to `nbhttp.NewServer/NewServerTLS` could promise to handle the frames in order, and please make sure that the Upgrader must not set `EnableCompression` to `true`. If you are sure about that, ignore this warning!")
-		}
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			c.Server.MessageHandlerExecutor(c.index, func() {
 				h(c, messageType, fin, data)
@@ -340,7 +343,7 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-func newConn(c net.Conn, index int, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
+func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
 	conn := &Conn{
 		Conn:                     c,
 		index:                    index,
@@ -352,22 +355,49 @@ func newConn(c net.Conn, index int, compress bool, subprotocol string, remoteCom
 		dataFrameHandler:         nil,
 		onClose:                  func(*Conn, error) {},
 	}
-	conn.pingHandler = func(c *Conn, data string) {
-		if len(data) > 125 {
-			conn.Close()
-			return
+	conn.EnableWriteCompression(u.enableWriteCompression)
+	conn.SetCompressionLevel(u.compressionLevel)
+
+	if u.pingHandler != nil {
+		conn.pingHandler = u.pingHandler
+	} else {
+		conn.pingHandler = func(c *Conn, data string) {
+			if len(data) > 125 {
+				conn.Close()
+				return
+			}
+			c.WriteMessage(PongMessage, []byte(data))
 		}
-		c.WriteMessage(PongMessage, []byte(data))
 	}
-	conn.closeHandler = func(c *Conn, code int, text string) {
-		if len(text)+2 > maxControlFramePayloadSize {
-			return //ErrInvalidControlFrame
+
+	if u.pongHandler != nil {
+		conn.pongHandler = u.pongHandler
+	}
+
+	if u.closeHandler != nil {
+		conn.closeHandler = u.closeHandler
+	} else {
+		conn.closeHandler = func(c *Conn, code int, text string) {
+			if len(text)+2 > maxControlFramePayloadSize {
+				return //ErrInvalidControlFrame
+			}
+			buf := mempool.Malloc(len(text) + 2)
+			binary.BigEndian.PutUint16(buf[:2], uint16(code))
+			copy(buf[2:], text)
+			conn.WriteMessage(CloseMessage, buf)
+			mempool.Free(buf)
 		}
-		buf := mempool.Malloc(len(text) + 2)
-		binary.BigEndian.PutUint16(buf[:2], uint16(code))
-		copy(buf[2:], text)
-		conn.WriteMessage(CloseMessage, buf)
-		mempool.Free(buf)
 	}
+
+	if u.messageHandler != nil {
+		conn.messageHandler = u.messageHandler
+	}
+
+	if u.dataFrameHandler != nil {
+		conn.dataFrameHandler = u.dataFrameHandler
+	}
+
+	conn.OnClose(u.onClose)
+
 	return conn
 }

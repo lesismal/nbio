@@ -19,15 +19,9 @@ var (
 	print = flag.Bool("print", false, "stdout output of echoed data")
 )
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	flag.Parse()
-	upgrader := websocket.NewUpgrader()
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+func newUpgrader() *websocket.Upgrader {
+	u := websocket.NewUpgrader()
+	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		c.WriteMessage(messageType, data)
 		if *print {
@@ -35,11 +29,23 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		}
 		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
+	u.OnClose(func(c *websocket.Conn, err error) {
 		if *print {
 			fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 		}
 	})
+
+	return u
+}
+
+func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	flag.Parse()
+	upgrader := newUpgrader()
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
 	if *print {
 		fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 	}

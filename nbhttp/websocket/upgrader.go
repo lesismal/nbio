@@ -17,6 +17,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
@@ -27,42 +28,107 @@ type Hijacker interface {
 }
 
 var (
-	emptyUpgrader = upgrader{}
+	emptyUpgrader = Upgrader{}
 
 	upgraderPool = sync.Pool{
 		New: func() interface{} {
-			return &upgrader{}
+			return &Upgrader{}
 		},
 	}
 )
 
-// upgrader .
-type upgrader struct {
+// Upgrader .
+type Upgrader struct {
 	conn *Conn
 
 	ReadLimit        int64
 	HandshakeTimeout time.Duration
 
-	EnableCompression bool
+	enableCompression bool
 	Subprotocols      []string
 
 	CheckOrigin func(r *http.Request) bool
 
-	expectingFragments bool
-	compress           bool
-	opcode             MessageType
-	buffer             []byte
-	message            []byte
+	expectingFragments     bool
+	compress               bool
+	enableWriteCompression bool
+	compressionLevel       int
+
+	opcode  MessageType
+	buffer  []byte
+	message []byte
+
+	pingHandler      func(c *Conn, appData string)
+	pongHandler      func(c *Conn, appData string)
+	closeHandler     func(c *Conn, code int, text string)
+	messageHandler   func(c *Conn, messageType MessageType, data []byte)
+	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
+	onClose          func(c *Conn, err error)
 
 	Server *nbhttp.Server
 }
 
-func NewUpgrader() *upgrader {
-	return upgraderPool.Get().(*upgrader)
+func NewUpgrader() *Upgrader {
+	return upgraderPool.Get().(*Upgrader)
+}
+
+func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
+	if h != nil {
+		u.closeHandler = h
+	}
+}
+
+func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
+	if h != nil {
+		u.pingHandler = h
+	}
+}
+
+func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
+	if h != nil {
+		u.pongHandler = h
+	}
+}
+
+func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
+	if h != nil {
+		u.messageHandler = h
+	}
+}
+
+var initDataFrameWarning = false
+
+func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
+	if h != nil {
+		if !initDataFrameWarning {
+			initDataFrameWarning = true
+			logging.Warn("If you use a DataFrame handler, please make sure the `messageHandlerExecutor` you passed to `nbhttp.NewServer/NewServerTLS` could promise to handle the frames in order, and please make sure that the Upgrader must not set `EnableCompression` to `true`. If you are sure about that, ignore this warning!")
+		}
+		u.dataFrameHandler = h
+	}
+}
+
+func (u *Upgrader) OnClose(h func(*Conn, error)) {
+	if h != nil {
+		u.onClose = h
+	}
+}
+
+func (u *Upgrader) EnableCompression(enable bool) {
+	u.enableCompression = enable
+}
+
+func (u *Upgrader) EnableWriteCompression(enable bool) {
+	u.enableWriteCompression = enable
+}
+
+func (u *Upgrader) SetCompressionLevel(level int) error {
+	u.compressionLevel = level
+	return nil
 }
 
 // Upgrade .
-func (u *upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
+func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
 	if !headerContains(r.Header, "Connection", "upgrade") {
 		return nil, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}
@@ -100,7 +166,7 @@ func (u *upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	// Negotiate PMCE
 	var compress bool
-	if u.EnableCompression {
+	if u.enableCompression {
 		for _, ext := range parseExtensions(r.Header) {
 			if ext[""] != "permessage-deflate" {
 				continue
@@ -174,19 +240,20 @@ func (u *upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
+	u.conn = newConn(u, conn, nbc.Hash(), false, subprotocol, compress)
+	u.Server = parser.Server
+	u.conn.Server = parser.Server
+
 	if _, err = conn.Write(buf); err != nil {
 		conn.Close()
 		return nil, err
 	}
 
-	u.conn = newConn(conn, nbc.Hash(), false, subprotocol, compress)
-	u.Server = parser.Server
-	u.conn.Server = parser.Server
 	return u.conn, nil
 }
 
-func (u *upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
-	if res1 && !u.EnableCompression {
+func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
+	if res1 && !u.enableCompression {
 		return ErrReserveBitSet
 	}
 	if res2 || res3 {
@@ -205,7 +272,7 @@ func (u *upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 }
 
 // Read .
-func (u *upgrader) Read(p *nbhttp.Parser, data []byte) error {
+func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
 	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
 		return nbhttp.ErrTooLong
@@ -308,7 +375,7 @@ func (u *upgrader) Read(p *nbhttp.Parser, data []byte) error {
 }
 
 // Close .
-func (u *upgrader) Close(p *nbhttp.Parser, err error) {
+func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
 		// u.conn.Close()
 		u.conn.onClose(u.conn, err)
@@ -323,7 +390,7 @@ func (u *upgrader) Close(p *nbhttp.Parser, err error) {
 	upgraderPool.Put(u)
 }
 
-func (u *upgrader) handleMessage() {
+func (u *Upgrader) handleMessage() {
 	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
@@ -333,7 +400,7 @@ func (u *upgrader) handleMessage() {
 	u.opcode = 0
 }
 
-func (u *upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
+func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
@@ -383,13 +450,13 @@ func (u *upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, 
 	return opcode, body, ok, fin, res1, res2, res3
 }
 
-func (u *upgrader) returnError(w http.ResponseWriter, r *http.Request, status int, err error) error {
+func (u *Upgrader) returnError(w http.ResponseWriter, r *http.Request, status int, err error) error {
 	w.Header().Set("Sec-Websocket-Version", "13")
 	http.Error(w, http.StatusText(status), status)
 	return err
 }
 
-func (u *upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
+func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
 	if u.Subprotocols != nil {
 		clientProtocols := subprotocols(r)
 		for _, serverProtocol := range u.Subprotocols {

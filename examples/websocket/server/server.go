@@ -20,17 +20,11 @@ var (
 	print = flag.Bool("print", false, "output input to standardout")
 )
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
-	upgrader.EnableCompression = true
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.EnableWriteCompression(true)
-	wsConn.SetReadDeadline(time.Time{})
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+func newUpgrader() *websocket.Upgrader {
+	u := websocket.NewUpgrader()
+	u.EnableCompression(true)
+	u.EnableWriteCompression(true)
+	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		if *print {
 			switch messageType {
@@ -42,11 +36,23 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		}
 		c.WriteMessage(messageType, data)
 	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
+
+	u.OnClose(func(c *websocket.Conn, err error) {
 		if *print {
 			fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 		}
 	})
+	return u
+}
+
+func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	upgrader := newUpgrader()
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
+	wsConn.SetReadDeadline(time.Time{})
 	if *print {
 		fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 	}
