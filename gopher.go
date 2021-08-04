@@ -348,6 +348,7 @@ func (g *Gopher) timerLoop() {
 			for {
 				g.tmux.Lock()
 				if len(g.callings) == 0 {
+					g.callings = nil
 					g.tmux.Unlock()
 					break
 				}
