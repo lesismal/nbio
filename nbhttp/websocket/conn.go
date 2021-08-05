@@ -145,11 +145,11 @@ func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
 	}
 }
 
-// Deperacated:
+// Deprecated:
 // OnMessage may leads to a message leak when the message arrive before this handler is set.
 // Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
-	logging.Warn(`websocket.Conn.OnMessage will be deperacated in the future because it may leads to a message leak when the message arrive before this handler is set. Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.`)
+	logging.Warn(`websocket.Conn.OnMessage will be deprecated in the future because it may leads to a message leak when the message arrive before this handler is set. Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.`)
 	if h != nil {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			// c.Server.MessageHandlerExecutor(c.index, func() {
@@ -163,11 +163,11 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	}
 }
 
-// Deperacated:
+// Deprecated:
 // OnDataFrame may leads to a dataframe leak when the message arrive before this handler is set.
 // Please use Upgrader.OnDataFrame to set the handler during Upgrade before the response to websocket client's handshake.
 func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
-	logging.Warn(`websocket.Conn.OnDataFrame will be deperacated in the future because it may leads to a dataframe leak when the message arrive before this handler is set. Please use Upgrader.OnDataFrame to set the handler during Upgrade before the response to websocket client's handshake.`)
+	logging.Warn(`websocket.Conn.OnDataFrame will be deprecated in the future because it may leads to a dataframe leak when the message arrive before this handler is set. Please use Upgrader.OnDataFrame to set the handler during Upgrade before the response to websocket client's handshake.`)
 	if h != nil {
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			// c.Server.MessageHandlerExecutor(c.index, func() {
