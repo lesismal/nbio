@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"io"
+	"fmt"
 	"log"
 	"net/url"
 	"time"
@@ -10,80 +10,72 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var addr = flag.String("addr", "localhost:8888", "http service address")
-var message = flag.String("message", "hello would", "message send to the server")
-var messageLen = flag.Int("mlen", 100000, "if set, will override message setting and send message of the specified length")
-var path = flag.String("path", "/ws", "path to connect to")
-var binary = flag.Bool("binary", false, "if set, message is sent as binary")
-
 func main() {
 	flag.Parse()
 
-	u := url.URL{Scheme: "ws", Host: *addr, Path: *path}
-	log.Printf("connecting to %s", u.String())
-	websocket.DefaultDialer.EnableCompression = true
+	u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/ws"}
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		log.Fatal("dial:", err)
 	}
 	defer c.Close()
 
-	text := *message
-	messageType := websocket.TextMessage
-	if *binary {
-		messageType = websocket.BinaryMessage
-	}
-	if *messageLen > 0 {
-		textBytes := make([]byte, *messageLen)
-		for i := 0; i < *messageLen; i++ {
-			textBytes[i] = (*message)[i%(len(*message)-1)]
-			if messageType == websocket.BinaryMessage {
-				textBytes[i] = 0xef
-			}
-		}
-		text = string(textBytes)
-	}
+	i := 0
 	for {
-		err := c.WriteMessage(messageType, []byte(text))
-		if err != nil {
-			log.Fatalf("write: %v", err)
-			return
-		}
-		log.Println("write:", text)
-
-		receiveType, reader, err := c.NextReader()
-		if err != nil {
-			log.Println("read:", err)
-			return
-		}
-		if receiveType != messageType {
-			log.Println("received type != messageType")
-			return
-
-		}
-		line := make([]byte, *messageLen+10)
-		i := 0
-		read := 0
-		output := ""
-		for err == nil {
-			var n int
-			n, err = reader.Read(line)
-			if err == nil {
-				log.Println("read :", i, n, string(line))
-				read += n
-			}
-			output += string(line[:n])
+		{
 			i++
-		}
-		if string(output) != text {
-			log.Println("output not equal text:", len(output), len(text))
-		}
-		if err != io.EOF {
-			log.Println("reader read error:", err)
-			return
-		} else {
-			log.Println("readlen:", read)
+			request := fmt.Sprintf("hello %v", i)
+			err := c.WriteMessage(websocket.BinaryMessage, []byte(request))
+			if err != nil {
+				log.Fatalf("write: %v", err)
+				return
+			}
 
+			receiveType, response, err := c.ReadMessage()
+			if err != nil {
+				log.Println("ReadMessage failed:", err)
+				return
+			}
+			if receiveType != websocket.BinaryMessage {
+				log.Println("received type != websocket.BinaryMessage")
+				return
+
+			}
+
+			if string(response) != request {
+				log.Printf("'%v' != '%v'", len(response), len(request))
+				return
+			}
+
+			log.Println("success echo websocket.BinaryMessage:", request)
+		}
+
+		{
+			i++
+			request := fmt.Sprintf("hello %v", i)
+			err := c.WriteMessage(websocket.TextMessage, []byte(request))
+			if err != nil {
+				log.Fatalf("write: %v", err)
+				return
+			}
+
+			receiveType, response, err := c.ReadMessage()
+			if err != nil {
+				log.Println("ReadMessage failed:", err)
+				return
+			}
+			if receiveType != websocket.TextMessage {
+				log.Println("received type != websocket.TextMessage")
+				return
+
+			}
+
+			if string(response) != request {
+				log.Printf("'%v' != '%v'", len(response), len(request))
+				return
+			}
+
+			log.Println("success echo websocket.TextMessage  :", request)
 		}
 
 		time.Sleep(time.Second)

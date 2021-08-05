@@ -1,9 +1,8 @@
 package main
 
 import (
-	"flag"
+	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,34 +12,15 @@ import (
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-var (
-	svr   *nbhttp.Server
-	addr  = flag.String("addr", ":8888", "listening addr")
-	path  = flag.String("path", "/ws", "url path")
-	print = flag.Bool("print", false, "output input to standardout")
-)
-
 func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
-	u.EnableCompression(true)
-	u.EnableWriteCompression(true)
 	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
-		if *print {
-			switch messageType {
-			case websocket.TextMessage:
-				fmt.Println("OnMessage:", messageType, string(data), len(data))
-			case websocket.BinaryMessage:
-				fmt.Println("OnMessage:", messageType, data, len(data))
-			}
-		}
 		c.WriteMessage(messageType, data)
 	})
 
 	u.OnClose(func(c *websocket.Conn, err error) {
-		if *print {
-			fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-		}
+		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 	})
 	return u
 }
@@ -53,19 +33,16 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.SetReadDeadline(time.Time{})
-	if *print {
-		fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
-	}
+	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 
 func main() {
-	flag.Parse()
 	mux := &http.ServeMux{}
-	mux.HandleFunc(*path, onWebsocket)
+	mux.HandleFunc("/ws", onWebsocket)
 
-	svr = nbhttp.NewServer(nbhttp.Config{
+	svr := nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{*addr},
+		Addrs:   []string{"localhost:8888"},
 	}, mux, nil)
 
 	err := svr.Start()
@@ -73,10 +50,11 @@ func main() {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
 	}
-	defer svr.Stop()
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 	<-interrupt
-	log.Println("exit")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	svr.Shutdown(ctx)
 }
