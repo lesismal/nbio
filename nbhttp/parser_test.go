@@ -85,7 +85,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		nRequest++
 	})
-	processor := NewServerProcessor(nil, mux, nil, DefaultKeepaliveTime, false)
+	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
 	if isClient {
 		processor = NewClientProcessor(nil, func(*http.Response) {
 			nRequest++
@@ -96,7 +96,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 		// Realloc: mempool.Realloc,
 		// Free:    mempool.Free,
 	}
-	parser = NewParser(processor, isClient, maxReadSize)
+	parser = NewParser(processor, isClient, maxReadSize, nil)
 	parser.Server = svr
 	tBegin := time.Now()
 	loop := 10000
@@ -133,15 +133,15 @@ func newParser(isClient bool) *Parser {
 	maxReadSize := 1024 * 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response) {})
-		parser := NewParser(processor, isClient, maxReadSize)
+		parser := NewParser(processor, isClient, maxReadSize, nil)
 		parser.Server = svr
 		return parser
 	}
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", pirntMessage)
-	processor := NewServerProcessor(nil, mux, nil, DefaultKeepaliveTime, false)
+	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
 
-	parser := NewParser(processor, isClient, maxReadSize)
+	parser := NewParser(processor, isClient, maxReadSize, nil)
 	parser.Server = svr
 	return parser
 }
@@ -200,8 +200,8 @@ func BenchmarkServerProcessor(b *testing.B) {
 	isClient := false
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
-	processor := NewServerProcessor(nil, mux, nil, DefaultKeepaliveTime, false)
-	parser := NewParser(processor, isClient, maxReadSize)
+	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
+	parser := NewParser(processor, isClient, maxReadSize, nil)
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -216,7 +216,7 @@ func BenchmarkEmpryProcessor(b *testing.B) {
 	maxReadSize := 1024 * 1024 * 4
 	isClient := false
 	// processor := NewEmptyProcessor()
-	parser := NewParser(nil, isClient, maxReadSize)
+	parser := NewParser(nil, isClient, maxReadSize, nil)
 
 	b.ReportAllocs()
 	b.ResetTimer()

@@ -152,13 +152,13 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	logging.Warn(`websocket.Conn.OnMessage will be deperacated in the future because it may leads to a message leak when the message arrive before this handler is set. Please use Upgrader.OnMessage to set the handler during Upgrade before the response to websocket client's handshake.`)
 	if h != nil {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			c.Server.MessageHandlerExecutor(c.index, func() {
-				h(c, messageType, data)
-				// do not free data if application layer need to use it in another goroutine.
-				if c.Server.ReleaseWebsocketPayload {
-					mempool.Free(data)
-				}
-			})
+			// c.Server.MessageHandlerExecutor(c.index, func() {
+			h(c, messageType, data)
+			// do not free data if application layer need to use it in another goroutine.
+			if c.Server.ReleaseWebsocketPayload {
+				mempool.Free(data)
+			}
+			// })
 		}
 	}
 }
@@ -170,13 +170,13 @@ func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	logging.Warn(`websocket.Conn.OnDataFrame will be deperacated in the future because it may leads to a dataframe leak when the message arrive before this handler is set. Please use Upgrader.OnDataFrame to set the handler during Upgrade before the response to websocket client's handshake.`)
 	if h != nil {
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			c.Server.MessageHandlerExecutor(c.index, func() {
-				h(c, messageType, fin, data)
-				// do not free data if application layer need to use it in another goroutine.
-				if c.Server.ReleaseWebsocketPayload {
-					mempool.Free(data)
-				}
-			})
+			// c.Server.MessageHandlerExecutor(c.index, func() {
+			h(c, messageType, fin, data)
+			// do not free data if application layer need to use it in another goroutine.
+			if c.Server.ReleaseWebsocketPayload {
+				mempool.Free(data)
+			}
+			// })
 		}
 	}
 }
@@ -357,8 +357,8 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 	conn.EnableWriteCompression(u.enableWriteCompression)
 	conn.SetCompressionLevel(u.compressionLevel)
 
-	if u.pingHandler != nil {
-		conn.pingHandler = u.pingHandler
+	if u.pingMessageHandler != nil {
+		conn.pingHandler = u.pingMessageHandler
 	} else {
 		conn.pingHandler = func(c *Conn, data string) {
 			if len(data) > 125 {
@@ -369,12 +369,12 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 		}
 	}
 
-	if u.pongHandler != nil {
-		conn.pongHandler = u.pongHandler
+	if u.pongMessageHandler != nil {
+		conn.pongHandler = u.pongMessageHandler
 	}
 
-	if u.closeHandler != nil {
-		conn.closeHandler = u.closeHandler
+	if u.closeMessageHandler != nil {
+		conn.closeHandler = u.closeMessageHandler
 	} else {
 		conn.closeHandler = func(c *Conn, code int, text string) {
 			if len(text)+2 > maxControlFramePayloadSize {
@@ -391,13 +391,13 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 	if u.messageHandler != nil {
 		h := u.messageHandler
 		conn.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			c.Server.MessageHandlerExecutor(c.index, func() {
-				h(c, messageType, data)
-				// do not free data if application layer need to use it in another goroutine.
-				if c.Server.ReleaseWebsocketPayload {
-					mempool.Free(data)
-				}
-			})
+			// c.Server.MessageHandlerExecutor(c.index, func() {
+			h(c, messageType, data)
+			// do not free data if application layer need to use it in another goroutine.
+			if c.Server.ReleaseWebsocketPayload {
+				mempool.Free(data)
+			}
+			// })
 		}
 
 	}
@@ -405,13 +405,13 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 	if u.dataFrameHandler != nil {
 		h := u.dataFrameHandler
 		conn.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			c.Server.MessageHandlerExecutor(c.index, func() {
-				h(c, messageType, fin, data)
-				// do not free data if application layer need to use it in another goroutine.
-				if c.Server.ReleaseWebsocketPayload {
-					mempool.Free(data)
-				}
-			})
+			// c.Server.MessageHandlerExecutor(c.index, func() {
+			h(c, messageType, fin, data)
+			// do not free data if application layer need to use it in another goroutine.
+			if c.Server.ReleaseWebsocketPayload {
+				mempool.Free(data)
+			}
+			// })
 		}
 	}
 

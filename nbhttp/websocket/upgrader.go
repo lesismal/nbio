@@ -58,9 +58,11 @@ type Upgrader struct {
 	buffer  []byte
 	message []byte
 
-	pingHandler      func(c *Conn, appData string)
-	pongHandler      func(c *Conn, appData string)
-	closeHandler     func(c *Conn, code int, text string)
+	pingMessageHandler  func(c *Conn, appData string)
+	pongMessageHandler  func(c *Conn, appData string)
+	closeMessageHandler func(c *Conn, code int, text string)
+
+	openHandler      func(*Conn)
 	messageHandler   func(c *Conn, messageType MessageType, data []byte)
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
 	onClose          func(c *Conn, err error)
@@ -74,19 +76,25 @@ func NewUpgrader() *Upgrader {
 
 func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
 	if h != nil {
-		u.closeHandler = h
+		u.closeMessageHandler = h
 	}
 }
 
 func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
 	if h != nil {
-		u.pingHandler = h
+		u.pingMessageHandler = h
 	}
 }
 
 func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
 	if h != nil {
-		u.pongHandler = h
+		u.pongMessageHandler = h
+	}
+}
+
+func (u *Upgrader) OnOpen(h func(*Conn)) {
+	if h != nil {
+		u.openHandler = h
 	}
 }
 
@@ -244,6 +252,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	u.Server = parser.Server
 	u.conn.Server = parser.Server
 
+	if u.openHandler != nil {
+		u.openHandler(u.conn)
+	}
+
 	if _, err = conn.Write(buf); err != nil {
 		conn.Close()
 		return nil, err
@@ -310,7 +322,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				if u.opcode == TextMessage && len(u.message) > 0 && !u.Server.CheckUtf8(u.message) {
 					u.conn.Close()
 				} else {
-					u.conn.dataFrameHandler(u.conn, u.opcode, fin, u.message)
+					u.handleDataFrame(p, u.conn, u.opcode, fin, u.message)
 				}
 				u.message = messageBackup
 			}
@@ -334,7 +346,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 							return err
 						}
 					}
-					u.handleMessage()
+					u.handleMessage(p)
 					u.expectingFragments = false
 					u.compress = false
 				} else {
@@ -346,7 +358,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			u.opcode = opcode
 			messageBackup := u.message
 			u.message = body
-			u.handleMessage()
+			u.handleMessage(p)
 			u.message = messageBackup
 			u.opcode = opcodeBackup
 		}
@@ -390,12 +402,22 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	upgraderPool.Put(u)
 }
 
-func (u *Upgrader) handleMessage() {
+func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, messageType MessageType, fin bool, data []byte) {
+	opcode, message := u.opcode, u.message
+	p.Execute(func() {
+		c.dataFrameHandler(u.conn, opcode, fin, message)
+	})
+}
+
+func (u *Upgrader) handleMessage(p *nbhttp.Parser) {
 	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
 	}
-	u.conn.handleMessage(u.opcode, u.message)
+	opcode, message := u.opcode, u.message
+	p.Execute(func() {
+		u.conn.handleMessage(opcode, message)
+	})
 	u.message = nil
 	u.opcode = 0
 }

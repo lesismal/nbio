@@ -11,8 +11,10 @@ import (
 	"net/textproto"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 
+	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -55,6 +57,10 @@ type Parser struct {
 	active   int32
 	errClose error
 
+	messageExecuteMux   sync.Mutex
+	messageExecuteQueue []func()
+	executor            func(index int, f func())
+
 	Processor Processor
 
 	Upgrader Upgrader
@@ -94,6 +100,38 @@ func (p *Parser) Close(err error) {
 		return
 	}
 	p.release()
+}
+
+func (p *Parser) Execute(f func()) {
+	p.messageExecuteMux.Lock()
+	isHead := p.messageExecuteQueue == nil
+	p.messageExecuteQueue = append(p.messageExecuteQueue, f)
+	p.messageExecuteMux.Unlock()
+
+	index := 0
+	c, ok := p.Conn.(*nbio.Conn)
+	if ok {
+		index = c.Hash()
+	}
+
+	if isHead {
+		f := func() {
+			for f != nil {
+				f()
+
+				p.messageExecuteMux.Lock()
+				if len(p.messageExecuteQueue) <= 1 {
+					p.messageExecuteQueue = nil
+					p.messageExecuteMux.Unlock()
+					return
+				}
+				p.messageExecuteQueue = p.messageExecuteQueue[1:]
+				f = p.messageExecuteQueue[0]
+				p.messageExecuteMux.Unlock()
+			}
+		}
+		p.executor(index, f)
+	}
 }
 
 // Read .
@@ -748,7 +786,7 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser .
-func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
+func NewParser(processor Processor, isClient bool, readLimit int, executor func(index int, f func())) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
 	}
@@ -759,10 +797,16 @@ func NewParser(processor Processor, isClient bool, readLimit int) *Parser {
 	if readLimit <= 0 {
 		readLimit = DefaultHTTPReadLimit
 	}
+	if executor == nil {
+		executor = func(index int, f func()) {
+			f()
+		}
+	}
 	p := &Parser{
 		state:     state,
 		readLimit: readLimit,
 		isClient:  isClient,
+		executor:  executor,
 		Processor: processor,
 	}
 	return p

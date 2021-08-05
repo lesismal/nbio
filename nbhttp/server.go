@@ -169,15 +169,14 @@ func (s *Server) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 		sess := c.Session()
 		if sess != nil {
 			parser := sess.(*Parser)
-			sp := parser.Processor.(*ServerProcessor)
-			sp.mux.Lock()
-			if len(sp.resQueue) == 0 {
+			parser.messageExecuteMux.Lock()
+			if len(parser.messageExecuteQueue) == 0 {
 				select {
 				case chCloseQueue <- c:
 				default:
 				}
 			}
-			sp.mux.Unlock()
+			parser.messageExecuteMux.Unlock()
 		}
 	}
 }
@@ -299,8 +298,8 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		processor := NewServerProcessor(c, handler, messageHandlerExecutor, conf.KeepaliveTime, conf.EnableSendfile)
-		parser := NewParser(processor, false, conf.ReadLimit)
+		processor := NewServerProcessor(c, handler, conf.KeepaliveTime, conf.EnableSendfile)
+		parser := NewParser(processor, false, conf.ReadLimit, messageHandlerExecutor)
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
@@ -467,8 +466,8 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.mux.Unlock()
 		svr._onOpen(c)
 		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
-		processor := NewServerProcessor(tlsConn, handler, messageHandlerExecutor, conf.KeepaliveTime, conf.EnableSendfile)
-		parser := NewParser(processor, false, conf.ReadLimit)
+		processor := NewServerProcessor(tlsConn, handler, conf.KeepaliveTime, conf.EnableSendfile)
+		parser := NewParser(processor, false, conf.ReadLimit, messageHandlerExecutor)
 		parser.Conn = tlsConn
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser

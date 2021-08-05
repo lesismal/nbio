@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/lesismal/nbio"
 )
 
 var (
@@ -71,7 +69,6 @@ type Processor interface {
 	OnBody(data []byte)
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
-	HandleExecute(executor func(index int, f func()))
 	Close()
 }
 
@@ -79,14 +76,14 @@ type Processor interface {
 type ServerProcessor struct {
 	// active int32
 
-	mux      sync.Mutex
-	conn     net.Conn
-	parser   *Parser
-	request  *http.Request
-	handler  http.Handler
-	executor func(index int, f func())
+	// mux     sync.Mutex
+	conn    net.Conn
+	parser  *Parser
+	request *http.Request
+	handler http.Handler
+	// executor func(index int, f func())
 
-	resQueue       []*Response
+	// resQueue       []*Response
 	keepaliveTime  time.Duration
 	enableSendfile bool
 	// isUpgrade      bool
@@ -169,10 +166,10 @@ func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ServerProcessor) OnComplete(parser *Parser) {
-	p.mux.Lock()
+	// p.mux.Lock()
 	request := p.request
 	p.request = nil
-	p.mux.Unlock()
+	// p.mux.Unlock()
 
 	if request == nil {
 		return
@@ -222,45 +219,41 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = NewBodyReader(nil)
 	}
 
-	res := NewResponse(p.parser, request, p.enableSendfile)
+	response := NewResponse(p.parser, request, p.enableSendfile)
+	parser.Execute(func() {
+		p.handler.ServeHTTP(response, request)
+		p.flushResponse(response)
+	})
+	// p.mux.Lock()
+	// isHead := p.resQueue == nil
+	// p.resQueue = append(p.resQueue, res)
+	// p.mux.Unlock()
 
-	p.mux.Lock()
-	isHead := p.resQueue == nil
-	p.resQueue = append(p.resQueue, res)
-	p.mux.Unlock()
+	// index := 0
+	// c, ok := p.conn.(*nbio.Conn)
+	// if ok {
+	// 	index = c.Hash()
+	// }
 
-	index := 0
-	c, ok := p.conn.(*nbio.Conn)
-	if ok {
-		index = c.Hash()
-	}
+	// if isHead {
+	// 	f := func() {
+	// 		for res != nil && res.request != nil {
+	// 			p.handler.ServeHTTP(res, res.request)
+	// 			p.flushResponse(res)
 
-	if isHead {
-		f := func() {
-			for res != nil && res.request != nil {
-				p.handler.ServeHTTP(res, res.request)
-				p.flushResponse(res)
-
-				p.mux.Lock()
-				if len(p.resQueue) <= 1 {
-					p.resQueue = nil
-					p.mux.Unlock()
-					return
-				}
-				p.resQueue = p.resQueue[1:]
-				res = p.resQueue[0]
-				p.mux.Unlock()
-			}
-		}
-		p.executor(index, f)
-	}
-}
-
-// HandleExecute .
-func (p *ServerProcessor) HandleExecute(executor func(index int, f func())) {
-	if executor != nil {
-		p.executor = executor
-	}
+	// 			p.mux.Lock()
+	// 			if len(p.resQueue) <= 1 {
+	// 				p.resQueue = nil
+	// 				p.mux.Unlock()
+	// 				return
+	// 			}
+	// 			p.resQueue = p.resQueue[1:]
+	// 			res = p.resQueue[0]
+	// 			p.mux.Unlock()
+	// 		}
+	// 	}
+	// 	p.executor(index, f)
+	// }
 }
 
 func (p *ServerProcessor) flushResponse(res *Response) {
@@ -325,12 +318,9 @@ func (p *ServerProcessor) HandleMessage(handler http.Handler) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index int, f func()), keepaliveTime time.Duration, enableSendfile bool) Processor {
+func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.Duration, enableSendfile bool) Processor {
 	if handler == nil {
 		panic(errors.New("invalid handler for ServerProcessor: nil"))
-	}
-	if executor == nil {
-		executor = func(index int, f func()) { f() }
 	}
 	// p := serverProcessorPool.Get().(*ServerProcessor)
 	// p.conn = conn
@@ -342,11 +332,13 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, executor func(index
 	p := &ServerProcessor{
 		conn:           conn,
 		handler:        handler,
-		executor:       executor,
 		keepaliveTime:  keepaliveTime,
 		enableSendfile: enableSendfile,
-		remoteAddr:     conn.RemoteAddr().String(),
 	}
+	if conn != nil {
+		p.remoteAddr = conn.RemoteAddr().String()
+	}
+
 	return p
 }
 
@@ -429,11 +421,6 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 	p.response = nil
 }
 
-// HandleExecute .
-func (p *ClientProcessor) HandleExecute(executor func(index int, f func())) {
-
-}
-
 // Close .
 func (p *ClientProcessor) Close() {
 
@@ -507,11 +494,6 @@ func (p *EmptyProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *EmptyProcessor) OnComplete(parser *Parser) {
-
-}
-
-// HandleExecute .
-func (p *EmptyProcessor) HandleExecute(executor func(index int, f func())) {
 
 }
 
