@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -25,16 +24,6 @@ import (
 type Hijacker interface {
 	Hijack() (net.Conn, error)
 }
-
-var (
-	emptyUpgrader = Upgrader{}
-
-	upgraderPool = sync.Pool{
-		New: func() interface{} {
-			return &Upgrader{}
-		},
-	}
-)
 
 // Upgrader .
 type Upgrader struct {
@@ -70,7 +59,7 @@ type Upgrader struct {
 }
 
 func NewUpgrader() *Upgrader {
-	return upgraderPool.Get().(*Upgrader)
+	return &Upgrader{}
 }
 
 func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
@@ -395,8 +384,6 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	if len(u.message) > 0 {
 		mempool.Free(u.message)
 	}
-	*u = emptyUpgrader
-	upgraderPool.Put(u)
 }
 
 func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, messageType MessageType, fin bool, data []byte) {
