@@ -17,7 +17,6 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
@@ -104,14 +103,14 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	}
 }
 
-var initDataFrameWarning = false
+// var initDataFrameWarning = false
 
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
-		if !initDataFrameWarning {
-			initDataFrameWarning = true
-			logging.Warn("If you use a DataFrame handler, please make sure the `messageHandlerExecutor` you passed to `nbhttp.NewServer/NewServerTLS` could promise to handle the frames in order, and please make sure that the Upgrader must not set `EnableCompression` to `true`. If you are sure about that, ignore this warning!")
-		}
+		// if !initDataFrameWarning {
+		// 	initDataFrameWarning = true
+		// 	logging.Warn("If you use a DataFrame handler, please make sure the `messageHandlerExecutor` you passed to `nbhttp.NewServer/NewServerTLS` could promise to handle the frames in order, and please make sure that the Upgrader must not set `EnableCompression` to `true`. If you are sure about that, ignore this warning!")
+		// }
 		u.dataFrameHandler = h
 	}
 }
@@ -404,6 +403,10 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 
 func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, messageType MessageType, fin bool, data []byte) {
 	opcode, message := u.opcode, u.message
+	if fin {
+		u.message = nil
+		u.opcode = 0
+	}
 	p.Execute(func() {
 		c.dataFrameHandler(u.conn, opcode, fin, message)
 	})

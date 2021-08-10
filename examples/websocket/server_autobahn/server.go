@@ -17,7 +17,7 @@ import (
 func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 	u := websocket.NewUpgrader()
 	u.EnableCompression(true)
-	if !isDataFrame {
+	if isDataFrame {
 		isFirst := true
 		u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
 			err := c.WriteFrame(messageType, isFirst, fin, data)
@@ -27,6 +27,8 @@ func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 			}
 			if fin {
 				isFirst = true
+			} else {
+				isFirst = false
 			}
 		})
 	} else {
