@@ -21,17 +21,17 @@ var (
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.NewUpgrader()
+	upgrader.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+		c.WriteMessage(messageType, data)
+	})
+	upgrader.OnClose(func(c *websocket.Conn, err error) {
+		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+	})
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
 	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		c.WriteMessage(messageType, data)
-	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-	})
 	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 

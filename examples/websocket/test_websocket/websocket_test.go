@@ -24,13 +24,8 @@ var (
 
 func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.NewUpgrader()
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
 	count := int32(0)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+	upgrader.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		fmt.Println("OnMessage:", messageType, string(data))
 		if int(atomic.AddInt32(&count, 1)) == maxCount {
@@ -38,6 +33,11 @@ func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWri
 		}
 		c.SetReadDeadline(time.Now().Add(time.Second * 60))
 	})
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 	})
