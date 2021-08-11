@@ -15,4 +15,12 @@ func TestMemPool(t *testing.T) {
 		}
 		pool.Free(buf)
 	}
+	for i := 1024 * 1024; i < 1024*1024*1024; i += 1024 * 1024 {
+		// for i := 1024 * 1024; i >= 0; i-- {
+		buf := pool.Malloc(i)
+		if len(buf) != i {
+			t.Fatalf("invalid length: %v != %v", len(buf), i)
+		}
+		pool.Free(buf)
+	}
 }

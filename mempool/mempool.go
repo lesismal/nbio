@@ -8,6 +8,10 @@ import (
 	"sync"
 )
 
+const holderSize = 1024 * 1024 * 4
+
+var holderBuffer = make([]byte, holderSize)
+
 var DefaultMemPool = New(64)
 
 // MemPool
@@ -33,9 +37,9 @@ func New(minSize int) *MemPool {
 func (c *MemPool) Malloc(size int) []byte {
 	pbuf := c.pool.Get().(*[]byte)
 	if cap(*pbuf) < size {
-		if cap(*pbuf) >= (size / 2) {
+		if cap(*pbuf)+holderSize >= size {
 			*pbuf = (*pbuf)[:cap(*pbuf)]
-			*pbuf = append(*pbuf, (*pbuf)[:size-len(*pbuf)]...)
+			*pbuf = append(*pbuf, holderBuffer[:size-len(*pbuf)]...)
 		} else {
 			c.pool.Put(pbuf)
 			newBuf := make([]byte, size)
