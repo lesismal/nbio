@@ -332,7 +332,9 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 							return err
 						}
 					}
-					u.handleMessage(p)
+					op, msg := u.opcode, u.message
+					u.opcode, u.message = 0, nil
+					u.handleMessage(p, op, msg)
 					u.expectingFragments = false
 					u.compress = false
 				} else {
@@ -340,13 +342,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				}
 			}
 		} else {
-			opcodeBackup := u.opcode
-			u.opcode = opcode
-			messageBackup := u.message
-			u.message = body
-			u.handleMessage(p)
-			u.message = messageBackup
-			u.opcode = opcodeBackup
+			u.handleMessage(p, opcode, body)
 		}
 
 		if len(u.buffer) == 0 {
@@ -397,17 +393,17 @@ func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, messageType Messag
 	}
 }
 
-func (u *Upgrader) handleMessage(p *nbhttp.Parser) {
-	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
+func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, message []byte) {
+	if opcode == TextMessage && !u.Server.CheckUtf8(message) {
 		u.conn.Close()
 		return
 	}
-	opcode, message := u.opcode, u.message
+	rtn := mempool.Malloc(len(message))
+	copy(rtn, message)
 	p.Execute(func() {
-		u.conn.handleMessage(opcode, message)
+		// needed for autobahn 7.4.* tls tests to pass
+		u.conn.handleMessage(opcode, rtn)
 	})
-	u.message = nil
-	u.opcode = 0
 }
 
 func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
