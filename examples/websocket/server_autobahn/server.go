@@ -79,9 +79,9 @@ func main() {
 	log.Printf("calling new server tls\n")
 
 	onClose := func(c *nbio.Conn, err error) {
-		fmt.Println("--- OnClose:", c.RemoteAddr(), err)
+		// fmt.Println("--- OnClose:", c.RemoteAddr(), err)
 	}
-	messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
+	messageHandlerExecutePool := taskpool.NewMixedPool(1000, 4, 1000)
 	svrTLS := nbhttp.NewServerTLS(nbhttp.Config{
 		Network:                 "tcp",
 		Addrs:                   []string{"localhost:9999"},
