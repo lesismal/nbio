@@ -6,11 +6,9 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 	"github.com/lesismal/nbio/taskpool"
@@ -78,24 +76,18 @@ func main() {
 
 	log.Printf("calling new server tls\n")
 
-	onClose := func(c *nbio.Conn, err error) {
-		// fmt.Println("--- OnClose:", c.RemoteAddr(), err)
-	}
-	messageHandlerExecutePool := taskpool.NewMixedPool(1000, 4, 1000)
+	messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
 	svrTLS := nbhttp.NewServerTLS(nbhttp.Config{
-		Network:                 "tcp",
-		Addrs:                   []string{"localhost:9999"},
-		ReadBufferSize:          1024 * 1024,
-		ReleaseWebsocketPayload: true,
+		Network:        "tcp",
+		Addrs:          []string{"localhost:9999"},
+		ReadBufferSize: 1024 * 1024,
 	}, mux, messageHandlerExecutePool.GoByIndex, tlsConfig)
-	svrTLS.OnClose(onClose)
 	svr := nbhttp.NewServer(nbhttp.Config{
-		Network:                 "tcp",
-		Addrs:                   []string{"localhost:9998"},
-		ReadBufferSize:          1024 * 1024,
-		ReleaseWebsocketPayload: true,
+		Network:        "tcp",
+		Addrs:          []string{"localhost:9998"},
+		ReadBufferSize: 1024 * 1024,
 	}, mux, messageHandlerExecutePool.GoByIndex)
-	svr.OnClose(onClose)
+
 	log.Printf("calling start non-tls\n")
 	err = svr.Start()
 	if err != nil {
@@ -111,14 +103,6 @@ func main() {
 		return
 	}
 	defer svrTLS.Stop()
-
-	go func() {
-		ticker := time.NewTicker(time.Second * 10)
-		for i := 1; true; i++ {
-			<-ticker.C
-			fmt.Printf("running for %v seconds, NumGoroutine: %v\n", i, runtime.NumGoroutine())
-		}
-	}()
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
