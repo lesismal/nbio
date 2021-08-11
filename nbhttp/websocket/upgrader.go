@@ -340,7 +340,9 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				u.expectingFragments = true
 			}
 		} else {
-			u.handleMessage(p, opcode, body)
+			message := mempool.Malloc(len(body))
+			copy(message, body)
+			u.handleMessage(p, opcode, message)
 		}
 
 		if len(u.buffer) == 0 {
