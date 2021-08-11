@@ -288,27 +288,27 @@ func (p *ServerProcessor) Close() {
 	// p.release()
 }
 
-func (p *ServerProcessor) release() {
-	// if p.request != nil {
-	// 	releaseRequest(p.request)
-	// }
-	// for _, res := range p.resQueue {
-	// 	releaseRequest(res.request)
-	// 	releaseResponse(res)
-	// }
+// func (p *ServerProcessor) release() {
+// if p.request != nil {
+// 	releaseRequest(p.request)
+// }
+// for _, res := range p.resQueue {
+// 	releaseRequest(res.request)
+// 	releaseResponse(res)
+// }
 
-	// p.conn = nil
-	// p.parser = nil
-	// p.request = nil
-	// p.handler = nil
-	// p.executor = nil
-	// p.resQueue = nil
-	// p.enableSendfile = false
-	// // p.isUpgrade = false
-	// // p.active = 0
+// p.conn = nil
+// p.parser = nil
+// p.request = nil
+// p.handler = nil
+// p.executor = nil
+// p.resQueue = nil
+// p.enableSendfile = false
+// // p.isUpgrade = false
+// // p.active = 0
 
-	// serverProcessorPool.Put(p)
-}
+// serverProcessorPool.Put(p)
+// }
 
 // HandleMessage .
 func (p *ServerProcessor) HandleMessage(handler http.Handler) {

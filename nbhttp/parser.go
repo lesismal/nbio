@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
@@ -51,10 +50,10 @@ type Parser struct {
 	state    int8
 	isClient bool
 
-	readLimit     int
-	minBufferSize int
+	readLimit int
+	// minBufferSize int
 
-	active   int32
+	// active   int32
 	errClose error
 
 	messageExecuteMux   sync.Mutex
@@ -78,7 +77,29 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
-func (p *Parser) release() {
+// func (p *Parser) release() {
+// 	if p.Upgrader != nil {
+// 		p.Upgrader.Close(p, p.errClose)
+// 	}
+// 	if p.Processor != nil {
+// 		p.Processor.Close()
+// 	}
+// 	if len(p.cache) > 0 {
+// 		mempool.Free(p.cache)
+// 	}
+// 	*p = emptyParser
+// 	parserPool.Put(p)
+// }
+
+func (p *Parser) Close(err error) {
+	p.state = stateClose
+	p.errClose = err
+	// active := atomic.AddInt32(&p.active, 1)
+	// if (active & 0x2) == 0x2 {
+	// 	return
+	// }
+	// p.release()
+
 	if p.Upgrader != nil {
 		p.Upgrader.Close(p, p.errClose)
 	}
@@ -88,18 +109,6 @@ func (p *Parser) release() {
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)
 	}
-	// *p = emptyParser
-	// parserPool.Put(p)
-}
-
-func (p *Parser) Close(err error) {
-	p.state = stateClose
-	p.errClose = err
-	active := atomic.AddInt32(&p.active, 1)
-	if (active & 0x2) == 0x2 {
-		return
-	}
-	p.release()
 }
 
 func (p *Parser) Execute(f func()) {
@@ -140,16 +149,16 @@ func (p *Parser) Read(data []byte) error {
 		return nil
 	}
 
-	active := atomic.AddInt32(&p.active, 2)
-	if (active & 0x1) == 0x1 {
-		return ErrClosed
-	}
-	defer func() {
-		active = atomic.AddInt32(&p.active, -2)
-		if (active & 0x1) == 0x1 {
-			p.release()
-		}
-	}()
+	// active := atomic.AddInt32(&p.active, 2)
+	// if (active & 0x1) == 0x1 {
+	// 	return ErrClosed
+	// }
+	// defer func() {
+	// 	active = atomic.AddInt32(&p.active, -2)
+	// 	if (active & 0x1) == 0x1 {
+	// 		p.release()
+	// 	}
+	// }()
 
 	var c byte
 	var start = 0
