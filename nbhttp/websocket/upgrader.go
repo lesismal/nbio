@@ -312,41 +312,35 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					u.handleDataFrame(p, u.conn, u.opcode, fin, frame)
 				}
 			}
-			if u.conn.messageHandler != nil {
-				if bl > 0 {
-					if u.message == nil {
-						u.message = mempool.Malloc(len(body))
-						copy(u.message, body)
-					} else {
-						u.message = append(u.message, body...)
-					}
-				}
-				if fin {
-					if u.compress {
-						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-						b, err := readAll(rc, len(u.message)*2)
-						mempool.Free(u.message)
-						u.message = b
-						rc.Close()
-						if err != nil {
-							return err
-						}
-					}
-					u.handleMessage(p)
-					u.expectingFragments = false
-					u.compress = false
+			if bl > 0 {
+				if u.message == nil {
+					u.message = mempool.Malloc(len(body))
+					copy(u.message, body)
 				} else {
-					u.expectingFragments = true
+					u.message = append(u.message, body...)
 				}
 			}
+			if fin {
+				if u.compress {
+					rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
+					b, err := readAll(rc, len(u.message)*2)
+					mempool.Free(u.message)
+					u.message = b
+					rc.Close()
+					if err != nil {
+						return err
+					}
+				}
+				u.handleMessage(p, u.opcode, u.message)
+				u.compress = false
+				u.expectingFragments = false
+				u.message = nil
+				u.opcode = 0
+			} else {
+				u.expectingFragments = true
+			}
 		} else {
-			opcodeBackup := u.opcode
-			u.opcode = opcode
-			messageBackup := u.message
-			u.message = body
-			u.handleMessage(p)
-			u.message = messageBackup
-			u.opcode = opcodeBackup
+			u.handleMessage(p, opcode, body)
 		}
 
 		if len(u.buffer) == 0 {
@@ -386,28 +380,20 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	}
 }
 
-func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, messageType MessageType, fin bool, data []byte) {
-	opcode := u.opcode
+func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType, fin bool, data []byte) {
 	p.Execute(func() {
 		c.dataFrameHandler(u.conn, opcode, fin, data)
 	})
-	if fin && u.messageHandler == nil {
-		u.message = nil
-		u.opcode = 0
-	}
 }
 
-func (u *Upgrader) handleMessage(p *nbhttp.Parser) {
+func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
 	}
-	opcode, message := u.opcode, u.message
 	p.Execute(func() {
-		u.conn.handleMessage(opcode, message)
+		u.conn.handleMessage(p, opcode, body)
 	})
-	u.message = nil
-	u.opcode = 0
 }
 
 func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {

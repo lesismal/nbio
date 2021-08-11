@@ -335,7 +335,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		err := parser.Read(data)
 		if err != nil {
 			logging.Debug("parser.Read failed: %v", err)
-			c.CloseWithError(err)
+			parser.Execute(func() {
+				c.CloseWithError(err)
+			})
 		}
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
@@ -517,7 +519,9 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 					err := parser.Read(buffer[:nread])
 					if err != nil {
 						logging.Debug("parser.Read failed: %v", err)
-						c.CloseWithError(err)
+						parser.Execute(func() {
+							c.CloseWithError(err)
+						})
 						return
 					}
 				}

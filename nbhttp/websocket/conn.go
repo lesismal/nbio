@@ -98,7 +98,7 @@ func validCloseCode(code int) bool {
 	return false
 }
 
-func (c *Conn) handleMessage(opcode MessageType, data []byte) {
+func (c *Conn) handleMessage(p *nbhttp.Parser, opcode MessageType, data []byte) {
 	switch opcode {
 	case TextMessage, BinaryMessage:
 		c.messageHandler(c, opcode, data)
@@ -109,13 +109,13 @@ func (c *Conn) handleMessage(opcode MessageType, data []byte) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
 				c.WriteMessage(CloseMessage, protoErrorCode)
+				c.Close()
 			} else {
 				c.closeHandler(c, code, string(data[2:]))
 			}
-		} else {
-			c.WriteMessage(CloseMessage, nil)
+			return
 		}
-		// close immediately, no need to wait for data flushed on a blocked conn
+		c.WriteMessage(CloseMessage, nil)
 		c.Close()
 	case PingMessage:
 		c.pingHandler(c, string(data))
@@ -383,6 +383,7 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 			binary.BigEndian.PutUint16(buf[:2], uint16(code))
 			copy(buf[2:], text)
 			conn.WriteMessage(CloseMessage, buf)
+			conn.Close()
 			mempool.Free(buf)
 		}
 	}
@@ -390,27 +391,33 @@ func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol stri
 	if u.messageHandler != nil {
 		h := u.messageHandler
 		conn.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			// c.Server.MessageHandlerExecutor(c.index, func() {
 			h(c, messageType, data)
-			// do not free data if application layer need to use it in another goroutine.
 			if c.Server.ReleaseWebsocketPayload {
 				mempool.Free(data)
 			}
-			// })
 		}
-
+	} else {
+		conn.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
+			if c.Server.ReleaseWebsocketPayload {
+				mempool.Free(data)
+			}
+		}
 	}
 
 	if u.dataFrameHandler != nil {
 		h := u.dataFrameHandler
 		conn.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			// c.Server.MessageHandlerExecutor(c.index, func() {
 			h(c, messageType, fin, data)
 			// do not free data if application layer need to use it in another goroutine.
 			if c.Server.ReleaseWebsocketPayload {
 				mempool.Free(data)
 			}
-			// })
+		}
+	} else {
+		conn.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
+			if c.Server.ReleaseWebsocketPayload {
+				mempool.Free(data)
+			}
 		}
 	}
 
