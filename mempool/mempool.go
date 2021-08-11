@@ -18,7 +18,7 @@ var (
 	// freeCntSize   int64
 )
 
-var DefaultMemPool = NewChosMemPool(64)
+var DefaultMemPool = NativeAllocator{}
 
 var pos = []byte{0, 1, 28, 2, 29, 14, 24, 3,
 	30, 22, 20, 15, 25, 17, 4, 8, 31, 27, 13, 23, 21, 19,
