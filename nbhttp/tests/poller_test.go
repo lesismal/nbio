@@ -28,20 +28,20 @@ var (
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.NewUpgrader()
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		panic(err)
-	}
-	wsConn := conn.(*websocket.Conn)
-	wsConn.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+	upgrader.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
 		c.WriteMessage(messageType, data)
 		fmt.Println("OnMessage:", messageType, string(data))
 		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	})
-	wsConn.OnClose(func(c *websocket.Conn, err error) {
+	upgrader.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 	})
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	wsConn := conn.(*websocket.Conn)
 	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
 }
 
