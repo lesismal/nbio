@@ -462,11 +462,6 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 		c.rTimer = nil
 	}
 
-	c.g.pollers[c.Hash()%len(c.g.pollers)].prepareClose(c)
-	return nil
-}
-
-func (c *Conn) release() {
 	mempool.Free(c.writeBuffer)
 	c.writeBuffer = nil
 
@@ -481,7 +476,7 @@ func (c *Conn) release() {
 		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
 	}
 
-	syscall.Close(c.fd)
+	return syscall.Close(c.fd)
 }
 
 func newConn(fd int, lAddr, rAddr net.Addr) *Conn {

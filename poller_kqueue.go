@@ -37,8 +37,6 @@ type poller struct {
 	pollType string
 
 	eventList []syscall.Kevent_t
-
-	closeQueue []*Conn
 }
 
 func (p *poller) addConn(c *Conn) {
@@ -51,13 +49,6 @@ func (p *poller) addConn(c *Conn) {
 
 func (p *poller) getConn(fd int) *Conn {
 	return p.g.connsUnix[fd]
-}
-
-func (p *poller) prepareClose(c *Conn) {
-	p.mux.Lock()
-	p.closeQueue = append(p.closeQueue, c)
-	p.mux.Unlock()
-	p.trigger()
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -101,7 +92,6 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if ev.Flags&syscall.EV_DELETE > 0 {
 		return
 	}
-
 	fd := int(ev.Ident)
 	c := p.getConn(fd)
 	if c != nil {
@@ -201,13 +191,6 @@ func (p *poller) readWriteLoop() {
 		if err != nil && err != syscall.EINTR {
 			return
 		}
-
-		p.mux.Lock()
-		for _, c := range p.closeQueue {
-			c.release()
-		}
-		p.closeQueue = nil
-		p.mux.Unlock()
 
 		for i := 0; i < n; i++ {
 			switch int(events[i].Ident) {
