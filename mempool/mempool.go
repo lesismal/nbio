@@ -22,6 +22,7 @@ type MemPool struct {
 	pool    sync.Pool
 
 	Debug        bool
+	mux          sync.Mutex
 	bufferStacks map[*byte]string
 }
 
@@ -84,6 +85,8 @@ func (mp *MemPool) Free(buf []byte) error {
 }
 
 func (mp *MemPool) saveStack(p *byte) {
+	mp.mux.Lock()
+	defer mp.mux.Unlock()
 	s, ok := mp.bufferStacks[p]
 	if ok {
 		sep := "--------------------------------------------------"
@@ -94,6 +97,8 @@ func (mp *MemPool) saveStack(p *byte) {
 }
 
 func (mp *MemPool) unsaveStack(p *byte) {
+	mp.mux.Lock()
+	defer mp.mux.Unlock()
 	delete(mp.bufferStacks, p)
 }
 
