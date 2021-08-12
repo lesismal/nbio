@@ -462,6 +462,10 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 		c.rTimer = nil
 	}
 
+	c.g.pollers[c.Hash()%len(c.g.pollers)].prepareClose(c)
+}
+
+func (c *Conn) release() {
 	mempool.Free(c.writeBuffer)
 	c.writeBuffer = nil
 

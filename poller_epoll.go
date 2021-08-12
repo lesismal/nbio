@@ -40,6 +40,9 @@ type poller struct {
 	ReadBuffer []byte
 
 	pollType string
+
+	sync.Mutex
+	closeQueue []*Conn
 }
 
 func (p *poller) addConn(c *Conn) {
@@ -58,6 +61,13 @@ func (p *poller) addConn(c *Conn) {
 
 func (p *poller) getConn(fd int) *Conn {
 	return p.g.connsUnix[fd]
+}
+
+func (p *poller) prepareClose(c *Conn) {
+	p.mux.Lock()
+	p.closeQueue = append(p.closeQueue, c)
+	p.mux.Unlock()
+	p.trigger()
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -136,6 +146,13 @@ func (p *poller) readWriteLoop() {
 			return
 		}
 
+		p.mux.Lock()
+		for _, c := range p.closeQueue {
+			c.release()
+		}
+		p.closeQueue = nil
+		p.mux.Unlock()
+
 		if n <= 0 {
 			msec = -1
 			// runtime.Gosched()
@@ -160,9 +177,13 @@ func (p *poller) stop() {
 	if p.listener != nil {
 		p.listener.Close()
 	} else {
-		n := uint64(1)
-		syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
+		p.trigger()
 	}
+}
+
+func (p *poller) trigger() error {
+	n := uint64(1)
+	syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
 }
 
 func (p *poller) addRead(fd int) error {
