@@ -368,12 +368,12 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 		// u.conn.Close()
 		u.conn.onClose(u.conn, err)
 	}
-	if len(u.buffer) > 0 {
-		mempool.Free(u.buffer)
-	}
-	if len(u.message) > 0 {
-		mempool.Free(u.message)
-	}
+	// if len(u.buffer) > 0 {
+	// 	mempool.Free(u.buffer)
+	// }
+	// if len(u.message) > 0 {
+	// 	mempool.Free(u.message)
+	// }
 }
 
 func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType, fin bool, data []byte) {
