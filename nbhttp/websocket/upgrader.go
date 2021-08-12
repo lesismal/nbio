@@ -312,34 +312,28 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					u.handleDataFrame(p, u.conn, u.opcode, fin, frame)
 				}
 			}
-			if u.conn.messageHandler != nil {
-				if bl > 0 {
-					if u.message == nil {
-						u.message = mempool.Malloc(len(body))
-						copy(u.message, body)
-					} else {
-						u.message = append(u.message, body...)
-					}
-				}
-				if fin {
-					if u.compress {
-						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-						b, err := readAll(rc, len(u.message)*2)
-						mempool.Free(u.message)
-						u.message = b
-						rc.Close()
-						if err != nil {
-							return err
-						}
-					}
-					op, msg := u.opcode, u.message
-					u.opcode, u.message = 0, nil
-					u.handleMessage(p, op, msg)
-					u.expectingFragments = false
-					u.compress = false
+			if bl > 0 {
+				if u.message == nil {
+					u.message = mempool.Malloc(len(body))
+					copy(u.message, body)
 				} else {
-					u.expectingFragments = true
+					u.message = append(u.message, body...)
 				}
+			}
+			if fin {
+				if u.compress {
+					rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
+					b, err := readAll(rc, len(u.message)*2)
+					mempool.Free(u.message)
+					u.message = b
+					rc.Close()
+					if err != nil {
+						return err
+					}
+				}
+				u.handleMessage(p, u.opcode, u.message)
+			} else {
+				u.expectingFragments = true
 			}
 		} else {
 			u.handleMessage(p, opcode, body)
@@ -382,28 +376,28 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	}
 }
 
-func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, messageType MessageType, fin bool, data []byte) {
-	opcode := u.opcode
+func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType, fin bool, data []byte) {
+	h := c.dataFrameHandler
 	p.Execute(func() {
-		c.dataFrameHandler(u.conn, opcode, fin, data)
+		h(u.conn, opcode, fin, data)
 	})
-	if fin && u.messageHandler == nil {
-		u.message = nil
-		u.opcode = 0
-	}
 }
 
-func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, message []byte) {
-	if opcode == TextMessage && !u.Server.CheckUtf8(message) {
+func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
+	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
 	}
-	rtn := mempool.Malloc(len(message))
-	copy(rtn, message)
+
+	h := u.conn.handleMessage
 	p.Execute(func() {
-		// needed for autobahn 7.4.* tls tests to pass
-		u.conn.handleMessage(opcode, rtn)
+		h(opcode, body)
 	})
+
+	u.compress = false
+	u.expectingFragments = false
+	u.message = nil
+	u.opcode = 0
 }
 
 func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
