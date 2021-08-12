@@ -86,7 +86,8 @@ func (mp *MemPool) Free(buf []byte) error {
 func (mp *MemPool) saveStack(p *byte) {
 	s, ok := mp.bufferStacks[p]
 	if ok {
-		err := fmt.Errorf("buffer exists: %p, previous alloc: \n%v", p, s)
+		sep := "--------------------------------------------------"
+		err := fmt.Errorf("%vbuffer exists: %p\n%vprevious allocation: \n%v\n%vcurrent allocation: \n%v", sep, p, sep, s, sep, getStack())
 		panic(err)
 	}
 	mp.bufferStacks[p] = getStack()
