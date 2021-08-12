@@ -109,9 +109,9 @@ func (p *Parser) Close(err error) {
 	if p.Processor != nil {
 		p.Processor.Close()
 	}
-	if len(p.cache) > 0 {
-		mempool.Free(p.cache)
-	}
+	// if len(p.cache) > 0 {
+	// 	mempool.Free(p.cache)
+	// }
 }
 
 func (p *Parser) Execute(f func()) {

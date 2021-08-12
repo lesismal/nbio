@@ -310,13 +310,13 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		if parser == nil {
 			logging.Error("nil parser")
 		}
-		parser.Execute(func() {
-			parser.Close(err)
-			svr._onClose(c, err)
-			svr.mux.Lock()
-			delete(svr.conns, c)
-			svr.mux.Unlock()
-		})
+		// parser.Execute(func() {
+		parser.Close(err)
+		svr._onClose(c, err)
+		svr.mux.Lock()
+		delete(svr.conns, c)
+		svr.mux.Unlock()
+		// })
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
 		defer func() {
@@ -337,9 +337,9 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(in
 		err := parser.Read(data)
 		if err != nil {
 			logging.Debug("parser.Read failed: %v", err)
-			parser.Execute(func() {
-				c.CloseWithError(err)
-			})
+			// parser.Execute(func() {
+			c.CloseWithError(err)
+			// })
 		}
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
@@ -484,14 +484,14 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			logging.Error("nil parser")
 			return
 		}
-		parser.Execute(func() {
-			parser.Conn.Close()
-			parser.Close(err)
-			svr._onClose(c, err)
-			svr.mux.Lock()
-			delete(svr.conns, c)
-			svr.mux.Unlock()
-		})
+		// parser.Execute(func() {
+		parser.Conn.Close()
+		parser.Close(err)
+		svr._onClose(c, err)
+		svr.mux.Lock()
+		delete(svr.conns, c)
+		svr.mux.Unlock()
+		// })
 	})
 
 	g.OnData(func(c *nbio.Conn, data []byte) {
@@ -516,18 +516,18 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 				_, nread, err := tlsConn.AppendAndRead(data, buffer)
 				data = nil
 				if err != nil {
-					parser.Execute(func() {
-						c.CloseWithError(err)
-					})
+					// parser.Execute(func() {
+					c.CloseWithError(err)
+					// })
 					return
 				}
 				if nread > 0 {
 					err := parser.Read(buffer[:nread])
 					if err != nil {
 						logging.Debug("parser.Read failed: %v", err)
-						parser.Execute(func() {
-							c.CloseWithError(err)
-						})
+						// parser.Execute(func() {
+						c.CloseWithError(err)
+						// })
 						return
 					}
 				}
