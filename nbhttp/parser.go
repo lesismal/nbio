@@ -92,6 +92,9 @@ func (p *Parser) nextState(state int8) {
 // }
 
 func (p *Parser) Close(err error) {
+	if p.state == stateClose {
+		return
+	}
 	p.state = stateClose
 	p.errClose = err
 	// active := atomic.AddInt32(&p.active, 1)
