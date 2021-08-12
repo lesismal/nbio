@@ -5,6 +5,8 @@
 package mempool
 
 import (
+	"fmt"
+	"runtime"
 	"sync"
 )
 
@@ -18,56 +20,80 @@ var DefaultMemPool = New(64)
 type MemPool struct {
 	minSize int
 	pool    sync.Pool
+
+	Debug        bool
+	bufferStacks map[*byte]string
 }
 
 func New(minSize int) *MemPool {
 	if minSize <= 0 {
 		minSize = 64
 	}
-	c := &MemPool{
-		minSize: minSize,
+	mp := &MemPool{
+		minSize:      minSize,
+		bufferStacks: map[*byte]string{},
 	}
-	c.pool.New = func() interface{} {
+	mp.pool.New = func() interface{} {
 		buf := make([]byte, minSize)
 		return &buf
 	}
-	return c
+	return mp
 }
 
-func (c *MemPool) Malloc(size int) []byte {
-	pbuf := c.pool.Get().(*[]byte)
+func (mp *MemPool) Malloc(size int) []byte {
+	pbuf := mp.pool.Get().(*[]byte)
 	if cap(*pbuf) < size {
 		if cap(*pbuf)+holderSize >= size {
 			*pbuf = (*pbuf)[:cap(*pbuf)]
 			*pbuf = append(*pbuf, holderBuffer[:size-len(*pbuf)]...)
 		} else {
-			c.pool.Put(pbuf)
+			mp.pool.Put(pbuf)
 			newBuf := make([]byte, size)
 			pbuf = &newBuf
 		}
+	}
+
+	if mp.Debug {
+		mp.unsaveStack(&(*pbuf)[0])
 	}
 
 	return (*pbuf)[:size]
 }
 
 // Realloc .
-func (c *MemPool) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
-	}
-	newBuf := c.Malloc(size)
-	copy(newBuf, buf)
-	c.Free(buf)
-	return newBuf[:size]
-}
+// func (c *MemPool) Realloc(buf []byte, size int) []byte {
+// 	if size <= cap(buf) {
+// 		return buf[:size]
+// 	}
+// 	newBuf := c.Malloc(size)
+// 	copy(newBuf, buf)
+// 	c.Free(buf)
+// 	return newBuf[:size]
+// }
 
 // Free .
-func (c *MemPool) Free(buf []byte) error {
-	if cap(buf) < c.minSize {
+func (mp *MemPool) Free(buf []byte) error {
+	if cap(buf) < mp.minSize {
 		return nil
 	}
-	c.pool.Put(&buf)
+	if mp.Debug {
+		mp.saveStack(&buf[0])
+	}
+	mp.pool.Put(&buf)
 	return nil
+}
+
+func (mp *MemPool) saveStack(p *byte) {
+	s, ok := mp.bufferStacks[p]
+	if ok {
+		err := fmt.Errorf("buffer exists: %p, previous alloc: \n%v", p, s)
+		panic(err)
+	}
+	mp.bufferStacks[p] = getStack()
+}
+
+func (mp *MemPool) unsaveStack(p *byte) {
+	delete(mp.bufferStacks, p)
 }
 
 // Malloc exports default package method
@@ -76,9 +102,9 @@ func Malloc(size int) []byte {
 }
 
 // Realloc exports default package method
-func Realloc(buf []byte, size int) []byte {
-	return DefaultMemPool.Realloc(buf, size)
-}
+// func Realloc(buf []byte, size int) []byte {
+// 	return DefaultMemPool.Realloc(buf, size)
+// }
 
 // Free exports default package method
 func Free(buf []byte) error {
@@ -87,4 +113,17 @@ func Free(buf []byte) error {
 
 func State() (int64, int64, string) {
 	return 0, 0, ""
+}
+
+func getStack() string {
+	i := 2
+	str := ""
+	for ; i < 10; i++ {
+		pc, file, line, ok := runtime.Caller(i)
+		if !ok {
+			break
+		}
+		str += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+	}
+	return str
 }
