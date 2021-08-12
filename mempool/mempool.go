@@ -21,9 +21,10 @@ type MemPool struct {
 	minSize int
 	pool    sync.Pool
 
-	Debug        bool
-	mux          sync.Mutex
-	bufferStacks map[*byte]string
+	Debug       bool
+	mux         sync.Mutex
+	allocStacks map[*byte]string
+	freeStacks  map[*byte]string
 }
 
 func New(minSize int) *MemPool {
@@ -31,8 +32,9 @@ func New(minSize int) *MemPool {
 		minSize = 64
 	}
 	mp := &MemPool{
-		minSize:      minSize,
-		bufferStacks: map[*byte]string{},
+		minSize:     minSize,
+		allocStacks: map[*byte]string{},
+		freeStacks:  map[*byte]string{},
 	}
 	mp.pool.New = func() interface{} {
 		buf := make([]byte, minSize)
@@ -55,7 +57,7 @@ func (mp *MemPool) Malloc(size int) []byte {
 	}
 
 	if mp.Debug {
-		mp.unsaveStack(&(*pbuf)[0])
+		mp.saveAllocStack(&(*pbuf)[0])
 	}
 
 	return (*pbuf)[:size]
@@ -78,28 +80,30 @@ func (mp *MemPool) Free(buf []byte) error {
 		return nil
 	}
 	if mp.Debug {
-		mp.saveStack(&buf[0])
+		mp.saveFreeStack(&buf[0])
 	}
 	mp.pool.Put(&buf)
 	return nil
 }
 
-func (mp *MemPool) saveStack(p *byte) {
+func (mp *MemPool) saveFreeStack(p *byte) {
 	mp.mux.Lock()
 	defer mp.mux.Unlock()
-	s, ok := mp.bufferStacks[p]
+	s, ok := mp.freeStacks[p]
 	if ok {
-		sep := "--------------------------------------------------"
-		err := fmt.Errorf("%vbuffer exists: %p\n%vprevious allocation: \n%v\n%vcurrent allocation: \n%v", sep, p, sep, s, sep, getStack())
+		allocStack := mp.allocStacks[p]
+		err := fmt.Errorf("\nbuffer exists: %p\nprevious allocation:\n%v\nprevious free:\n%v\ncurrent free:\n%v", p, allocStack, s, getStack())
 		panic(err)
 	}
-	mp.bufferStacks[p] = getStack()
+	mp.freeStacks[p] = getStack()
+	delete(mp.allocStacks, p)
 }
 
-func (mp *MemPool) unsaveStack(p *byte) {
+func (mp *MemPool) saveAllocStack(p *byte) {
 	mp.mux.Lock()
 	defer mp.mux.Unlock()
-	delete(mp.bufferStacks, p)
+	delete(mp.freeStacks, p)
+	mp.allocStacks[p] = getStack()
 }
 
 // Malloc exports default package method
