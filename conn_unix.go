@@ -463,6 +463,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	c.g.pollers[c.Hash()%len(c.g.pollers)].prepareClose(c)
+	return nil
 }
 
 func (c *Conn) release() {
@@ -480,7 +481,7 @@ func (c *Conn) release() {
 		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
 	}
 
-	return syscall.Close(c.fd)
+	syscall.Close(c.fd)
 }
 
 func newConn(fd int, lAddr, rAddr net.Addr) *Conn {

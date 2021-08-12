@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"

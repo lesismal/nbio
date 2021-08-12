@@ -35,6 +35,7 @@ func New(minSize int) *MemPool {
 		minSize:     minSize,
 		allocStacks: map[*byte]string{},
 		freeStacks:  map[*byte]string{},
+		Debug:       true,
 	}
 	mp.pool.New = func() interface{} {
 		buf := make([]byte, minSize)
