@@ -98,7 +98,7 @@ func validCloseCode(code int) bool {
 	return false
 }
 
-func (c *Conn) handleMessage(p *nbhttp.Parser, opcode MessageType, data []byte) {
+func (c *Conn) handleMessage(opcode MessageType, data []byte) {
 	switch opcode {
 	case TextMessage, BinaryMessage:
 		c.messageHandler(c, opcode, data)
