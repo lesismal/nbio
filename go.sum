@@ -2,8 +2,8 @@ github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAE
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/gorilla/websocket v1.4.2 h1:+/TMaTYc4QFitKJxsQ7Yye35DkWvkdLcvGKqM+x0Ufc=
 github.com/gorilla/websocket v1.4.2/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
-github.com/lesismal/llib v1.0.9 h1:8o2HTASrbczWjNRdxBY9l/9DNkgtVxUsOHf2LkfjmEA=
-github.com/lesismal/llib v1.0.9/go.mod h1:3vmCrIMrpkaoA3bDu/sI+J7EyEUMPbOvmAxb7PlzilM=
+github.com/lesismal/llib v1.0.10 h1:APFkfC0u2ndvi9qKdVQQ+1gw13QbDBKCZCYZXEcldIs=
+github.com/lesismal/llib v1.0.10/go.mod h1:3vmCrIMrpkaoA3bDu/sI+J7EyEUMPbOvmAxb7PlzilM=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 golang.org/x/crypto v0.0.0-20210513122933-cd7d49e622d5 h1:N6Jp/LCiEoIBX56BZSR2bepK5GtbSC2DDOYT742mMfE=
 golang.org/x/crypto v0.0.0-20210513122933-cd7d49e622d5/go.mod h1:P+XmwS30IXTQdn5tA2iutPOUgjI07+tq3H3K9MVA1s8=
