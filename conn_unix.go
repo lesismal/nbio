@@ -41,6 +41,8 @@ type Conn struct {
 	session interface{}
 
 	chWaitWrite chan struct{}
+
+	execList []func()
 }
 
 // Lock .

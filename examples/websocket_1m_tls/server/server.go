@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
@@ -81,8 +80,7 @@ func main() {
 		<-ticker.C
 		n := atomic.SwapUint64(&qps, 0)
 		total += n
-		_, _, s := mempool.State()
-		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n--------------------------------\n%v\n", i, runtime.NumGoroutine(), n, total, s)
+		fmt.Printf("running for %v seconds, NumGoroutine: %v, qps: %v, total: %v\n", i, runtime.NumGoroutine(), n, total)
 	}
 }
 

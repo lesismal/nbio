@@ -30,6 +30,8 @@ type Conn struct {
 
 	// user session
 	session interface{}
+
+	execList []func()
 }
 
 // Hash returns a hashcode

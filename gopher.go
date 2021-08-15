@@ -120,6 +120,8 @@ type Gopher struct {
 	timers    timerHeap
 	trigger   *time.Timer
 	chTimer   chan struct{}
+
+	Execute func(f func())
 }
 
 // Stop pollers
@@ -423,6 +425,12 @@ func (g *Gopher) initHandlers() {
 	g.AfterRead(func(c *Conn) {})
 	g.BeforeWrite(func(c *Conn) {})
 	g.OnStop(func() {})
+
+	if g.Execute == nil {
+		g.Execute = func(f func()) {
+			f()
+		}
+	}
 }
 
 func (g *Gopher) borrow(c *Conn) []byte {

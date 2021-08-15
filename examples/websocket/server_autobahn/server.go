@@ -32,7 +32,6 @@ func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 			}
 		})
 	} else {
-		u.EnableWriteCompression(true)
 		u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 			c.WriteMessage(messageType, data)
 		})
@@ -81,12 +80,12 @@ func main() {
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9999"},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, messageHandlerExecutePool.GoByIndex, tlsConfig)
+	}, mux, messageHandlerExecutePool.Go, tlsConfig)
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9998"},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, messageHandlerExecutePool.GoByIndex)
+	}, mux, messageHandlerExecutePool.Go)
 
 	log.Printf("calling start non-tls\n")
 	err = svr.Start()

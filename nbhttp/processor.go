@@ -224,36 +224,6 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		p.handler.ServeHTTP(response, request)
 		p.flushResponse(response)
 	})
-	// p.mux.Lock()
-	// isHead := p.resQueue == nil
-	// p.resQueue = append(p.resQueue, res)
-	// p.mux.Unlock()
-
-	// index := 0
-	// c, ok := p.conn.(*nbio.Conn)
-	// if ok {
-	// 	index = c.Hash()
-	// }
-
-	// if isHead {
-	// 	f := func() {
-	// 		for res != nil && res.request != nil {
-	// 			p.handler.ServeHTTP(res, res.request)
-	// 			p.flushResponse(res)
-
-	// 			p.mux.Lock()
-	// 			if len(p.resQueue) <= 1 {
-	// 				p.resQueue = nil
-	// 				p.mux.Unlock()
-	// 				return
-	// 			}
-	// 			p.resQueue = p.resQueue[1:]
-	// 			res = p.resQueue[0]
-	// 			p.mux.Unlock()
-	// 		}
-	// 	}
-	// 	p.executor(index, f)
-	// }
 }
 
 func (p *ServerProcessor) flushResponse(res *Response) {

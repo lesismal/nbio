@@ -12,24 +12,14 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 
-	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 )
 
-// var (
-// 	emptyParser = Parser{}
-
-// 	parserPool = sync.Pool{
-// 		New: func() interface{} {
-// 			return &Parser{}
-// 		},
-// 	}
-// )
-
 // Parser .
 type Parser struct {
+	mux sync.Mutex
+
 	cache []byte
 
 	proto string
@@ -51,15 +41,9 @@ type Parser struct {
 	state    int8
 	isClient bool
 
-	readLimit     int
-	minBufferSize int
+	readLimit int
 
-	active   int32
 	errClose error
-
-	messageExecuteMux   sync.Mutex
-	messageExecuteQueue []func()
-	executor            func(index int, f func())
 
 	Processor Processor
 
@@ -68,6 +52,8 @@ type Parser struct {
 	Server *Server
 
 	Conn net.Conn
+
+	Execute func(f func())
 }
 
 func (p *Parser) nextState(state int8) {
@@ -78,7 +64,18 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
-func (p *Parser) release() {
+func (p *Parser) Close(err error) {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+
+	if p.state == stateClose {
+		return
+	}
+
+	p.state = stateClose
+
+	p.errClose = err
+
 	if p.Upgrader != nil {
 		p.Upgrader.Close(p, p.errClose)
 	}
@@ -88,68 +85,20 @@ func (p *Parser) release() {
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)
 	}
-	// *p = emptyParser
-	// parserPool.Put(p)
-}
-
-func (p *Parser) Close(err error) {
-	p.state = stateClose
-	p.errClose = err
-	active := atomic.AddInt32(&p.active, 1)
-	if (active & 0x2) == 0x2 {
-		return
-	}
-	p.release()
-}
-
-func (p *Parser) Execute(f func()) {
-	p.messageExecuteMux.Lock()
-	isHead := p.messageExecuteQueue == nil
-	p.messageExecuteQueue = append(p.messageExecuteQueue, f)
-	p.messageExecuteMux.Unlock()
-
-	index := 0
-	c, ok := p.Conn.(*nbio.Conn)
-	if ok {
-		index = c.Hash()
-	}
-
-	if isHead {
-		f := func() {
-			for f != nil {
-				f()
-
-				p.messageExecuteMux.Lock()
-				if len(p.messageExecuteQueue) <= 1 {
-					p.messageExecuteQueue = nil
-					p.messageExecuteMux.Unlock()
-					return
-				}
-				p.messageExecuteQueue = p.messageExecuteQueue[1:]
-				f = p.messageExecuteQueue[0]
-				p.messageExecuteMux.Unlock()
-			}
-		}
-		p.executor(index, f)
-	}
 }
 
 // Read .
 func (p *Parser) Read(data []byte) error {
+	p.mux.Lock()
+	defer p.mux.Unlock()
+
+	if p.state == stateClose {
+		return ErrClosed
+	}
+
 	if len(data) == 0 {
 		return nil
 	}
-
-	active := atomic.AddInt32(&p.active, 2)
-	if (active & 0x1) == 0x1 {
-		return ErrClosed
-	}
-	defer func() {
-		active = atomic.AddInt32(&p.active, -2)
-		if (active & 0x1) == 0x1 {
-			p.release()
-		}
-	}()
 
 	var c byte
 	var start = 0
@@ -786,7 +735,7 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser .
-func NewParser(processor Processor, isClient bool, readLimit int, executor func(index int, f func())) *Parser {
+func NewParser(processor Processor, isClient bool, readLimit int, executor func(f func())) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
 	}
@@ -798,7 +747,7 @@ func NewParser(processor Processor, isClient bool, readLimit int, executor func(
 		readLimit = DefaultHTTPReadLimit
 	}
 	if executor == nil {
-		executor = func(index int, f func()) {
+		executor = func(f func()) {
 			f()
 		}
 	}
@@ -806,7 +755,7 @@ func NewParser(processor Processor, isClient bool, readLimit int, executor func(
 		state:     state,
 		readLimit: readLimit,
 		isClient:  isClient,
-		executor:  executor,
+		Execute:   executor,
 		Processor: processor,
 	}
 	return p
