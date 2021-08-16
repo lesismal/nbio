@@ -54,8 +54,8 @@ func (c *Conn) Execute(f func()) {
 				c.mux.Lock()
 				i++
 				if len(c.execList) == i {
-					c.mux.Unlock()
 					c.execList = c.execList[0:0]
+					c.mux.Unlock()
 					return
 				}
 				f = c.execList[i]
