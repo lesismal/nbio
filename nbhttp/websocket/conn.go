@@ -38,8 +38,6 @@ type Conn struct {
 
 	mux sync.Mutex
 
-	index int
-
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	compressionLevel         int
