@@ -48,12 +48,6 @@ type Conn struct {
 
 	session interface{}
 
-	pingHandler      func(c *Conn, appData string)
-	pongHandler      func(c *Conn, appData string)
-	closeHandler     func(c *Conn, code int, text string)
-	messageHandler   func(c *Conn, messageType MessageType, data []byte)
-	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
-
 	onClose func(c *Conn, err error)
 	Server  *nbhttp.Server
 }
@@ -96,52 +90,6 @@ func validCloseCode(code int) bool {
 		return true
 	}
 	return false
-}
-
-func (c *Conn) handleMessage(opcode MessageType, data []byte) {
-	switch opcode {
-	case TextMessage, BinaryMessage:
-		c.messageHandler(c, opcode, data)
-	case CloseMessage:
-		if len(data) >= 2 {
-			code := int(binary.BigEndian.Uint16(data[:2]))
-			if !validCloseCode(code) || !c.Server.CheckUtf8(data[2:]) {
-				protoErrorCode := make([]byte, 2)
-				binary.BigEndian.PutUint16(protoErrorCode, 1002)
-				c.WriteMessage(CloseMessage, protoErrorCode)
-			} else {
-				c.closeHandler(c, code, string(data[2:]))
-			}
-		} else {
-			c.WriteMessage(CloseMessage, nil)
-		}
-		// close immediately, no need to wait for data flushed on a blocked conn
-		c.Close()
-	case PingMessage:
-		c.pingHandler(c, string(data))
-	case PongMessage:
-		c.pongHandler(c, string(data))
-	default:
-		c.Close()
-	}
-}
-
-func (c *Conn) SetPingHandler(h func(*Conn, string)) {
-	if h != nil {
-		c.pingHandler = h
-	}
-}
-
-func (c *Conn) SetPongHandler(h func(*Conn, string)) {
-	if h != nil {
-		c.pongHandler = h
-	}
-}
-
-func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
-	if h != nil {
-		c.closeHandler = h
-	}
 }
 
 func (c *Conn) OnClose(h func(*Conn, error)) {
@@ -305,72 +253,16 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-func newConn(u *Upgrader, c net.Conn, index int, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
+func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
 	conn := &Conn{
 		Conn:                     c,
-		index:                    index,
 		subprotocol:              subprotocol,
 		remoteCompressionEnabled: remoteCompressionEnabled,
 		compressionLevel:         defaultCompressionLevel,
-		pongHandler:              func(*Conn, string) {},
-		messageHandler:           nil,
-		dataFrameHandler:         nil,
 		onClose:                  func(*Conn, error) {},
 	}
 	conn.EnableWriteCompression(u.enableWriteCompression)
 	conn.SetCompressionLevel(u.compressionLevel)
-
-	if u.pingMessageHandler != nil {
-		conn.pingHandler = u.pingMessageHandler
-	} else {
-		conn.pingHandler = func(c *Conn, data string) {
-			if len(data) > 125 {
-				conn.Close()
-				return
-			}
-			c.WriteMessage(PongMessage, []byte(data))
-		}
-	}
-
-	if u.pongMessageHandler != nil {
-		conn.pongHandler = u.pongMessageHandler
-	}
-
-	if u.closeMessageHandler != nil {
-		conn.closeHandler = u.closeMessageHandler
-	} else {
-		conn.closeHandler = func(c *Conn, code int, text string) {
-			if len(text)+2 > maxControlFramePayloadSize {
-				return //ErrInvalidControlFrame
-			}
-			buf := mempool.Malloc(len(text) + 2)
-			binary.BigEndian.PutUint16(buf[:2], uint16(code))
-			copy(buf[2:], text)
-			conn.WriteMessage(CloseMessage, buf)
-			mempool.Free(buf)
-		}
-	}
-
-	if u.messageHandler != nil {
-		h := u.messageHandler
-		conn.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			h(c, messageType, data)
-			if c.Server.ReleaseWebsocketPayload {
-				mempool.Free(data)
-			}
-		}
-
-	}
-
-	if u.dataFrameHandler != nil {
-		h := u.dataFrameHandler
-		conn.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			h(c, messageType, fin, data)
-			if c.Server.ReleaseWebsocketPayload {
-				mempool.Free(data)
-			}
-		}
-	}
 
 	conn.OnClose(u.onClose)
 

@@ -59,7 +59,26 @@ type Upgrader struct {
 }
 
 func NewUpgrader() *Upgrader {
-	return &Upgrader{}
+	u := &Upgrader{}
+	u.pingMessageHandler = func(c *Conn, data string) {
+		if len(data) > 125 {
+			u.conn.Close()
+			return
+		}
+		c.WriteMessage(PongMessage, []byte(data))
+	}
+	u.pongMessageHandler = func(*Conn, string) {}
+	u.closeMessageHandler = func(c *Conn, code int, text string) {
+		if len(text)+2 > maxControlFramePayloadSize {
+			return //ErrInvalidControlFrame
+		}
+		buf := mempool.Malloc(len(text) + 2)
+		binary.BigEndian.PutUint16(buf[:2], uint16(code))
+		copy(buf[2:], text)
+		u.conn.WriteMessage(CloseMessage, buf)
+		mempool.Free(buf)
+	}
+	return u
 }
 
 func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
@@ -81,20 +100,28 @@ func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
 }
 
 func (u *Upgrader) OnOpen(h func(*Conn)) {
-	if h != nil {
-		u.openHandler = h
-	}
+	u.openHandler = h
 }
 
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
-		u.messageHandler = h
+		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
+			if c.Server.ReleaseWebsocketPayload {
+				defer mempool.Free(data)
+			}
+			h(c, messageType, data)
+		}
 	}
 }
 
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
-		u.dataFrameHandler = h
+		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
+			if c.Server.ReleaseWebsocketPayload {
+				defer mempool.Free(data)
+			}
+			h(c, messageType, fin, data)
+		}
 	}
 }
 
@@ -230,7 +257,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(u, conn, nbc.Hash(), false, subprotocol, compress)
+	u.conn = newConn(u, conn, false, subprotocol, compress)
 	u.Server = parser.Server
 	u.conn.Server = parser.Server
 
@@ -280,12 +307,13 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		oldBuffer = u.buffer
 	}
 
+	var err error
 	for i := 0; true; i++ {
 		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
-		if err := u.validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
-			return err
-		}
 		if !ok {
+			break
+		}
+		if err = u.validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
 			break
 		}
 		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
@@ -294,7 +322,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				u.compress = res1
 			}
 			bl := len(body)
-			if u.conn.dataFrameHandler != nil {
+			if u.dataFrameHandler != nil {
 				var frame []byte
 				if bl > 0 {
 					frame = mempool.Malloc(bl)
@@ -316,13 +344,14 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			}
 			if fin {
 				if u.compress {
+					var b []byte
 					rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-					b, err := readAll(rc, len(u.message)*2)
+					b, err = readAll(rc, len(u.message)*2)
 					mempool.Free(u.message)
 					u.message = b
 					rc.Close()
 					if err != nil {
-						return err
+						break
 					}
 				}
 				u.handleMessage(p, u.opcode, u.message)
@@ -358,7 +387,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		}
 	}
 
-	return nil
+	return err
 }
 
 // Close .
@@ -376,7 +405,7 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 }
 
 func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType, fin bool, data []byte) {
-	h := c.dataFrameHandler
+	h := u.dataFrameHandler
 	p.Execute(func() {
 		h(u.conn, opcode, fin, data)
 	})
@@ -388,9 +417,8 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 		return
 	}
 
-	h := u.conn.handleMessage
 	p.Execute(func() {
-		h(opcode, body)
+		u.handleWsMessage(u.conn, opcode, body)
 	})
 
 	u.compress = false
@@ -400,10 +428,37 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 }
 
 func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
-	h := u.conn.handleMessage
 	p.Execute(func() {
-		h(opcode, body)
+		u.handleWsMessage(u.conn, opcode, body)
 	})
+}
+
+func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
+	switch opcode {
+	case TextMessage, BinaryMessage:
+		u.messageHandler(c, opcode, data)
+	case CloseMessage:
+		if len(data) >= 2 {
+			code := int(binary.BigEndian.Uint16(data[:2]))
+			if !validCloseCode(code) || !c.Server.CheckUtf8(data[2:]) {
+				protoErrorCode := make([]byte, 2)
+				binary.BigEndian.PutUint16(protoErrorCode, 1002)
+				c.WriteMessage(CloseMessage, protoErrorCode)
+			} else {
+				u.closeMessageHandler(c, code, string(data[2:]))
+			}
+		} else {
+			c.WriteMessage(CloseMessage, nil)
+		}
+		// close immediately, no need to wait for data flushed on a blocked conn
+		c.Close()
+	case PingMessage:
+		u.pingMessageHandler(c, string(data))
+	case PongMessage:
+		u.pongMessageHandler(c, string(data))
+	default:
+		c.Close()
+	}
 }
 
 func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
