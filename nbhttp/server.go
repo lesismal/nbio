@@ -301,7 +301,7 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
-		c.Execute(func() {
+		c.MustExecute(func() {
 			parser := c.Session().(*Parser)
 			if parser == nil {
 				logging.Error("nil parser")
@@ -472,7 +472,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
-		c.Execute(func() {
+		c.MustExecute(func() {
 			parser := c.Session().(*Parser)
 			if parser == nil {
 				logging.Error("nil parser")

@@ -38,6 +38,7 @@ type Conn struct {
 
 	mux sync.Mutex
 
+	onCloseCalled            bool
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	compressionLevel         int
@@ -93,7 +94,12 @@ func validCloseCode(code int) bool {
 func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h != nil {
 		c.onClose = func(c *Conn, err error) {
-			h(c, err)
+			c.mux.Lock()
+			defer c.mux.Unlock()
+			if !c.onCloseCalled {
+				c.onCloseCalled = true
+				h(c, err)
+			}
 		}
 
 		nbc, ok := c.Conn.(*nbio.Conn)
@@ -102,7 +108,7 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 			defer nbc.Unlock()
 			closed, err := nbc.IsClosed()
 			if closed {
-				h(c, err)
+				c.onClose(c, err)
 			}
 		}
 	}
@@ -261,8 +267,6 @@ func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteC
 	}
 	conn.EnableWriteCompression(u.enableWriteCompression)
 	conn.SetCompressionLevel(u.compressionLevel)
-
-	conn.OnClose(u.onClose)
 
 	return conn
 }

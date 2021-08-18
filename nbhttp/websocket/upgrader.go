@@ -270,6 +270,8 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
+	u.conn.OnClose(u.onClose)
+
 	return u.conn, nil
 }
 
@@ -393,7 +395,6 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 // Close .
 func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
-		// u.conn.Close()
 		u.conn.onClose(u.conn, err)
 	}
 	if len(u.buffer) > 0 {
