@@ -50,23 +50,19 @@ func (r *fixedRunner) taskLoop() {
 // FixedPool .
 type FixedPool struct {
 	wg      *sync.WaitGroup
-	mux     sync.Mutex
 	stopped int32
 
-	chTask   chan func()
-	chRunner chan struct{}
-	chClose  chan struct{}
+	chTask  chan func()
+	chClose chan struct{}
 
 	runners []*fixedRunner
 }
 
-func (tp *FixedPool) push(f func()) error {
+func (tp *FixedPool) push(f func()) {
 	select {
 	case tp.chTask <- f:
 	case <-tp.chClose:
-		return ErrStopped
 	}
-	return nil
 }
 
 func (tp *FixedPool) pushByIndex(index int, f func()) {
@@ -75,7 +71,6 @@ func (tp *FixedPool) pushByIndex(index int, f func()) {
 	case r.chTaskBy <- f:
 	case <-tp.chClose:
 	}
-	return
 }
 
 // Go .

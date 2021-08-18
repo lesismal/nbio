@@ -34,11 +34,21 @@ func (mp *MixedPool) call(f func()) {
 // Go .
 func (mp *MixedPool) Go(f func()) {
 	if atomic.AddInt32(&mp.cuncurrent, 1) <= mp.nativeSize {
-		go mp.call(f)
-		return
+		go func() {
+			mp.call(f)
+			for len(mp.chTask) > 0 {
+				select {
+				case f = <-mp.chTask:
+					mp.call(f)
+				default:
+					return
+				}
+			}
+		}()
+	} else {
+		atomic.AddInt32(&mp.cuncurrent, -1)
+		mp.FixedNoOrderPool.Go(f)
 	}
-	atomic.AddInt32(&mp.cuncurrent, -1)
-	mp.FixedNoOrderPool.Go(f)
 }
 
 // GoByIndex .

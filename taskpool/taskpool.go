@@ -47,7 +47,6 @@ func (r *runner) taskLoop(maxIdleTime time.Duration, chTask <-chan func(), chClo
 // TaskPool .
 type TaskPool struct {
 	wg      *sync.WaitGroup
-	mux     sync.Mutex
 	running bool
 	stopped int32
 
@@ -58,7 +57,7 @@ type TaskPool struct {
 	maxIdleTime time.Duration
 }
 
-func (tp *TaskPool) push(f func()) error {
+func (tp *TaskPool) push(f func()) {
 	select {
 	case tp.chTask <- f:
 	case tp.chRunner <- struct{}{}:
@@ -66,9 +65,7 @@ func (tp *TaskPool) push(f func()) error {
 		tp.wg.Add(1)
 		go r.taskLoop(tp.maxIdleTime, tp.chTask, tp.chClose, f)
 	case <-tp.chClose:
-		return ErrStopped
 	}
-	return nil
 }
 
 // Go .

@@ -7,6 +7,7 @@ import (
 )
 
 const testLoopNum = 1024
+const sleepTime = time.Nanosecond * 10
 
 func BenchmarkGo(b *testing.B) {
 	b.ReportAllocs()
@@ -17,7 +18,9 @@ func BenchmarkGo(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			go call(func() {
-				// time.Sleep(time.Microsecond)
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
 				wg.Done()
 			})
 		}
@@ -37,7 +40,9 @@ func BenchmarkFixedPoolGo(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			p.Go(func() {
-				// time.Sleep(time.Microsecond)
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
 				wg.Done()
 			})
 		}
@@ -57,7 +62,9 @@ func BenchmarkFixedPoolGoByIndex(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			p.GoByIndex(j, func() {
-				// time.Sleep(time.Microsecond)
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
 				wg.Done()
 			})
 		}
@@ -77,7 +84,9 @@ func BenchmarkFixedNoOrderPool(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			p.Go(func() {
-				// time.Sleep(time.Microsecond)
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
 				wg.Done()
 			})
 		}
@@ -86,7 +95,7 @@ func BenchmarkFixedNoOrderPool(b *testing.B) {
 }
 
 func BenchmarkMixedPool(b *testing.B) {
-	p := NewMixedPool(1024, 4, 512)
+	p := NewMixedPool(32, 4, 1024)
 	defer p.Stop()
 
 	b.ReportAllocs()
@@ -97,7 +106,9 @@ func BenchmarkMixedPool(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			p.Go(func() {
-				// time.Sleep(time.Microsecond)
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
 				wg.Done()
 			})
 		}
@@ -117,7 +128,9 @@ func BenchmarkTaskPool(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			p.Go(func() {
-				// time.Sleep(time.Microsecond)
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
 				wg.Done()
 			})
 		}
