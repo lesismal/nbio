@@ -134,11 +134,11 @@ func (p *poller) start() {
 
 	logging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
 	defer logging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
-	defer syscall.Close(p.kfd)
 
 	if p.isListener {
 		p.acceptorLoop()
 	} else {
+		defer syscall.Close(p.kfd)
 		p.readWriteLoop()
 	}
 }
