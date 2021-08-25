@@ -81,7 +81,8 @@ type Config struct {
 	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
 	LockPoller bool
 
-	EPOLLMOD uint32
+	// EpollMod sets the epoll mod, EPOLLLT by default.
+	EpollMod uint32
 }
 
 // Gopher is a manager of poller
@@ -201,7 +202,6 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 func (g *Gopher) OnRead(h func(c *Conn)) {
 	g.onRead = h
 }
-
 
 // OnData registers callback for data
 func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
