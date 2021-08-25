@@ -93,6 +93,11 @@ func NewGopher(conf Config) *Gopher {
 		conf.MaxReadTimesPerEventLoop = DefaultMaxReadTimesPerEventLoop
 	}
 
+	var epollMod int = 0
+	if conf.EPOLLMOD == EPOLLET {
+		epollMod = syscall.EPOLLET
+	}
+
 	g := &Gopher{
 		Name:                     conf.Name,
 		network:                  conf.Network,
@@ -103,6 +108,7 @@ func NewGopher(conf Config) *Gopher {
 		maxWriteBufferSize:       conf.MaxWriteBufferSize,
 		maxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
 		minConnCacheSize:         conf.MinConnCacheSize,
+		epollMod:                 epollMod,
 		lockListener:             conf.LockListener,
 		lockPoller:               conf.LockPoller,
 		listeners:                make([]*poller, len(conf.Addrs)),
