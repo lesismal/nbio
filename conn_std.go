@@ -46,8 +46,12 @@ func (c *Conn) Hash() int {
 
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
+	if c.closeErr != nil {
+		return 0, c.closeErr
+	}
+
 	var reader io.Reader = c.conn
-	if c.cache == nil {
+	if c.cache != nil {
 		reader = c.cache
 	}
 	nread, err := reader.Read(b)
@@ -63,16 +67,17 @@ func (c *Conn) read(b []byte) (int, error) {
 	if c.closeErr == nil {
 		c.closeErr = err
 	}
-	if nread > 0 {
-		if c.g.onRead != nil {
+	if c.g.onRead != nil {
+		if nread > 0 {
 			if c.cache == nil {
 				c.cache = bytes.NewBuffer(nil)
 			}
 			c.cache.Write(b[:nread])
-			c.g.onRead(c)
-		} else {
-			c.g.onData(c, b[:nread])
 		}
+		c.g.onRead(c)
+		return nread, nil
+	} else {
+		c.g.onData(c, b[:nread])
 	}
 	return nread, err
 }
