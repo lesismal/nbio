@@ -2,12 +2,15 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package nbio
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -32,6 +35,8 @@ type Conn struct {
 	session interface{}
 
 	execList []func()
+
+	cache *bytes.Buffer
 }
 
 // Hash returns a hashcode
@@ -41,10 +46,33 @@ func (c *Conn) Hash() int {
 
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
+	var reader io.Reader = c.conn
+	if c.cache == nil {
+		reader = c.cache
+	}
+	nread, err := reader.Read(b)
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+	return nread, err
+}
+
+func (c *Conn) read(b []byte) (int, error) {
 	c.g.beforeRead(c)
 	nread, err := c.conn.Read(b)
 	if c.closeErr == nil {
 		c.closeErr = err
+	}
+	if nread > 0 {
+		if c.g.onRead != nil {
+			if c.cache == nil {
+				c.cache = bytes.NewBuffer(nil)
+			}
+			c.cache.Write(b[:nread])
+			c.g.onRead(c)
+		} else {
+			c.g.onData(c, b[:nread])
+		}
 	}
 	return nread, err
 }
