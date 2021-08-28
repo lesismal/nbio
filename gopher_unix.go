@@ -94,7 +94,7 @@ func NewGopher(conf Config) *Gopher {
 	}
 
 	var epollMod int = 0
-	if conf.EPOLLMOD == EPOLLET {
+	if conf.EpollMod == EPOLLET {
 		epollMod = syscall.EPOLLET
 	}
 
