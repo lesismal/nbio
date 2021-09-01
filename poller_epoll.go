@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	EPOLLLT = syscall.EPOLLLT
+	EPOLLLT = 0
 	EPOLLET = syscall.EPOLLET
 )
 

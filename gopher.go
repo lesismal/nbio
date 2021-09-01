@@ -77,7 +77,7 @@ type Config struct {
 	LockPoller bool
 
 	// EpollMod sets the epoll mod, EPOLLLT by default.
-	EpollMod uint32
+	EpollMod int
 }
 
 // Gopher is a manager of poller
