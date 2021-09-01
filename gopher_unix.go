@@ -2,6 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build linux || darwin || netbsd || freebsd || openbsd || dragonfly
 // +build linux darwin netbsd freebsd openbsd dragonfly
 
 package nbio
@@ -93,11 +94,6 @@ func NewGopher(conf Config) *Gopher {
 		conf.MaxReadTimesPerEventLoop = DefaultMaxReadTimesPerEventLoop
 	}
 
-	var epollMod int = 0
-	if conf.EpollMod == EPOLLET {
-		epollMod = syscall.EPOLLET
-	}
-
 	g := &Gopher{
 		Name:                     conf.Name,
 		network:                  conf.Network,
@@ -108,7 +104,7 @@ func NewGopher(conf Config) *Gopher {
 		maxWriteBufferSize:       conf.MaxWriteBufferSize,
 		maxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
 		minConnCacheSize:         conf.MinConnCacheSize,
-		epollMod:                 epollMod,
+		epollMod:                 conf.EpollMod,
 		lockListener:             conf.LockListener,
 		lockPoller:               conf.LockPoller,
 		listeners:                make([]*poller, len(conf.Addrs)),
