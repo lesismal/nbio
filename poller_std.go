@@ -10,15 +10,17 @@ package nbio
 import (
 	"net"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/lesismal/nbio/logging"
 )
 
-type poller struct {
-	mux sync.Mutex
+const (
+	EPOLLLT = 0
+	EPOLLET = 1
+)
 
+type poller struct {
 	g *Gopher
 
 	index int

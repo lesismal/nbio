@@ -33,11 +33,6 @@ var (
 	MaxOpenFiles = 1024 * 1024
 )
 
-const (
-	EPOLLLT = 0
-	EPOLLET = 1
-)
-
 // Config Of Gopher
 type Config struct {
 	// Name describes your gopher name for logging, it's set to "NB" by default.

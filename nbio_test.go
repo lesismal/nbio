@@ -89,7 +89,7 @@ func TestEcho(t *testing.T) {
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		recved := atomic.AddInt64(&total, int64(len(data)))
-		if recved >= int64(clientNum*msgSize) {
+		if len(data) > 0 && recved >= int64(clientNum*msgSize) {
 			close(done)
 		}
 	})

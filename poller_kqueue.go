@@ -17,6 +17,11 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
+const (
+	EPOLLLT = 0
+	EPOLLET = 1
+)
+
 type poller struct {
 	mux sync.Mutex
 

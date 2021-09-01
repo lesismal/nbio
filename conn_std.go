@@ -76,7 +76,7 @@ func (c *Conn) read(b []byte) (int, error) {
 		}
 		c.g.onRead(c)
 		return nread, nil
-	} else {
+	} else if nread > 0 {
 		c.g.onData(c, b[:nread])
 	}
 	return nread, err

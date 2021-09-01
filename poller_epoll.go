@@ -2,6 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build linux
 // +build linux
 
 package nbio
@@ -15,6 +16,11 @@ import (
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
+)
+
+const (
+	EPOLLLT = syscall.EPOLLLT
+	EPOLLET = syscall.EPOLLET
 )
 
 const (
