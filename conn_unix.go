@@ -2,6 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build linux || darwin || netbsd || freebsd || openbsd || dragonfly
 // +build linux darwin netbsd freebsd openbsd dragonfly
 
 package nbio
@@ -43,21 +44,6 @@ type Conn struct {
 	chWaitWrite chan struct{}
 
 	execList []func()
-}
-
-// Lock .
-func (c *Conn) Lock() {
-	c.mux.Lock()
-}
-
-// Unlock .
-func (c *Conn) Unlock() {
-	c.mux.Unlock()
-}
-
-// IsClosed .
-func (c *Conn) IsClosed() (bool, error) {
-	return c.closed, c.closeErr
 }
 
 // Hash returns a hash code

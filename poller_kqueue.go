@@ -2,6 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly
 // +build darwin netbsd freebsd openbsd dragonfly
 
 package nbio
@@ -14,6 +15,11 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/logging"
+)
+
+const (
+	EPOLLLT = 0
+	EPOLLET = 1
 )
 
 type poller struct {
@@ -96,23 +102,29 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter&syscall.EVFILT_READ == syscall.EVFILT_READ {
-			for i := 0; i < 3; i++ {
-				buffer := p.g.borrow(c)
-				n, err := c.Read(buffer)
-				if n > 0 {
-					p.g.onData(c, buffer[:n])
+			if p.g.onRead == nil {
+				for {
+					buffer := p.g.borrow(c)
+					n, err := c.Read(buffer)
+					if n > 0 {
+						p.g.onData(c, buffer[:n])
+					}
+					p.g.payback(c, buffer)
+					if err == syscall.EINTR {
+						continue
+					}
+					if err == syscall.EAGAIN {
+						return
+					}
+					if (err != nil || n == 0) && ev.Flags&syscall.EV_DELETE == 0 {
+						c.closeWithError(err)
+					}
+					if n < len(buffer) {
+						break
+					}
 				}
-				p.g.payback(c, buffer)
-				if err == syscall.EINTR {
-					continue
-				}
-				if err == syscall.EAGAIN {
-					return
-				}
-				if (err != nil || n == 0) && ev.Flags&syscall.EV_DELETE == 0 {
-					c.closeWithError(err)
-				}
-				return
+			} else {
+				p.g.onRead(c)
 			}
 		}
 

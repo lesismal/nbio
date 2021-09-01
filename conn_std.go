@@ -2,12 +2,15 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package nbio
 
 import (
+	"bytes"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"time"
@@ -32,6 +35,8 @@ type Conn struct {
 	session interface{}
 
 	execList []func()
+
+	cache *bytes.Buffer
 }
 
 // Hash returns a hashcode
@@ -39,27 +44,40 @@ func (c *Conn) Hash() int {
 	return c.hash
 }
 
-// Lock .
-func (c *Conn) Lock() {
-	c.mux.Lock()
-}
-
-// Unlock .
-func (c *Conn) Unlock() {
-	c.mux.Unlock()
-}
-
-// IsClosed .
-func (c *Conn) IsClosed() (bool, error) {
-	return c.closed, c.closeErr
-}
-
 // Read wraps net.Conn.Read
 func (c *Conn) Read(b []byte) (int, error) {
+	if c.closeErr != nil {
+		return 0, c.closeErr
+	}
+
+	var reader io.Reader = c.conn
+	if c.cache != nil {
+		reader = c.cache
+	}
+	nread, err := reader.Read(b)
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+	return nread, err
+}
+
+func (c *Conn) read(b []byte) (int, error) {
 	c.g.beforeRead(c)
 	nread, err := c.conn.Read(b)
 	if c.closeErr == nil {
 		c.closeErr = err
+	}
+	if c.g.onRead != nil {
+		if nread > 0 {
+			if c.cache == nil {
+				c.cache = bytes.NewBuffer(nil)
+			}
+			c.cache.Write(b[:nread])
+		}
+		c.g.onRead(c)
+		return nread, nil
+	} else if nread > 0 {
+		c.g.onData(c, b[:nread])
 	}
 	return nread, err
 }

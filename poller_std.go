@@ -2,6 +2,7 @@
 // Use of this source code is governed by an MIT-style
 // license that can be found in the LICENSE file.
 
+//go:build windows
 // +build windows
 
 package nbio
@@ -9,15 +10,17 @@ package nbio
 import (
 	"net"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/lesismal/nbio/logging"
 )
 
-type poller struct {
-	mux sync.Mutex
+const (
+	EPOLLLT = 0
+	EPOLLET = 1
+)
 
+type poller struct {
 	g *Gopher
 
 	index int
@@ -48,10 +51,7 @@ func (p *poller) accept() error {
 func (p *poller) readConn(c *Conn) {
 	for {
 		buffer := p.g.borrow(c)
-		n, err := c.Read(buffer)
-		if n > 0 {
-			p.g.onData(c, buffer[:n])
-		}
+		_, err := c.read(buffer)
 		p.g.payback(c, buffer)
 		if err != nil {
 			c.Close()

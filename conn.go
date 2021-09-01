@@ -27,6 +27,21 @@ func DialTimeout(network string, address string, timeout time.Duration) (*Conn, 
 	return NBConn(conn)
 }
 
+// Lock .
+func (c *Conn) Lock() {
+	c.mux.Lock()
+}
+
+// Unlock .
+func (c *Conn) Unlock() {
+	c.mux.Unlock()
+}
+
+// IsClosed .
+func (c *Conn) IsClosed() (bool, error) {
+	return c.closed, c.closeErr
+}
+
 func (c *Conn) ExecuteLen() int {
 	c.mux.Lock()
 	n := len(c.execList)

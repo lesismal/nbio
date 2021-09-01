@@ -75,6 +75,9 @@ type Config struct {
 
 	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
 	LockPoller bool
+
+	// EpollMod sets the epoll mod, EPOLLLT by default.
+	EpollMod int
 }
 
 // Gopher is a manager of poller
@@ -93,6 +96,7 @@ type Gopher struct {
 	maxWriteBufferSize       int
 	maxReadTimesPerEventLoop int
 	minConnCacheSize         int
+	epollMod                 int
 	lockListener             bool
 	lockPoller               bool
 
@@ -106,6 +110,7 @@ type Gopher struct {
 
 	onOpen            func(c *Conn)
 	onClose           func(c *Conn, err error)
+	onRead            func(c *Conn)
 	onData            func(c *Conn, data []byte)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
@@ -186,6 +191,11 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 			h(c, err)
 		})
 	}
+}
+
+// OnRead registers callback for reading event
+func (g *Gopher) OnRead(h func(c *Conn)) {
+	g.onRead = h
 }
 
 // OnData registers callback for data
