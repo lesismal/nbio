@@ -48,7 +48,7 @@ type Conn struct {
 	session interface{}
 
 	onClose func(c *Conn, err error)
-	Server  *nbhttp.Server
+	Engine  *nbhttp.Engine
 }
 
 func validCloseCode(code int) bool {
@@ -151,8 +151,8 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		sendOpcode := true
 		for len(data) > 0 {
 			n := len(data)
-			if n > c.Server.MaxWebsocketFramePayloadSize {
-				n = c.Server.MaxWebsocketFramePayloadSize
+			if n > c.Engine.MaxWebsocketFramePayloadSize {
+				n = c.Engine.MaxWebsocketFramePayloadSize
 			}
 			err := c.writeFrame(messageType, sendOpcode, n == len(data), data[:n], compress)
 			if err != nil {

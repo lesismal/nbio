@@ -49,7 +49,7 @@ type Parser struct {
 
 	Upgrader Upgrader
 
-	Server *Server
+	Engine *Engine
 
 	Conn net.Conn
 
@@ -80,7 +80,7 @@ func (p *Parser) Close(err error) {
 		p.Upgrader.Close(p, p.errClose)
 	}
 	if p.Processor != nil {
-		p.Processor.Close()
+		p.Processor.Close(p, p.errClose)
 	}
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)

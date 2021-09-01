@@ -69,7 +69,7 @@ type Processor interface {
 	OnBody(data []byte)
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
-	Close()
+	Close(p *Parser, err error)
 }
 
 // ServerProcessor .
@@ -250,7 +250,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 }
 
 // Close .
-func (p *ServerProcessor) Close() {
+func (p *ServerProcessor) Close(parser *Parser, err error) {
 	// active := atomic.AddInt32(&p.active, 1)
 	// if (active & 0x2) > 0x1 {
 	// 	return
@@ -281,11 +281,11 @@ func (p *ServerProcessor) release() {
 }
 
 // HandleMessage .
-func (p *ServerProcessor) HandleMessage(handler http.Handler) {
-	if handler != nil {
-		p.handler = handler
-	}
-}
+// func (p *ServerProcessor) HandleMessage(handler http.Handler) {
+// 	if handler != nil {
+// 		p.handler = handler
+// 	}
+// }
 
 // NewServerProcessor .
 func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.Duration, enableSendfile bool) Processor {
@@ -314,14 +314,14 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.
 
 // ClientProcessor .
 type ClientProcessor struct {
-	conn     net.Conn
+	client   *Client
 	response *http.Response
-	handler  func(*http.Response)
+	handler  func(res *http.Response, err error)
 }
 
 // Conn .
 func (p *ClientProcessor) Conn() net.Conn {
-	return p.conn
+	return p.client.Conn
 }
 
 // OnMethod .
@@ -387,29 +387,26 @@ func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ClientProcessor) OnComplete(parser *Parser) {
-	p.handler(p.response)
+	p.handler(p.response, nil)
 	p.response = nil
 }
 
 // Close .
-func (p *ClientProcessor) Close() {
-
+func (p *ClientProcessor) Close(parser *Parser, err error) {
+	p.client.CloseWithError(err)
 }
 
 // HandleMessage .
-func (p *ClientProcessor) HandleMessage(handler func(*http.Response)) {
-	if handler != nil {
-		p.handler = handler
-	}
-}
+// func (p *ClientProcessor) HandleMessage(handler func(*http.Response)) {
+// 	if handler != nil {
+// 		p.handler = handler
+// 	}
+// }
 
 // NewClientProcessor .
-func NewClientProcessor(conn net.Conn, handler func(*http.Response)) Processor {
-	if handler == nil {
-		panic(errors.New("invalid handler for ClientProcessor: nil"))
-	}
+func NewClientProcessor(client *Client, handler func(res *http.Response, err error)) Processor {
 	return &ClientProcessor{
-		conn:    conn,
+		client:  client,
 		handler: handler,
 	}
 }
@@ -468,7 +465,7 @@ func (p *EmptyProcessor) OnComplete(parser *Parser) {
 }
 
 // Close .
-func (p *EmptyProcessor) Close() {
+func (p *EmptyProcessor) Close(parser *Parser, err error) {
 
 }
 
