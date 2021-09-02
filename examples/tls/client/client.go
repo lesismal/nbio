@@ -52,8 +52,8 @@ func main() {
 	}
 	defer g.Stop()
 
-	for i := 0; i < 100; i++ {
-		go func() {
+	for i := 0; i < 1; i++ {
+		func() {
 			// step 1: make a tls.Conn by tls.Dial
 			tlsConn, err := tls.Dial("tcp", addr, tlsConfig)
 			if err != nil {

@@ -130,6 +130,8 @@ type Engine struct {
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
+
+	TLSCOnfig *tls.Config
 }
 
 // OnOpen registers callback for new connection
@@ -452,6 +454,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
+		TLSCOnfig:                    tlsConfig,
 	}
 
 	isClient := false

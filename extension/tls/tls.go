@@ -3,6 +3,7 @@ package tls
 import (
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/mempool"
 )
 
 // Conn .
@@ -12,8 +13,8 @@ type Conn = tls.Conn
 type Config = tls.Config
 
 // Dial returns a net.Conn to be added to a Gopher
-func Dial(network, addr string, config *Config, v ...interface{}) (*tls.Conn, error) {
-	tlsConn, err := tls.Dial(network, addr, config, v...)
+func Dial(network, addr string, config *Config) (*tls.Conn, error) {
+	tlsConn, err := tls.Dial(network, addr, config, mempool.DefaultMemPool)
 	if err != nil {
 		return nil, err
 	}
@@ -30,7 +31,7 @@ func WrapOpen(tlsConfig *Config, isClient bool, h func(c *nbio.Conn, tlsConn *Co
 			tlsConn = sesseion.(*tls.Conn)
 		}
 		if tlsConn == nil && !isClient {
-			tlsConn := tls.NewConn(c, tlsConfig, isClient, true)
+			tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
 			c.SetSession((*Conn)(tlsConn))
 		}
 		if h != nil {

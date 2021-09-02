@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
@@ -8,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lesismal/nbio/extension/tls"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -16,13 +18,27 @@ var (
 	failed       uint64 = 0
 	totalSuccess uint64 = 0
 	totalFailed  uint64 = 0
+
+	tlsConfig = &tls.Config{
+		InsecureSkipVerify: true,
+	}
+
+	isTLS = flag.Bool("tls", true, "is tls")
 )
 
 func main() {
-	engine := nbhttp.NewEngine(nbhttp.Config{
-		NPoller: runtime.NumCPU(),
-	}, nil, nil)
+	flag.Parse()
 
+	var engine *nbhttp.Engine
+	if !*isTLS {
+		engine = nbhttp.NewEngine(nbhttp.Config{
+			NPoller: runtime.NumCPU(),
+		}, nil, nil)
+	} else {
+		engine = nbhttp.NewEngineTLS(nbhttp.Config{
+			NPoller: runtime.NumCPU(),
+		}, nil, nil, tlsConfig)
+	}
 	err := engine.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
