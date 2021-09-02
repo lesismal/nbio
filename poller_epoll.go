@@ -20,7 +20,7 @@ import (
 
 const (
 	EPOLLLT = 0
-	EPOLLET = syscall.EPOLLET
+	EPOLLET = 0x80000000
 )
 
 const (
