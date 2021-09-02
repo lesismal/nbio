@@ -201,6 +201,9 @@ func (p *poller) readWriteLoop() {
 				}
 			}
 		}
+		if n == len(events) {
+			events = make([]syscall.EpollEvent, n*2)
+		}
 	}
 }
 
