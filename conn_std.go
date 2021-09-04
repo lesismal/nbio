@@ -37,6 +37,8 @@ type Conn struct {
 	execList []func()
 
 	cache *bytes.Buffer
+
+	DataHandler func(c *Conn, data []byte)
 }
 
 // Hash returns a hashcode

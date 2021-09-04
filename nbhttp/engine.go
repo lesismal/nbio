@@ -131,30 +131,24 @@ type Engine struct {
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
 
-	TLSCOnfig *tls.Config
+	NParser        int
+	ReadBufferSize int
+	tlsBuffers     [][]byte
+	getTLSBuffer   func(c *nbio.Conn) []byte
 }
 
 // OnOpen registers callback for new connection
 func (s *Engine) OnOpen(h func(c *nbio.Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
 	s._onOpen = h
 }
 
 // OnClose registers callback for disconnected
 func (s *Engine) OnClose(h func(c *nbio.Conn, err error)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
 	s._onClose = h
 }
 
 // OnStop registers callback before Gopher is stopped.
 func (s *Engine) OnStop(h func()) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
 	s._onStop = h
 }
 
@@ -220,6 +214,105 @@ Exit:
 	return nil
 }
 
+func (e *Engine) InitTLSBuffers() {
+	if e.tlsBuffers != nil {
+		return
+	}
+	e.tlsBuffers = make([][]byte, e.NParser)
+	for i := 0; i < e.NParser; i++ {
+		e.tlsBuffers[i] = make([]byte, e.ReadBufferSize)
+	}
+
+	e.getTLSBuffer = func(c *nbio.Conn) []byte {
+		return e.tlsBuffers[uint64(c.Hash())%uint64(e.NParser)]
+	}
+
+	if runtime.GOOS == "windows" {
+		bufferMux := sync.Mutex{}
+		buffers := map[*nbio.Conn][]byte{}
+		e.getTLSBuffer = func(c *nbio.Conn) []byte {
+			bufferMux.Lock()
+			defer bufferMux.Unlock()
+			buf, ok := buffers[c]
+			if !ok {
+				buf = make([]byte, 4096)
+				buffers[c] = buf
+			}
+			return buf
+		}
+	}
+}
+
+func (e *Engine) TLSBuffer(c *nbio.Conn) []byte {
+	return e.getTLSBuffer(c)
+}
+
+func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
+	defer func() {
+		if err := recover(); err != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+		}
+	}()
+
+	parser := c.Session().(*Parser)
+	if parser == nil {
+		logging.Error("nil parser")
+		return
+	}
+
+	err := parser.Read(data)
+	if err != nil {
+		logging.Debug("parser.Read failed: %v", err)
+		c.CloseWithError(err)
+	}
+	// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+
+}
+
+func (e *Engine) DataHandlerTLS(c *nbio.Conn, data []byte) {
+	defer func() {
+		if err := recover(); err != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+		}
+	}()
+
+	parser := c.Session().(*Parser)
+	if parser == nil {
+		logging.Error("nil parser")
+		c.Close()
+		return
+	}
+	if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
+		buffer := e.getTLSBuffer(c)
+		for {
+			_, nread, err := tlsConn.AppendAndRead(data, buffer)
+			data = nil
+			if err != nil {
+				c.CloseWithError(err)
+				return
+			}
+			if nread > 0 {
+				err := parser.Read(buffer[:nread])
+				if err != nil {
+					logging.Debug("parser.Read failed: %v", err)
+					c.CloseWithError(err)
+					return
+				}
+			}
+			if nread == 0 {
+				return
+			}
+		}
+		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+	}
+}
+
 // NewEngine .
 func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f func())) *Engine {
 	if conf.MaxLoad <= 0 {
@@ -283,6 +376,8 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
+		NParser:                      conf.NParser,
+		ReadBufferSize:               conf.ReadBufferSize,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -305,6 +400,8 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+
+		c.OnData(engine.DataHandler)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
@@ -320,33 +417,13 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		})
 	})
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-
-		parser := c.Session().(*Parser)
-		if parser == nil {
-			logging.Error("nil parser")
-			return
+		if c.DataHandler != nil {
+			c.DataHandler(c, data)
 		}
-
-		err := parser.Read(data)
-		if err != nil {
-			logging.Debug("parser.Read failed: %v", err)
-			c.CloseWithError(err)
-		}
-		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
-
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
-
 	g.OnStop(func() {
 		engine._onStop()
 		g.Execute = func(f func()) {}
@@ -381,28 +458,6 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
 	}
 	conf.EnableSendfile = false
-
-	buffers := make([][]byte, conf.NParser)
-	for i := 0; i < len(buffers); i++ {
-		buffers[i] = make([]byte, conf.ReadBufferSize)
-	}
-	getBuffer := func(c *nbio.Conn) []byte {
-		return buffers[uint64(c.Hash())%uint64(conf.NParser)]
-	}
-	if runtime.GOOS == "windows" {
-		bufferMux := sync.Mutex{}
-		buffers := map[*nbio.Conn][]byte{}
-		getBuffer = func(c *nbio.Conn) []byte {
-			bufferMux.Lock()
-			defer bufferMux.Unlock()
-			buf, ok := buffers[c]
-			if !ok {
-				buf = make([]byte, 4096)
-				buffers[c] = buf
-			}
-			return buf
-		}
-	}
 
 	var messageHandlerExecutePool *taskpool.MixedPool
 	if messageHandlerExecutor == nil {
@@ -454,8 +509,10 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
-		TLSCOnfig:                    tlsConfig,
+		NParser:                      conf.NParser,
+		ReadBufferSize:               conf.ReadBufferSize,
 	}
+	engine.InitTLSBuffers()
 
 	isClient := false
 
@@ -481,6 +538,8 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+
+		c.OnData(engine.DataHandlerTLS)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
@@ -497,51 +556,14 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 			engine.mux.Unlock()
 		})
 	})
-
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-
-		parser := c.Session().(*Parser)
-		if parser == nil {
-			logging.Error("nil parser")
-			c.Close()
-			return
-		}
-		if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
-			buffer := getBuffer(c)
-			for {
-				_, nread, err := tlsConn.AppendAndRead(data, buffer)
-				data = nil
-				if err != nil {
-					c.CloseWithError(err)
-					return
-				}
-				if nread > 0 {
-					err := parser.Read(buffer[:nread])
-					if err != nil {
-						logging.Debug("parser.Read failed: %v", err)
-						c.CloseWithError(err)
-						return
-					}
-				}
-				if nread == 0 {
-					return
-				}
-			}
-			// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		if c.DataHandler != nil {
+			c.DataHandler(c, data)
 		}
 	})
 	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
 		mempool.Free(buffer)
 	})
-
 	g.OnStop(func() {
 		engine._onStop()
 		g.Execute = func(f func()) {}

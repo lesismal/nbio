@@ -54,12 +54,14 @@ func (c *Client) onResponse(res *http.Response, err error) {
 	}
 }
 
+var isTLS = true
+
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, err error)) {
 	c.Engine.Execute(func() {
 		if c.Conn == nil {
 			// for test
 			addr := "localhost:8888"
-			if c.Engine.TLSCOnfig == nil {
+			if !isTLS {
 				conn, err := net.Dial("tcp", addr)
 				if err != nil {
 					handler(nil, err)
@@ -79,8 +81,12 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, err erro
 				nbc.SetSession(parser)
 
 				c.Conn, _ = c.Engine.AddConn(nbc)
+				nbc.OnData(c.Engine.DataHandler)
 			} else {
-				tlsConn, err := tls.Dial("tcp", addr, c.Engine.TLSCOnfig, mempool.DefaultMemPool)
+				tlsConfig := &tls.Config{
+					InsecureSkipVerify: true,
+				}
+				tlsConn, err := tls.Dial("tcp", addr, tlsConfig, mempool.DefaultMemPool)
 				if err != nil {
 					log.Fatalf("Dial failed: %v\n", err)
 				}
@@ -101,6 +107,8 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, err erro
 
 				c.Engine.AddConn(nbc)
 				c.Conn = tlsConn
+
+				nbc.OnData(c.Engine.DataHandlerTLS)
 			}
 		}
 
