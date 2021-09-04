@@ -57,8 +57,22 @@ func (c *Client) onResponse(res *http.Response, err error) {
 var isTLS = true
 
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, err error)) {
-	c.Engine.Execute(func() {
-		if c.Conn == nil {
+	sendRequest := func() {
+		data := []byte("POST /echo HTTP/1.1\r\nHost: localhost:8888\r\nContent-Length: 5\r\nAccept-Encoding: gzip\r\n\r\nhello")
+
+		_, err := c.Conn.Write(data)
+		if err != nil {
+			handler(nil, err)
+			return
+		}
+		c.handlers = append(c.handlers, handler)
+	}
+
+	c.mux.Lock()
+	if c.Conn == nil {
+		c.Engine.ExecuteClient(func() {
+			defer c.mux.Unlock()
+
 			// for test
 			addr := "localhost:8888"
 			if !isTLS {
@@ -74,9 +88,8 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, err erro
 					return
 				}
 
-				readLimit := 1024 * 1024 * 32
 				processor := NewClientProcessor(c, c.onResponse)
-				parser := NewParser(processor, true, readLimit, nbc.Execute)
+				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
 				parser.Engine = c.Engine
 				nbc.SetSession(parser)
 
@@ -99,9 +112,8 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, err erro
 				isNonblock := true
 				tlsConn.ResetConn(nbc, isNonblock)
 
-				readLimit := 1024 * 1024 * 32
 				processor := NewClientProcessor(c, c.onResponse)
-				parser := NewParser(processor, true, readLimit, nbc.Execute)
+				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
 				parser.Engine = c.Engine
 				nbc.SetSession(parser)
 
@@ -110,24 +122,18 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, err erro
 
 				nbc.OnData(c.Engine.DataHandlerTLS)
 			}
-		}
 
-		data := []byte("POST /echo HTTP/1.1\r\nHost: localhost:8888\r\nContent-Length: 5\r\nAccept-Encoding: gzip\r\n\r\nhello")
+			sendRequest()
 
-		c.mux.Lock()
+		})
+	} else {
 		defer c.mux.Unlock()
-
-		_, err := c.Conn.Write(data)
-		if err != nil {
-			handler(nil, err)
-			return
-		}
-		c.handlers = append(c.handlers, handler)
-	})
-}
-
-func NewClient(engine *Engine) *Client {
-	return &Client{
-		Engine: engine,
+		sendRequest()
 	}
 }
+
+// func NewClient(engine *Engine) *Client {
+// 	return &Client{
+// 		Engine: engine,
+// 	}
+// }

@@ -9,7 +9,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
+	"github.com/lesismal/nbio/taskpool"
 )
 
 var (
@@ -22,9 +24,10 @@ var (
 func main() {
 	flag.Parse()
 
-	engine := nbhttp.NewEngine(nbhttp.Config{
+	clientExecutePool := taskpool.NewMixedPool(1024, 1, 1024)
+	engine := nbhttp.NewEngineTLS(nbhttp.Config{
 		NPoller: runtime.NumCPU(),
-	}, nil, nil)
+	}, nil, nil, &tls.Config{}, clientExecutePool.Go)
 	engine.InitTLSBuffers()
 
 	err := engine.Start()
@@ -36,7 +39,9 @@ func main() {
 
 	go func() {
 		ok := true
-		cli := nbhttp.NewClient(engine)
+		cli := &nbhttp.Client{
+			Engine: engine,
+		}
 		for ok {
 			cli.Do(nil, func(res *http.Response, err error) {
 				if err != nil {

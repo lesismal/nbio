@@ -118,6 +118,7 @@ type Config struct {
 // Server .
 type Engine struct {
 	*nbio.Gopher
+	*Config
 
 	MaxLoad                      int
 	MaxWebsocketFramePayloadSize int
@@ -131,35 +132,35 @@ type Engine struct {
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
 
-	NParser        int
-	ReadBufferSize int
-	tlsBuffers     [][]byte
-	getTLSBuffer   func(c *nbio.Conn) []byte
+	tlsBuffers   [][]byte
+	getTLSBuffer func(c *nbio.Conn) []byte
+
+	ExecuteClient func(f func())
 }
 
 // OnOpen registers callback for new connection
-func (s *Engine) OnOpen(h func(c *nbio.Conn)) {
-	s._onOpen = h
+func (e *Engine) OnOpen(h func(c *nbio.Conn)) {
+	e._onOpen = h
 }
 
 // OnClose registers callback for disconnected
-func (s *Engine) OnClose(h func(c *nbio.Conn, err error)) {
-	s._onClose = h
+func (e *Engine) OnClose(h func(c *nbio.Conn, err error)) {
+	e._onClose = h
 }
 
 // OnStop registers callback before Gopher is stopped.
-func (s *Engine) OnStop(h func()) {
-	s._onStop = h
+func (e *Engine) OnStop(h func()) {
+	e._onStop = h
 }
 
-func (s *Engine) Online() int {
-	return len(s.conns)
+func (e *Engine) Online() int {
+	return len(e.conns)
 }
 
-func (s *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
-	s.mux.Lock()
-	defer s.mux.Unlock()
-	for c := range s.conns {
+func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
+	e.mux.Lock()
+	defer e.mux.Unlock()
+	for c := range e.conns {
 		sess := c.Session()
 		if sess != nil {
 			if c.ExecuteLen() == 0 {
@@ -172,7 +173,7 @@ func (s *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 	}
 }
 
-func (s *Engine) Shutdown(ctx context.Context) error {
+func (e *Engine) Shutdown(ctx context.Context) error {
 	pollIntervalBase := time.Millisecond
 	shutdownPollIntervalMax := time.Millisecond * 200
 	nextPollInterval := func() time.Duration {
@@ -196,12 +197,12 @@ func (s *Engine) Shutdown(ctx context.Context) error {
 	timer := time.NewTimer(nextPollInterval())
 	defer timer.Stop()
 	for {
-		s.closeIdleConns(chCloseQueue)
+		e.closeIdleConns(chCloseQueue)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timer.C:
-			if len(s.conns) == 0 {
+			if len(e.conns) == 0 {
 				goto Exit
 			}
 			timer.Reset(nextPollInterval())
@@ -209,8 +210,8 @@ func (s *Engine) Shutdown(ctx context.Context) error {
 	}
 
 Exit:
-	s.Stop()
-	logging.Info("Gopher[%v] shutdown", s.Name)
+	e.Stop()
+	logging.Info("Gopher[%v] shutdown", e.Gopher.Name)
 	return nil
 }
 
@@ -314,7 +315,7 @@ func (e *Engine) DataHandlerTLS(c *nbio.Conn, data []byte) {
 }
 
 // NewEngine .
-func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f func())) *Engine {
+func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), v ...interface{}) *Engine {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -342,13 +343,21 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
-		nativeSize := conf.MessageHandlerPoolSize - conf.NPoller
-		if nativeSize <= 0 {
-			nativeSize = 1024
-		}
-
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, 1024)
+		nativeSize := conf.MessageHandlerPoolSize - 1
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
+	}
+
+	var clientExecutor func(f func())
+	if len(v) > 0 {
+		if h, ok := v[0].(func(f func())); ok {
+			clientExecutor = h
+		}
+	}
+	if clientExecutor == nil {
+		clientExecutor = func(f func()) {
+			f()
+		}
 	}
 
 	gopherConf := nbio.Config{
@@ -368,6 +377,7 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 
 	engine := &Engine{
 		Gopher:                       g,
+		Config:                       &conf,
 		_onOpen:                      func(c *nbio.Conn) {},
 		_onClose:                     func(c *nbio.Conn, err error) {},
 		_onStop:                      func() {},
@@ -376,8 +386,7 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
-		NParser:                      conf.NParser,
-		ReadBufferSize:               conf.ReadBufferSize,
+		ExecuteClient:                clientExecutor,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -435,7 +444,7 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 }
 
 // NewEngineTLS .
-func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Engine {
+func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config, v ...interface{}) *Engine {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -464,13 +473,21 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
-		nativeSize := conf.MessageHandlerPoolSize - conf.NPoller
-		if nativeSize <= 0 {
-			nativeSize = 1024
-		}
-
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, conf.NPoller, 1024)
+		nativeSize := conf.MessageHandlerPoolSize - 1
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024)
 		messageHandlerExecutor = messageHandlerExecutePool.Go
+	}
+
+	var clientExecutor func(f func())
+	if len(v) > 0 {
+		if h, ok := v[0].(func(f func())); ok {
+			clientExecutor = h
+		}
+	}
+	if clientExecutor == nil {
+		clientExecutor = func(f func()) {
+			f()
+		}
 	}
 
 	// setup prefer protos: http2.0, other protos to be added
@@ -501,6 +518,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 
 	engine := &Engine{
 		Gopher:                       g,
+		Config:                       &conf,
 		_onOpen:                      func(c *nbio.Conn) {},
 		_onClose:                     func(c *nbio.Conn, err error) {},
 		_onStop:                      func() {},
@@ -509,8 +527,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
-		NParser:                      conf.NParser,
-		ReadBufferSize:               conf.ReadBufferSize,
+		ExecuteClient:                clientExecutor,
 	}
 	engine.InitTLSBuffers()
 
