@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"runtime"
@@ -37,26 +38,28 @@ func main() {
 	}
 	defer engine.Stop()
 
-	go func() {
-		ok := true
-		cli := &nbhttp.Client{
-			Engine: engine,
-		}
-		for ok {
-			cli.Do(nil, func(res *http.Response, err error) {
-				if err != nil {
-					atomic.AddUint64(&failed, 1)
-					fmt.Println("Do failed:", err)
-					ok = false
-					return
-				} else {
-					atomic.AddUint64(&success, 1)
-					// fmt.Println(res.Proto, res.StatusCode, res.Status)
-				}
-			})
-			time.Sleep(time.Second / 10)
-		}
-	}()
+	for i := 0; i < 100; i++ {
+		go func() {
+			ok := true
+			cli := &nbhttp.Client{
+				Engine: engine,
+			}
+			for ok {
+				cli.Do(nil, func(res *http.Response, conn net.Conn, err error) {
+					if err != nil {
+						atomic.AddUint64(&failed, 1)
+						fmt.Println("Do failed:", err)
+						ok = false
+						return
+					} else {
+						atomic.AddUint64(&success, 1)
+						// fmt.Println(res.Proto, res.StatusCode, res.Status)
+					}
+				})
+				time.Sleep(time.Second / 10000)
+			}
+		}()
+	}
 
 	ticker := time.NewTicker(time.Second)
 	for i := 1; true; i++ {

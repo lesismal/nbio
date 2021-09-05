@@ -11,7 +11,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
@@ -102,15 +101,16 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 			}
 		}
 
-		nbc, ok := c.Conn.(*nbio.Conn)
-		if ok {
-			nbc.Lock()
-			defer nbc.Unlock()
-			closed, err := nbc.IsClosed()
-			if closed {
-				c.onClose(c, err)
-			}
-		}
+		// now all the upgrade, frames/messages and close are called in order
+		// nbc, ok := c.Conn.(*nbio.Conn)
+		// if ok {
+		// 	nbc.Lock()
+		// 	defer nbc.Unlock()
+		// 	closed, err := nbc.IsClosed()
+		// 	if closed {
+		// 		c.onClose(c, err)
+		// 	}
+		// }
 	}
 }
 

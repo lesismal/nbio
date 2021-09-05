@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
@@ -17,15 +18,23 @@ type Client struct {
 
 	Engine *Engine
 
+	Transport http.RoundTripper
+
+	CheckRedirect func(req *http.Request, via []*http.Request) error
+
+	Jar http.CookieJar
+
+	Timeout time.Duration
+
 	mux      sync.Mutex
-	handlers []func(res *http.Response, err error)
+	handlers []func(res *http.Response, conn net.Conn, err error)
 }
 
 func (c *Client) Close() {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	for _, h := range c.handlers {
-		h(nil, io.EOF)
+		h(nil, c.Conn, io.EOF)
 	}
 	c.handlers = nil
 }
@@ -34,7 +43,7 @@ func (c *Client) CloseWithError(err error) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	for _, h := range c.handlers {
-		h(nil, err)
+		h(nil, c.Conn, err)
 	}
 	c.handlers = nil
 }
@@ -46,23 +55,37 @@ func (c *Client) onResponse(res *http.Response, err error) {
 	switch len(c.handlers) {
 	case 0:
 	case 1:
-		c.handlers[0](res, err)
+		c.handlers[0](res, c.Conn, err)
 		c.handlers = nil
 	default:
-		c.handlers[0](res, err)
+		c.handlers[0](res, c.Conn, err)
 		c.handlers = c.handlers[1:]
 	}
 }
 
+func (c *Client) deadline() time.Time {
+	if c.Timeout > 0 {
+		return time.Now().Add(c.Timeout)
+	}
+	return time.Time{}
+}
+
+func (c *Client) transport() http.RoundTripper {
+	if c.Transport != nil {
+		return c.Transport
+	}
+	return http.DefaultTransport
+}
+
 var isTLS = true
 
-func (c *Client) Do(req *http.Request, handler func(res *http.Response, err error)) {
+func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	sendRequest := func() {
 		data := []byte("POST /echo HTTP/1.1\r\nHost: localhost:8888\r\nContent-Length: 5\r\nAccept-Encoding: gzip\r\n\r\nhello")
 
 		_, err := c.Conn.Write(data)
 		if err != nil {
-			handler(nil, err)
+			handler(nil, c.Conn, err)
 			return
 		}
 		c.handlers = append(c.handlers, handler)
@@ -78,13 +101,13 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, err erro
 			if !isTLS {
 				conn, err := net.Dial("tcp", addr)
 				if err != nil {
-					handler(nil, err)
+					handler(nil, c.Conn, err)
 					return
 				}
 
 				nbc, err := nbio.NBConn(conn)
 				if err != nil {
-					handler(nil, err)
+					handler(nil, c.Conn, err)
 					return
 				}
 
