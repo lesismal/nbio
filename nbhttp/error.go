@@ -81,3 +81,8 @@ var (
 	// ErrNilConn .
 	ErrNilConn = errors.New("nil Conn")
 )
+
+var (
+	// ErrClientUnsupportedSchema
+	ErrClientUnsupportedSchema = errors.New("unsupported schema")
+)

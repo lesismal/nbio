@@ -355,9 +355,7 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = func(f func()) {
-			f()
-		}
+		clientExecutor = messageHandlerExecutePool.Go
 	}
 
 	gopherConf := nbio.Config{
@@ -485,9 +483,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = func(f func()) {
-			f()
-		}
+		clientExecutor = messageHandlerExecutePool.Go
 	}
 
 	// setup prefer protos: http2.0, other protos to be added

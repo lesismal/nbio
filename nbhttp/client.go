@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,27 +64,9 @@ func (c *Client) onResponse(res *http.Response, err error) {
 	}
 }
 
-func (c *Client) deadline() time.Time {
-	if c.Timeout > 0 {
-		return time.Now().Add(c.Timeout)
-	}
-	return time.Time{}
-}
-
-func (c *Client) transport() http.RoundTripper {
-	if c.Transport != nil {
-		return c.Transport
-	}
-	return http.DefaultTransport
-}
-
-var isTLS = true
-
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	sendRequest := func() {
-		data := []byte("POST /echo HTTP/1.1\r\nHost: localhost:8888\r\nContent-Length: 5\r\nAccept-Encoding: gzip\r\n\r\nhello")
-
-		_, err := c.Conn.Write(data)
+		err := req.Write(c.Conn)
 		if err != nil {
 			handler(nil, c.Conn, err)
 			return
@@ -95,11 +78,22 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 	if c.Conn == nil {
 		c.Engine.ExecuteClient(func() {
 			defer c.mux.Unlock()
-
-			// for test
-			addr := "localhost:8888"
-			if !isTLS {
-				conn, err := net.Dial("tcp", addr)
+			strs := strings.Split(req.URL.Host, ":")
+			host := strs[0]
+			port := req.URL.Scheme
+			if len(strs) >= 2 {
+				port = strs[1]
+			}
+			addr := host + ":" + port
+			switch req.URL.Scheme {
+			case "http":
+				var err error
+				var conn net.Conn
+				if c.Timeout <= 0 {
+					conn, err = net.Dial("tcp", addr)
+				} else {
+					conn, err = net.DialTimeout("tcp", addr, c.Timeout)
+				}
 				if err != nil {
 					handler(nil, c.Conn, err)
 					return
@@ -113,23 +107,33 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 
 				processor := NewClientProcessor(c, c.onResponse)
 				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
+				parser.Conn = nbc
 				parser.Engine = c.Engine
 				nbc.SetSession(parser)
 
 				c.Conn, _ = c.Engine.AddConn(nbc)
 				nbc.OnData(c.Engine.DataHandler)
-			} else {
-				tlsConfig := &tls.Config{
-					InsecureSkipVerify: true,
+
+			case "https":
+				var err error
+				var tlsConn *tls.Conn
+				var tlsConfig = &tls.Config{
+					ServerName: req.URL.Host,
+					// InsecureSkipVerify: true,
 				}
-				tlsConn, err := tls.Dial("tcp", addr, tlsConfig, mempool.DefaultMemPool)
+				if c.Timeout <= 0 {
+					tlsConn, err = tls.Dial("tcp", addr, tlsConfig, mempool.DefaultMemPool)
+				} else {
+					tlsConn, err = tls.DialWithDialer(&net.Dialer{Timeout: c.Timeout}, "tcp", addr, tlsConfig, mempool.DefaultMemPool)
+				}
 				if err != nil {
 					log.Fatalf("Dial failed: %v\n", err)
 				}
 
 				nbc, err := nbio.NBConn(tlsConn.Conn())
 				if err != nil {
-					log.Fatalf("AddConn failed: %v\n", err)
+					handler(nil, c.Conn, err)
+					return
 				}
 
 				isNonblock := true
@@ -137,13 +141,17 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 
 				processor := NewClientProcessor(c, c.onResponse)
 				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
+				parser.Conn = tlsConn
 				parser.Engine = c.Engine
 				nbc.SetSession(parser)
 
-				c.Engine.AddConn(nbc)
 				c.Conn = tlsConn
-
 				nbc.OnData(c.Engine.DataHandlerTLS)
+				c.Engine.AddConn(nbc)
+
+			default:
+				handler(nil, c.Conn, ErrClientUnsupportedSchema)
+				return
 			}
 
 			sendRequest()
@@ -155,8 +163,8 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 	}
 }
 
-// func NewClient(engine *Engine) *Client {
-// 	return &Client{
-// 		Engine: engine,
-// 	}
-// }
+func NewClient(engine *Engine) *Client {
+	return &Client{
+		Engine: engine,
+	}
+}

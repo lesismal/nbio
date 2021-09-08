@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
@@ -38,36 +39,49 @@ func main() {
 	}
 	defer engine.Stop()
 
-	for i := 0; i < 100; i++ {
-		go func() {
-			ok := true
-			cli := &nbhttp.Client{
-				Engine: engine,
-			}
-			for ok {
-				cli.Do(nil, func(res *http.Response, conn net.Conn, err error) {
+	for i := 0; i < 1; i++ {
+		count := 0
+		func() {
+			cli := nbhttp.NewClient(engine)
+
+			var doRequest func(int)
+			doRequest = func(cnt int) {
+				var err error
+				var req *http.Request
+				if cnt%2 == 0 {
+					req, err = http.NewRequest("GET", "http://localhost:8888/echo", nil)
+				} else {
+					req, err = http.NewRequest("GET", "https://github.com/lesismal", nil)
+				}
+				if err != nil {
+					log.Fatal(err)
+				}
+				cli.Do(req, func(res *http.Response, conn net.Conn, err error) {
 					if err != nil {
 						atomic.AddUint64(&failed, 1)
 						fmt.Println("Do failed:", err)
-						ok = false
 						return
 					} else {
 						atomic.AddUint64(&success, 1)
-						// fmt.Println(res.Proto, res.StatusCode, res.Status)
+						if err == nil && res.Body != nil {
+							defer res.Body.Close()
+							// body, err := io.ReadAll(res.Body)
+							// if err == nil {
+							// 	fmt.Println(string(body))
+							// }
+						}
+						fmt.Printf("request success %v: %v/%v\n", count, req.URL.Host, req.URL.Path)
+
+						time.AfterFunc(time.Second, func() {
+							count++
+							doRequest(count)
+						})
 					}
 				})
-				time.Sleep(time.Second / 10000)
 			}
+			doRequest(count)
 		}()
 	}
 
-	ticker := time.NewTicker(time.Second)
-	for i := 1; true; i++ {
-		<-ticker.C
-		nSuccess := atomic.SwapUint64(&success, 0)
-		nFailed := atomic.SwapUint64(&failed, 0)
-		totalSuccess += nSuccess
-		totalFailed += nFailed
-		fmt.Printf("running for %v seconds, success: %v, totalSuccess: %v, failed: %v, totalFailed: %v\n", i, nSuccess, totalSuccess, failed, totalFailed)
-	}
+	<-make(chan int)
 }
