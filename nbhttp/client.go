@@ -64,7 +64,7 @@ func (c *Client) onResponse(res *http.Response, err error) {
 	}
 }
 
-func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
+func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *http.Response, conn net.Conn, err error)) {
 	sendRequest := func() {
 		err := req.Write(c.Conn)
 		if err != nil {
@@ -117,10 +117,6 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 			case "https":
 				var err error
 				var tlsConn *tls.Conn
-				var tlsConfig = &tls.Config{
-					ServerName: req.URL.Host,
-					// InsecureSkipVerify: true,
-				}
 				if c.Timeout <= 0 {
 					tlsConn, err = tls.Dial("tcp", addr, tlsConfig, mempool.DefaultMemPool)
 				} else {

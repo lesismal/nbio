@@ -17,10 +17,8 @@ import (
 )
 
 var (
-	success      uint64 = 0
-	failed       uint64 = 0
-	totalSuccess uint64 = 0
-	totalFailed  uint64 = 0
+	success uint64 = 0
+	failed  uint64 = 0
 )
 
 func main() {
@@ -56,7 +54,7 @@ func main() {
 				if err != nil {
 					log.Fatal(err)
 				}
-				cli.Do(req, func(res *http.Response, conn net.Conn, err error) {
+				cli.Do(req, nil, func(res *http.Response, conn net.Conn, err error) {
 					if err != nil {
 						atomic.AddUint64(&failed, 1)
 						fmt.Println("Do failed:", err)
@@ -70,7 +68,7 @@ func main() {
 							// 	fmt.Println(string(body))
 							// }
 						}
-						fmt.Printf("request success %v: %v/%v\n", count, req.URL.Host, req.URL.Path)
+						fmt.Printf("request success %v: %v%v\n", count, req.URL.Host, req.URL.Path)
 
 						time.AfterFunc(time.Second, func() {
 							count++
