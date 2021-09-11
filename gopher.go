@@ -7,9 +7,10 @@ package nbio
 import (
 	"container/heap"
 	"net"
-	"runtime/debug"
+	"runtime"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
 )
@@ -371,8 +372,10 @@ func (g *Gopher) timerLoop() {
 					defer func() {
 						err := recover()
 						if err != nil {
-							logging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
-							debug.PrintStack()
+							const size = 64 << 10
+							buf := make([]byte, size)
+							buf = buf[:runtime.Stack(buf, false)]
+							logging.Error("Gopher[%v] exec call failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
 						}
 					}()
 					f()
@@ -394,8 +397,10 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								logging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
-								debug.PrintStack()
+								const size = 64 << 10
+								buf := make([]byte, size)
+								buf = buf[:runtime.Stack(buf, false)]
+								logging.Error("Gopher[%v] exec timer failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
 							}
 						}()
 						it.f()

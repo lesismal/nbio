@@ -132,6 +132,7 @@ type Engine struct {
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
 
+	tlsConfig    *tls.Config
 	tlsBuffers   [][]byte
 	getTLSBuffer func(c *nbio.Conn) []byte
 
@@ -242,6 +243,14 @@ func (e *Engine) InitTLSBuffers() {
 			return buf
 		}
 	}
+}
+
+func (e *Engine) TLSConfig() *tls.Config {
+	return e.tlsConfig
+}
+
+func (e *Engine) SetTLSConfig(tlsConfig *tls.Config) {
+	e.tlsConfig = tlsConfig
 }
 
 func (e *Engine) TLSBuffer(c *nbio.Conn) []byte {
@@ -407,7 +416,6 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
-
 		c.OnData(engine.DataHandler)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
@@ -487,15 +495,15 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 
 	// setup prefer protos: http2.0, other protos to be added
-	preferenceProtos := map[string]struct{}{
-		// "h2": {},
-	}
-	for _, v := range tlsConfig.NextProtos {
-		delete(preferenceProtos, v)
-	}
-	for proto := range preferenceProtos {
-		tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
-	}
+	// preferenceProtos := map[string]struct{}{
+	// 	// "h2": {},
+	// }
+	// for _, v := range tlsConfig.NextProtos {
+	// 	delete(preferenceProtos, v)
+	// }
+	// for proto := range preferenceProtos {
+	// 	tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
+	// }
 
 	gopherConf := nbio.Config{
 		Name:                     conf.Name,
@@ -524,6 +532,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
 		ExecuteClient:                clientExecutor,
+		tlsConfig:                    tlsConfig,
 	}
 	engine.InitTLSBuffers()
 
@@ -543,7 +552,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		engine.conns[c] = struct{}{}
 		engine.mux.Unlock()
 		engine._onOpen(c)
-		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
+		tlsConn := tls.NewConn(c, engine.tlsConfig, isClient, true, mempool.DefaultMemPool)
 		processor := NewServerProcessor(tlsConn, handler, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, c.Execute)
 		parser.Conn = tlsConn
