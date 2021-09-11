@@ -130,6 +130,12 @@ type Server struct {
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
+
+	tlsConfig *tls.Config
+}
+
+func (s *Server) SetTLSConfig(config *tls.Config) {
+	s.tlsConfig = wrapTLSConfig(config)
 }
 
 // OnOpen registers callback for new connection
@@ -351,6 +357,20 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 	return svr
 }
 
+func wrapTLSConfig(tlsConfig *tls.Config) *tls.Config {
+	// setup prefer protos: http2.0, other protos to be added
+	preferenceProtos := map[string]struct{}{
+		// "h2": {},
+	}
+	for _, v := range tlsConfig.NextProtos {
+		delete(preferenceProtos, v)
+	}
+	for proto := range preferenceProtos {
+		tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
+	}
+	return tlsConfig
+}
+
 // NewServerTLS .
 func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
 	if conf.MaxLoad <= 0 {
@@ -412,17 +432,6 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
-	// setup prefer protos: http2.0, other protos to be added
-	preferenceProtos := map[string]struct{}{
-		// "h2": {},
-	}
-	for _, v := range tlsConfig.NextProtos {
-		delete(preferenceProtos, v)
-	}
-	for proto := range preferenceProtos {
-		tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
-	}
-
 	gopherConf := nbio.Config{
 		Name:                     conf.Name,
 		Network:                  conf.Network,
@@ -448,6 +457,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
+		tlsConfig:                    wrapTLSConfig(tlsConfig),
 	}
 
 	isClient := false
@@ -462,7 +472,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
+		tlsConn := tls.NewConn(c, svr.tlsConfig, isClient, true, mempool.DefaultMemPool)
 		processor := NewServerProcessor(tlsConn, handler, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, c.Execute)
 		parser.Conn = tlsConn
