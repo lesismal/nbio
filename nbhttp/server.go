@@ -6,14 +6,17 @@ package nbhttp
 
 import (
 	"context"
+	"log"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 	"unsafe"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/logging"
@@ -130,6 +133,59 @@ type Server struct {
 
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
+
+	tlsConfig *tls.Config
+	crtFile   string // the path of file
+	crtUpdate uint32
+	keyFile   string // the path of file
+	keyUpdate uint32
+}
+
+func (s *Server) watching() {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		logging.Error("watcher start failed, ", err)
+		return
+	}
+	defer watcher.Close()
+	err = watcher.Add(s.crtFile)
+	if err != nil {
+		logging.Error("add monitor crt failed ", err)
+		return
+	}
+	err = watcher.Add(s.keyFile)
+	if err != nil {
+		logging.Error("add monitor key failed ", err)
+		return
+	}
+
+	for {
+		select {
+		case ev, ok := <-watcher.Events:
+			if !ok {
+				continue
+			}
+			if ev.Op&fsnotify.Write == fsnotify.Write {
+				switch ev.Name {
+				case s.crtFile:
+					atomic.StoreUint32(&s.crtUpdate, 1)
+				case s.keyFile:
+					atomic.StoreUint32(&s.keyUpdate, 1)
+				}
+				if atomic.LoadUint32(&s.crtUpdate) == 1 && atomic.LoadUint32(&s.keyUpdate) == 1 {
+					s.tlsConfig = WrapTLSConfig(s.crtFile, s.keyFile)
+					atomic.StoreUint32(&s.crtUpdate, 0)
+					atomic.StoreUint32(&s.keyUpdate, 0)
+				}
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				continue
+			}
+			logging.Error("watch error ", err)
+		}
+	}
+
 }
 
 // OnOpen registers callback for new connection
@@ -351,8 +407,33 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 	return svr
 }
 
+func WrapTLSConfig(crtFile, keyFile string) *tls.Config {
+	// setup prefer protos: http2.0, other protos to be added
+	preferenceProtos := map[string]struct{}{
+		// "h2": {},
+	}
+
+	cert, err := tls.LoadX509KeyPair(crtFile, keyFile)
+	if err != nil {
+		log.Panicf("tls.X509KeyPair failed: %v", err)
+	}
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+	}
+	tlsConfig.BuildNameToCertificate()
+
+	for _, v := range tlsConfig.NextProtos {
+		delete(preferenceProtos, v)
+	}
+	for proto := range preferenceProtos {
+		tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
+	}
+
+	return tlsConfig
+}
+
 // NewServerTLS .
-func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config) *Server {
+func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), crtFile, keyFile string) *Server {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -412,16 +493,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		messageHandlerExecutor = messageHandlerExecutePool.Go
 	}
 
-	// setup prefer protos: http2.0, other protos to be added
-	preferenceProtos := map[string]struct{}{
-		// "h2": {},
-	}
-	for _, v := range tlsConfig.NextProtos {
-		delete(preferenceProtos, v)
-	}
-	for proto := range preferenceProtos {
-		tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
-	}
+	tlsConfig := WrapTLSConfig(crtFile, keyFile)
 
 	gopherConf := nbio.Config{
 		Name:                     conf.Name,
@@ -448,9 +520,15 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
+		crtFile:                      crtFile,
+		keyFile:                      keyFile,
+		tlsConfig:                    tlsConfig,
 	}
 
 	isClient := false
+
+	// monitor tls file update
+	nbio.SafeGo(svr.watching)
 
 	g.OnOpen(func(c *nbio.Conn) {
 		svr.mux.Lock()
@@ -462,7 +540,7 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		svr.conns[c] = struct{}{}
 		svr.mux.Unlock()
 		svr._onOpen(c)
-		tlsConn := tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
+		tlsConn := tls.NewConn(c, svr.tlsConfig, isClient, true, mempool.DefaultMemPool)
 		processor := NewServerProcessor(tlsConn, handler, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, c.Execute)
 		parser.Conn = tlsConn

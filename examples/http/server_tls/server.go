@@ -3,13 +3,11 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"runtime"
 	"sync/atomic"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -30,15 +28,6 @@ func onEcho(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
-	if err != nil {
-		log.Fatalf("tls.X509KeyPair failed: %v", err)
-	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
-	}
-	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/echo", onEcho)
@@ -46,9 +35,11 @@ func main() {
 	svr := nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
-	}, mux, nil, tlsConfig)
+	}, mux, nil,
+		"/home/mobus/projects/sunvim/prs/nbio/examples/http/server_tls/server.crt",
+		"/home/mobus/projects/sunvim/prs/nbio/examples/http/server_tls/server.key")
 
-	err = svr.Start()
+	err := svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return

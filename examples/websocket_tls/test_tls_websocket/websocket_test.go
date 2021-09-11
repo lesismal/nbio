@@ -14,7 +14,6 @@ import (
 	"time"
 
 	gwebsocket "github.com/gorilla/websocket"
-	ntls "github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
@@ -106,15 +105,6 @@ func onWebsocket(cancelFunc context.CancelFunc, maxCount int, w http.ResponseWri
 }
 
 func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
-	cert, err := ntls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
-	if err != nil {
-		log.Fatalf("tls.X509KeyPair failed: %v", err)
-	}
-	tlsConfig := &ntls.Config{
-		Certificates:       []ntls.Certificate{cert},
-		InsecureSkipVerify: true,
-	}
-	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", func(w http.ResponseWriter, r *http.Request) {
@@ -124,9 +114,9 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 	svr = nbhttp.NewServerTLS(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{*addr},
-	}, mux, nil, tlsConfig)
+	}, mux, nil, string(rsaCertPEM), string(rsaKeyPEM))
 
-	err = svr.Start()
+	err := svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return

@@ -51,15 +51,18 @@ func (g *Gopher) Start() error {
 	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
 		g.Add(1)
-		go g.pollers[i].start()
+
+		SafeGo(g.pollers[i].start)
 	}
 	for _, l := range g.listeners {
 		g.Add(1)
-		go l.start()
+		SafeGo(l.start)
 	}
 
 	g.Add(1)
-	go g.timerLoop()
+	SafeGo(g.timerLoop)
+
+	// monitor tls file
 
 	if len(g.addrs) == 0 {
 		logging.Info("Gopher[%v] start", g.Name)

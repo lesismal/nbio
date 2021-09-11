@@ -8,7 +8,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 	"github.com/lesismal/nbio/taskpool"
@@ -59,15 +58,6 @@ func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
-	if err != nil {
-		log.Fatalf("tls.X509KeyPair failed: %v", err)
-	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
-	}
-	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/echo/message", onWebsocketMessage)
@@ -80,7 +70,7 @@ func main() {
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9999"},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, messageHandlerExecutePool.Go, tlsConfig)
+	}, mux, messageHandlerExecutePool.Go, string(rsaCertPEM), string(rsaCertPEM))
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9998"},
@@ -88,7 +78,7 @@ func main() {
 	}, mux, messageHandlerExecutePool.Go)
 
 	log.Printf("calling start non-tls\n")
-	err = svr.Start()
+	err := svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start non-tls failed: %v\n", err)
 		return

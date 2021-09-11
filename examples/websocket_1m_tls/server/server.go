@@ -2,14 +2,12 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
@@ -48,16 +46,6 @@ func main() {
 		}
 	}()
 
-	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
-	if err != nil {
-		log.Fatalf("tls.X509KeyPair failed: %v", err)
-	}
-	tlsConfig := &tls.Config{
-		Certificates:       []tls.Certificate{cert},
-		InsecureSkipVerify: true,
-	}
-	tlsConfig.BuildNameToCertificate()
-
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
@@ -66,9 +54,9 @@ func main() {
 		Addrs:                   addrs,
 		MaxLoad:                 1000000,
 		ReleaseWebsocketPayload: true,
-	}, mux, nil, tlsConfig)
+	}, mux, nil, string(rsaCertPEM), string(rsaKeyPEM))
 
-	err = svr.Start()
+	err := svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
