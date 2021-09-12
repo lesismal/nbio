@@ -251,41 +251,8 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 
 // Close .
 func (p *ServerProcessor) Close(parser *Parser, err error) {
-	// active := atomic.AddInt32(&p.active, 1)
-	// if (active & 0x2) > 0x1 {
-	// 	return
-	// }
-	// p.release()
+
 }
-
-func (p *ServerProcessor) release() {
-	// if p.request != nil {
-	// 	releaseRequest(p.request)
-	// }
-	// for _, res := range p.resQueue {
-	// 	releaseRequest(res.request)
-	// 	releaseResponse(res)
-	// }
-
-	// p.conn = nil
-	// p.parser = nil
-	// p.request = nil
-	// p.handler = nil
-	// p.executor = nil
-	// p.resQueue = nil
-	// p.enableSendfile = false
-	// // p.isUpgrade = false
-	// // p.active = 0
-
-	// serverProcessorPool.Put(p)
-}
-
-// HandleMessage .
-// func (p *ServerProcessor) HandleMessage(handler http.Handler) {
-// 	if handler != nil {
-// 		p.handler = handler
-// 	}
-// }
 
 // NewServerProcessor .
 func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.Duration, enableSendfile bool) Processor {
@@ -396,13 +363,6 @@ func (p *ClientProcessor) Close(parser *Parser, err error) {
 	p.client.CloseWithError(err)
 }
 
-// HandleMessage .
-// func (p *ClientProcessor) HandleMessage(handler func(*http.Response)) {
-// 	if handler != nil {
-// 		p.handler = handler
-// 	}
-// }
-
 // NewClientProcessor .
 func NewClientProcessor(client *Client, handler func(res *http.Response, err error)) Processor {
 	return &ClientProcessor{
@@ -466,11 +426,6 @@ func (p *EmptyProcessor) OnComplete(parser *Parser) {
 
 // Close .
 func (p *EmptyProcessor) Close(parser *Parser, err error) {
-
-}
-
-// HandleMessage .
-func (p *EmptyProcessor) HandleMessage(handler http.Handler) {
 
 }
 
