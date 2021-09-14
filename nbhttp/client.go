@@ -25,7 +25,32 @@ type Client struct {
 
 	Jar http.CookieJar
 
-	Timeout time.Duration
+	Timeout                     time.Duration
+	MaxConcurrencyPerConnection int
+	MaxIdleConns                int
+	MaxIdleConnsPerHost         int
+	MaxConnsPerHost             int
+	IdleConnTimeout             time.Duration
+
+	// http.Transport
+	// Proxy func(*http.Request) (*url.URL, error)
+	// DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
+	// Dial            func(network, addr string) (net.Conn, error)
+	// DialTLSContext  func(ctx context.Context, network, addr string) (net.Conn, error)
+	// DialTLS         func(network, addr string) (net.Conn, error)
+	// TLSClientConfig *tls.Config
+	// TLSHandshakeTimeout time.Duration
+	// DisableKeepAlives bool
+	// DisableCompression bool
+	// MaxIdleConns int
+	// MaxIdleConnsPerHost int
+	// MaxConnsPerHost int
+	// IdleConnTimeout time.Duration
+	// ResponseHeaderTimeout time.Duration
+	// ExpectContinueTimeout time.Duration
+	// TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper
+	// ProxyConnectHeader http.Header
+	// GetProxyConnectHeader func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error)
 
 	mux      sync.Mutex
 	handlers []func(res *http.Response, conn net.Conn, err error)
