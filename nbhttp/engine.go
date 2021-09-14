@@ -113,6 +113,17 @@ type Config struct {
 
 	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
 	MaxReadTimesPerEventLoop int
+
+	Handler http.Handler
+
+	ServerExecutor func(f func())
+
+	ClientExecutor func(f func())
+
+	TLSConfig *tls.Config
+
+	Context context.Context
+	Cancel  func()
 }
 
 // Server .
@@ -135,6 +146,10 @@ type Engine struct {
 	tlsConfig    *tls.Config
 	tlsBuffers   [][]byte
 	getTLSBuffer func(c *nbio.Conn) []byte
+
+	emptyRequest *http.Request
+	BaseCtx      context.Context
+	Cancel       func()
 
 	ExecuteClient func(f func())
 }
@@ -184,6 +199,10 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 			pollIntervalBase = shutdownPollIntervalMax
 		}
 		return interval
+	}
+
+	if e.Cancel != nil {
+		e.Cancel()
 	}
 
 	chCloseQueue := make(chan *nbio.Conn, 1024)
@@ -324,7 +343,7 @@ func (e *Engine) DataHandlerTLS(c *nbio.Conn, data []byte) {
 }
 
 // NewEngine .
-func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), v ...interface{}) *Engine {
+func NewEngine(conf Config, v ...interface{}) *Engine {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -347,24 +366,52 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
 	}
 
+	var handler = conf.Handler
+	if handler == nil {
+		if len(v) > 0 {
+			if h, ok := v[0].(http.Handler); ok {
+				handler = h
+			}
+		}
+	}
+	if handler == nil {
+		panic("nil http.Handler")
+	}
+
+	var serverExecutor = conf.ServerExecutor
+	if serverExecutor == nil {
+		if len(v) > 1 {
+			if h, ok := v[1].(func(f func())); ok {
+				serverExecutor = h
+			}
+		}
+	}
+
 	var messageHandlerExecutePool *taskpool.MixedPool
-	if messageHandlerExecutor == nil {
+	if serverExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
 		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024)
-		messageHandlerExecutor = messageHandlerExecutePool.Go
+		serverExecutor = messageHandlerExecutePool.Go
 	}
 
-	var clientExecutor func(f func())
-	if len(v) > 0 {
-		if h, ok := v[0].(func(f func())); ok {
-			clientExecutor = h
+	var clientExecutor = conf.ClientExecutor
+	if clientExecutor == nil {
+		if len(v) > 2 {
+			if h, ok := v[2].(func(f func())); ok {
+				clientExecutor = h
+			}
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = messageHandlerExecutePool.Go
+		clientExecutor = serverExecutor
+	}
+
+	baseCtx, cancel := conf.Context, conf.Cancel
+	if baseCtx == nil {
+		baseCtx, cancel = context.WithCancel(context.Background())
 	}
 
 	gopherConf := nbio.Config{
@@ -380,7 +427,7 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		LockListener:             conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
-	g.Execute = messageHandlerExecutor
+	g.Execute = serverExecutor
 
 	engine := &Engine{
 		Gopher:                       g,
@@ -394,6 +441,10 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
 		ExecuteClient:                clientExecutor,
+
+		emptyRequest: (&http.Request{}).WithContext(baseCtx),
+		BaseCtx:      baseCtx,
+		Cancel:       cancel,
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -450,7 +501,7 @@ func NewEngine(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 }
 
 // NewEngineTLS .
-func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config, v ...interface{}) *Engine {
+func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
@@ -474,24 +525,62 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 	}
 	conf.EnableSendfile = false
 
+	//handler http.Handler, messageHandlerExecutor func(f func()), v ...interface{}
+	var handler = conf.Handler
+	if handler == nil {
+		if len(v) > 0 {
+			if h, ok := v[0].(http.Handler); ok {
+				handler = h
+			}
+		}
+	}
+	if handler == nil {
+		panic("nil http.Handler")
+	}
+
+	var serverExecutor = conf.ServerExecutor
+	if serverExecutor == nil {
+		if len(v) > 1 {
+			if h, ok := v[1].(func(f func())); ok {
+				serverExecutor = h
+			}
+		}
+	}
+
 	var messageHandlerExecutePool *taskpool.MixedPool
-	if messageHandlerExecutor == nil {
+	if serverExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
 		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024)
-		messageHandlerExecutor = messageHandlerExecutePool.Go
+		serverExecutor = messageHandlerExecutePool.Go
 	}
 
-	var clientExecutor func(f func())
-	if len(v) > 0 {
-		if h, ok := v[0].(func(f func())); ok {
-			clientExecutor = h
+	var tlsConfig = conf.TLSConfig
+	if tlsConfig == nil {
+		if len(v) > 2 {
+			if c, ok := v[2].(*tls.Config); ok {
+				tlsConfig = c
+			}
+		}
+	}
+
+	var clientExecutor = conf.ClientExecutor
+	if clientExecutor == nil {
+		if len(v) > 3 {
+			if h, ok := v[3].(func(f func())); ok {
+				clientExecutor = h
+			}
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = messageHandlerExecutePool.Go
+		clientExecutor = serverExecutor
+	}
+
+	baseCtx, cancel := conf.Context, conf.Cancel
+	if baseCtx == nil {
+		baseCtx, cancel = context.WithCancel(context.Background())
 	}
 
 	// setup prefer protos: http2.0, other protos to be added
@@ -518,7 +607,7 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		LockListener:             conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
-	g.Execute = messageHandlerExecutor
+	g.Execute = serverExecutor
 
 	engine := &Engine{
 		Gopher:                       g,
@@ -533,6 +622,10 @@ func NewEngineTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		conns:                        map[*nbio.Conn]struct{}{},
 		ExecuteClient:                clientExecutor,
 		tlsConfig:                    tlsConfig,
+
+		emptyRequest: (&http.Request{}).WithContext(baseCtx),
+		BaseCtx:      baseCtx,
+		Cancel:       cancel,
 	}
 	engine.InitTLSBuffers()
 

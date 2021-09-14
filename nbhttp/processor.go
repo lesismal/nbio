@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	emptyRequest  = http.Request{}
+	// emptyRequest  = http.Request{}
 	emptyResponse = Response{}
 
 	requestPool = sync.Pool{
@@ -45,7 +45,7 @@ func releaseRequest(req *http.Request) {
 			br.close()
 			bodyReaderPool.Put(br)
 		}
-		*req = emptyRequest
+		// *req = emptyRequest
 		requestPool.Put(req)
 	}
 }
@@ -99,6 +99,7 @@ func (p *ServerProcessor) Conn() net.Conn {
 func (p *ServerProcessor) OnMethod(method string) {
 	if p.request == nil {
 		p.request = requestPool.Get().(*http.Request)
+		*p.request = *p.parser.Engine.emptyRequest
 		p.request.Method = method
 		p.request.Header = http.Header{}
 	} else {

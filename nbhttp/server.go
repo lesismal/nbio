@@ -16,12 +16,14 @@ type Server struct {
 
 // NewServer .
 func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), v ...interface{}) *Server {
-	engine := NewEngine(conf, handler, messageHandlerExecutor, v...)
+	args := append([]interface{}{handler, messageHandlerExecutor}, v...)
+	engine := NewEngine(conf, args...)
 	return &Server{Engine: engine}
 }
 
 // NewServerTLS .
 func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config, v ...interface{}) *Server {
-	engine := NewEngineTLS(conf, handler, messageHandlerExecutor, tlsConfig, v...)
+	args := append([]interface{}{handler, messageHandlerExecutor, tlsConfig}, v...)
+	engine := NewEngineTLS(conf, args...)
 	return &Server{Engine: engine}
 }
