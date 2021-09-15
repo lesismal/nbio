@@ -16,7 +16,7 @@ import (
 )
 
 var (
-	// emptyRequest  = http.Request{}
+	emptyRequest  = http.Request{}
 	emptyResponse = Response{}
 
 	requestPool = sync.Pool{
@@ -45,7 +45,8 @@ func releaseRequest(req *http.Request) {
 			br.close()
 			bodyReaderPool.Put(br)
 		}
-		// *req = emptyRequest
+		// fast gc for fields
+		*req = emptyRequest
 		requestPool.Put(req)
 	}
 }
