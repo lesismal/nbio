@@ -44,10 +44,11 @@ func New(minSize int) *MemPool {
 
 func (mp *MemPool) Malloc(size int) []byte {
 	pbuf := mp.pool.Get().(*[]byte)
-	if cap(*pbuf) < size {
-		if cap(*pbuf)+maxAppendSize >= size {
+	need := size - cap(*pbuf)
+	if need > 0 {
+		if need <= maxAppendSize {
 			*pbuf = (*pbuf)[:cap(*pbuf)]
-			*pbuf = append(*pbuf, make([]byte, size-len(*pbuf))...)
+			*pbuf = append(*pbuf, make([]byte, need)...)
 		} else {
 			mp.pool.Put(pbuf)
 			newBuf := make([]byte, size)
@@ -71,9 +72,10 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 		return mp.Malloc(size)
 	}
 	pbuf := &buf
-	if cap(*pbuf)+maxAppendSize >= size {
+	need := size - cap(buf)
+	if need <= maxAppendSize {
 		*pbuf = (*pbuf)[:cap(*pbuf)]
-		*pbuf = append(*pbuf, make([]byte, size-len(*pbuf))...)
+		*pbuf = append(*pbuf, make([]byte, need)...)
 	} else {
 		mp.pool.Put(pbuf)
 		newBuf := make([]byte, size)
