@@ -126,9 +126,7 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 }
 
 func (u *Upgrader) OnClose(h func(*Conn, error)) {
-	if h != nil {
-		u.onClose = h
-	}
+	u.onClose = h
 }
 
 func (u *Upgrader) EnableCompression(enable bool) {
