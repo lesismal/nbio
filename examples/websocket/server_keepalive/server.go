@@ -21,17 +21,16 @@ var (
 var clientMgr *ClientMgr
 
 type ClientMgr struct {
-	clients sync.Map
-	mux     sync.Mutex
-	chStop  chan struct{}
-	// clients       map[*websocket.Conn]struct{}
+	mux           sync.Mutex
+	chStop        chan struct{}
+	clients       map[*websocket.Conn]struct{}
 	keepaliveTime time.Duration
 }
 
 func NewClientMgr(keepaliveTime time.Duration) *ClientMgr {
 	return &ClientMgr{
-		chStop: make(chan struct{}),
-		// clients:       map[*websocket.Conn]struct{}{},
+		chStop:        make(chan struct{}),
+		clients:       map[*websocket.Conn]struct{}{},
 		keepaliveTime: keepaliveTime,
 	}
 }
@@ -39,15 +38,13 @@ func NewClientMgr(keepaliveTime time.Duration) *ClientMgr {
 func (cm *ClientMgr) Add(c *websocket.Conn) {
 	cm.mux.Lock()
 	defer cm.mux.Unlock()
-	cm.clients.Store(c, struct{}{})
-	// cm.clients[c] = struct{}{}
+	cm.clients[c] = struct{}{}
 }
 
 func (cm *ClientMgr) Delete(c *websocket.Conn) {
 	cm.mux.Lock()
 	defer cm.mux.Unlock()
-	// delete(cm.clients, c)
-	cm.clients.Delete(c)
+	delete(cm.clients, c)
 }
 
 func (cm *ClientMgr) Run() {
