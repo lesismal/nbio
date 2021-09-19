@@ -1,21 +1,29 @@
 # NBIO - NON-BLOCKING IO
 
-[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go#networking)
 
-[![GoDoc][1]][2] [![MIT licensed][3]][4] [![Build Status][5]][6] [![Go Report Card][7]][8] [![Coverage Statusd][11]][12]
+[![Slack][1]][2]
 
-[1]: https://godoc.org/github.com/lesismal/nbio?status.svg
-[2]: https://godoc.org/github.com/lesismal/nbio
-[3]: https://img.shields.io/badge/license-MIT-blue.svg
-[4]: LICENSE
-[5]: https://img.shields.io/github/workflow/status/lesismal/nbio/build-linux?style=flat-square&logo=github-actions
-[6]: https://github.com/lesismal/nbio/actions?query=workflow%3build-linux
-[7]: https://goreportcard.com/badge/github.com/lesismal/nbio
-[8]: https://goreportcard.com/report/github.com/lesismal/nbio
-[9]: https://img.shields.io/badge/go-%3E%3D1.16-30dff3?style=flat-square&logo=go
-[10]: https://github.com/lesismal/nbio
-[11]: https://codecov.io/gh/lesismal/nbio/branch/master/graph/badge.svg
-[12]: https://codecov.io/gh/lesismal/nbio
+[![Mentioned in Awesome Go][3]][4] [![MIT licensed][5]][6] [![Go Version][7]][8] [![Build Status][9]][10] [![Go Report Card][11]][12] [![Coverage Statusd][13]][14]
+
+[1]: https://img.shields.io/badge/join-us%20on%20slack-gray.svg?longCache=true&logo=slack&colorB=green
+[2]: https://join.slack.com/t/arpcnbio/shared_invite/zt-vh3g1z2v-qqoDp1hQ45fJZqwPrSz4~Q
+[3]: https://awesome.re/mentioned-badge-flat.svg
+[4]: https://github.com/avelino/awesome-go#networking
+[5]: https://img.shields.io/badge/license-MIT-blue.svg
+[6]: LICENSE
+[7]: https://img.shields.io/badge/go-%3E%3D1.16-30dff3?style=flat-square&logo=go
+[8]: https://github.com/lesismal/nbio
+[9]: https://img.shields.io/github/workflow/status/lesismal/nbio/build-linux?style=flat-square&logo=github-actions
+[10]: https://github.com/lesismal/nbio/actions?query=workflow%3build-linux
+[11]: https://goreportcard.com/badge/github.com/lesismal/nbio
+[12]: https://goreportcard.com/report/github.com/lesismal/nbio
+[13]: https://codecov.io/gh/lesismal/nbio/branch/master/graph/badge.svg
+[14]: https://codecov.io/gh/lesismal/nbio
+[15]: https://godoc.org/github.com/lesismal/nbio?status.svg
+[16]: https://godoc.org/github.com/lesismal/nbio
+
+
+
 
 
 ## Contents
