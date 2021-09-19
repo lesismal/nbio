@@ -325,7 +325,8 @@ func (g *Gopher) removeTimer(it *htimer) {
 		heap.Remove(&g.timers, index)
 		if len(g.timers) > 0 {
 			if index == 0 {
-				g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+				g.trigger.Reset(time.Until(g.timers[0].expire))
+
 			}
 		} else {
 			g.trigger.Reset(timeForever)
@@ -346,7 +347,7 @@ func (g *Gopher) resetTimer(it *htimer) {
 	if g.timers[index] == it {
 		heap.Fix(&g.timers, index)
 		if index == 0 || it.index == 0 {
-			g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+			g.trigger.Reset(time.Until(g.timers[0].expire))
 		}
 	}
 }
@@ -385,6 +386,7 @@ func (g *Gopher) timerLoop() {
 			for {
 				g.tmux.Lock()
 				if g.timers.Len() == 0 {
+					g.trigger.Reset(timeForever)
 					g.tmux.Unlock()
 					break
 				}
