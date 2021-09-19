@@ -39,6 +39,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	})
 	upgrader.SetPongHandler(func(c *websocket.Conn, s string) {
 		log.Println("-- pone")
+
 		// step 3: reset ping timer
 		keepaliveTimer := c.Session().(*nbio.Timer)
 		keepaliveTimer.Reset(KeepaliveTime)
@@ -53,12 +54,16 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn := conn.(*websocket.Conn)
 
-	// step 1: reset ping timer and save it
-
+	// step 1: set ping timer and save it
+	closed := false
 	var ping func()
 	ping = func() {
+		if closed {
+			return
+		}
 		log.Println("++ ping")
 		wsConn.WriteMessage(websocket.PingMessage, nil)
+
 		keepaliveTimer := server.AfterFunc(KeepaliveTime, ping)
 		wsConn.SetSession(keepaliveTimer)
 	}
@@ -66,6 +71,9 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn.SetSession(keepaliveTimer)
 
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
+		closed = true
+
+		// step 4: clear ping timer
 		keepaliveTimer := c.Session().(*nbio.Timer)
 		keepaliveTimer.Stop()
 	})
