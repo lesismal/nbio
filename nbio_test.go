@@ -242,7 +242,10 @@ func TestFuzz(t *testing.T) {
 
 func TestHeapTimer(t *testing.T) {
 	g := NewGopher(Config{})
-	g.Start()
+	err := g.Start()
+	if err != nil {
+		t.Fatal("failed to start gopher", err)
+	}
 	defer g.Stop()
 
 	timeout := time.Second / 10

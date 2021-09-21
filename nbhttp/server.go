@@ -304,7 +304,10 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		err := c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		if err != nil {
+			logging.Error("set read deadline failure: %v", err)
+		}
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
@@ -338,7 +341,10 @@ func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f 
 		err := parser.Read(data)
 		if err != nil {
 			logging.Debug("parser.Read failed: %v", err)
-			c.CloseWithError(err)
+			err := c.CloseWithError(err)
+			if err != nil {
+				logging.Error("parser.Read close with error failed: %v", err)
+			}
 		}
 		// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 	})
@@ -479,7 +485,10 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 		parser.Server = svr
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		err := c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		if err != nil {
+			logging.Error("set read deadline error: %v", err)
+		}
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
@@ -519,14 +528,20 @@ func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func
 				_, nread, err := tlsConn.AppendAndRead(data, buffer)
 				data = nil
 				if err != nil {
-					c.CloseWithError(err)
+					err := c.CloseWithError(err)
+					if err != nil {
+						logging.Debug("close with error failed: %v", err)
+					}
 					return
 				}
 				if nread > 0 {
 					err := parser.Read(buffer[:nread])
 					if err != nil {
 						logging.Debug("parser.Read failed: %v", err)
-						c.CloseWithError(err)
+						err = c.CloseWithError(err)
+						if err != nil {
+							logging.Debug("failed to close: %v", err)
+						}
 						return
 					}
 				}

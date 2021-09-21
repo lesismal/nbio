@@ -17,7 +17,6 @@ import (
 )
 
 const (
-	maxFrameHeaderSize         = 14
 	maxControlFramePayloadSize = 125
 )
 
@@ -257,7 +256,7 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
+func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteCompressionEnabled bool) (*Conn, error) {
 	conn := &Conn{
 		Conn:                     c,
 		subprotocol:              subprotocol,
@@ -266,7 +265,6 @@ func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteC
 		onClose:                  func(*Conn, error) {},
 	}
 	conn.EnableWriteCompression(u.enableWriteCompression)
-	conn.SetCompressionLevel(u.compressionLevel)
+	return conn, conn.SetCompressionLevel(u.compressionLevel)
 
-	return conn
 }

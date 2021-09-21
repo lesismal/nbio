@@ -470,14 +470,6 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	return syscall.Close(c.fd)
 }
 
-func newConn(fd int, lAddr, rAddr net.Addr) *Conn {
-	return &Conn{
-		fd:    fd,
-		lAddr: lAddr,
-		rAddr: rAddr,
-	}
-}
-
 // NBConn converts net.Conn to *Conn
 func NBConn(conn net.Conn) (*Conn, error) {
 	if conn == nil {

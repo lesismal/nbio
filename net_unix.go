@@ -39,6 +39,7 @@ func sockaddrToAddr(sa syscall.Sockaddr) net.Addr {
 	return a
 }
 
+/*
 func getSockaddr(proto, addr string) (sa syscall.Sockaddr, soType int, err error) {
 	var tcp *net.TCPAddr
 
@@ -154,6 +155,7 @@ func listen(network, address string, backlogNum int64) (int, error) {
 
 	return fd, nil
 }
+*/
 
 func dupStdConn(conn net.Conn) (*Conn, error) {
 	sc, ok := conn.(interface {

@@ -69,29 +69,32 @@ func (p *poller) deleteConn(c *Conn) {
 	p.g.onClose(c, c.closeErr)
 }
 
-func (p *poller) trigger() {
-	syscall.Kevent(p.kfd, []syscall.Kevent_t{{Ident: 0, Filter: syscall.EVFILT_USER, Fflags: syscall.NOTE_TRIGGER}}, nil, nil)
+func (p *poller) trigger() (int, error) {
+	return syscall.Kevent(p.kfd, []syscall.Kevent_t{{Ident: 0, Filter: syscall.EVFILT_USER, Fflags: syscall.NOTE_TRIGGER}}, nil, nil)
 }
 
-func (p *poller) addRead(fd int) {
+func (p *poller) addRead(fd int) error {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
 	p.mux.Unlock()
-	p.trigger()
+	_, err := p.trigger()
+	return err
 }
 
-func (p *poller) modWrite(fd int) {
+func (p *poller) modWrite(fd int) error {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
-	p.trigger()
+	_, err := p.trigger()
+	return err
 }
 
-func (p *poller) deleteEvent(fd int) {
+func (p *poller) deleteEvent(fd int) error {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_READ})
 	p.mux.Unlock()
-	p.trigger()
+	_, err := p.trigger()
+	return err
 }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {

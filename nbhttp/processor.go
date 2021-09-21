@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lesismal/nbio/logging"
 )
 
 var (
@@ -242,7 +244,10 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 			// the data may still in the send queue
 			p.conn.Close()
 		} else if p.parser == nil || p.parser.Upgrader == nil {
-			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+			err := p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+			if err != nil {
+				logging.Error("set read deadline failed: %v", err)
+			}
 		}
 		releaseRequest(req)
 		releaseResponse(res)
@@ -256,28 +261,6 @@ func (p *ServerProcessor) Close() {
 	// 	return
 	// }
 	// p.release()
-}
-
-func (p *ServerProcessor) release() {
-	// if p.request != nil {
-	// 	releaseRequest(p.request)
-	// }
-	// for _, res := range p.resQueue {
-	// 	releaseRequest(res.request)
-	// 	releaseResponse(res)
-	// }
-
-	// p.conn = nil
-	// p.parser = nil
-	// p.request = nil
-	// p.handler = nil
-	// p.executor = nil
-	// p.resQueue = nil
-	// p.enableSendfile = false
-	// // p.isUpgrade = false
-	// // p.active = 0
-
-	// serverProcessorPool.Put(p)
 }
 
 // HandleMessage .
