@@ -406,7 +406,17 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = serverExecutor
+		clientExecutor = func(f func()) {
+			defer func() {
+				if err := recover(); err != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				}
+			}()
+			f()
+		}
 	}
 
 	baseCtx, cancel := conf.Context, conf.Cancel
@@ -575,7 +585,17 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = serverExecutor
+		clientExecutor = func(f func()) {
+			defer func() {
+				if err := recover(); err != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				}
+			}()
+			f()
+		}
 	}
 
 	baseCtx, cancel := conf.Context, conf.Cancel
