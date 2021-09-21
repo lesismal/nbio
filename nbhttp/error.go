@@ -85,4 +85,6 @@ var (
 var (
 	// ErrClientUnsupportedSchema
 	ErrClientUnsupportedSchema = errors.New("unsupported schema")
+
+	ErrClientTimeout = errors.New("timeout")
 )

@@ -375,7 +375,7 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		}
 	}
 	if handler == nil {
-		panic("nil http.Handler")
+		handler = http.NewServeMux()
 	}
 
 	var serverExecutor = conf.ServerExecutor
@@ -535,7 +535,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		}
 	}
 	if handler == nil {
-		panic("nil http.Handler")
+		handler = http.NewServeMux()
 	}
 
 	var serverExecutor = conf.ServerExecutor
