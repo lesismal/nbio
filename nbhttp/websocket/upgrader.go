@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
@@ -255,7 +256,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(u, conn, false, subprotocol, compress)
+	u.conn = newConn(u, conn, subprotocol, compress)
 	u.Engine = parser.Engine
 	u.conn.Engine = parser.Engine
 
@@ -546,6 +547,13 @@ func subprotocols(r *http.Request) []string {
 
 var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
+func acceptKeyString(challengeKey string) string {
+	h := sha1.New()
+	h.Write([]byte(challengeKey))
+	h.Write(keyGUID)
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
 func acceptKeyBytes(challengeKey string) []byte {
 	h := sha1.New()
 	h.Write([]byte(challengeKey))
@@ -554,6 +562,14 @@ func acceptKeyBytes(challengeKey string) []byte {
 	buf := make([]byte, base64.StdEncoding.EncodedLen(len(sum)))
 	base64.StdEncoding.Encode(buf, sum)
 	return buf
+}
+
+func challengeKey() (string, error) {
+	p := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, p); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(p), nil
 }
 
 func checkSameOrigin(r *http.Request) bool {

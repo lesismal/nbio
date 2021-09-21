@@ -257,7 +257,7 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
+func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool) *Conn {
 	conn := &Conn{
 		Conn:                     c,
 		subprotocol:              subprotocol,

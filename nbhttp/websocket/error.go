@@ -36,4 +36,8 @@ var (
 	ErrFragmentsShouldNotHaveBinaryOrTextOpcode = errors.New("websocket: fragments should not have opcode of text or binary")
 
 	ErrInvalidCloseCode = errors.New("websocket: invalid close code")
+
+	ErrBadHandshake = errors.New("websocket: bad handshake")
+
+	ErrInvalidCompression = errors.New("websocket: invalid compression negotiation")
 )
