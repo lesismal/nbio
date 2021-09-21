@@ -71,6 +71,7 @@ type httpConn struct {
 	conn     net.Conn
 	mux      sync.Mutex
 	handlers []resHandler
+	executor func(f func())
 }
 
 func (c *httpConn) Close() {
@@ -100,17 +101,21 @@ func (c *httpConn) onResponse(res *http.Response, err error) {
 		head.h(res, c.conn, err)
 		c.handlers = c.handlers[1:]
 		if c.cli.Timeout > 0 {
-			now := time.Now()
-			for len(c.handlers) > 0 {
-				head = c.handlers[0]
-				deadline := head.t.Add(c.cli.Timeout)
-				if deadline.Before(now) {
-					head.h(nil, head.c, ErrClientTimeout)
-					c.handlers = c.handlers[1:]
-				} else {
-					c.conn.SetReadDeadline(deadline)
-					break
+			if len(c.handlers) > 0 {
+				now := time.Now()
+				if len(c.handlers) > 0 {
+					head = c.handlers[0]
+					deadline := head.t.Add(c.cli.Timeout)
+					if deadline.Before(now) {
+						c.executor(func() {
+							c.CloseWithError(ErrClientTimeout)
+						})
+					} else {
+						c.conn.SetReadDeadline(deadline)
+					}
 				}
+			} else {
+				c.conn.SetReadDeadline(time.Time{})
 			}
 		}
 		if len(c.handlers) == 0 {
@@ -194,7 +199,7 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 					return
 				}
 
-				c.Conn = &httpConn{cli: c, conn: nbc}
+				c.Conn = &httpConn{cli: c, conn: nbc, executor: nbc.Execute}
 				processor := NewClientProcessor(c.Conn, c.Conn.onResponse)
 				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
 				parser.Conn = nbc
