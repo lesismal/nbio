@@ -60,6 +60,22 @@ type Client struct {
 
 }
 
+func (c *Client) Close() {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
+}
+
+func (c *Client) CloseWithError(err error) {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if c.Conn != nil {
+		c.Conn.CloseWithError(err)
+	}
+}
+
 type resHandler struct {
 	c net.Conn
 	t time.Time
@@ -81,6 +97,9 @@ func (c *httpConn) Close() {
 		h.h(nil, c.conn, io.EOF)
 	}
 	c.handlers = nil
+	if c.conn != nil {
+		c.conn.Close()
+	}
 }
 
 func (c *httpConn) CloseWithError(err error) {
@@ -90,6 +109,9 @@ func (c *httpConn) CloseWithError(err error) {
 		h.h(nil, c.conn, err)
 	}
 	c.handlers = nil
+	if c.conn != nil {
+		c.conn.Close()
+	}
 }
 
 func (c *httpConn) onResponse(res *http.Response, err error) {
@@ -127,7 +149,7 @@ func (c *httpConn) onResponse(res *http.Response, err error) {
 func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *http.Response, conn net.Conn, err error)) {
 	originHandler := handler
 	handler = func(res *http.Response, conn net.Conn, err error) {
-		if c.Timeout > 0 {
+		if err == nil && c.Timeout > 0 && conn != nil {
 			conn.SetReadDeadline(time.Time{})
 		}
 		originHandler(res, conn, err)
@@ -135,7 +157,7 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 	sendRequest := func() {
 		err := req.Write(c.Conn.conn)
 		if err != nil {
-			handler(nil, c.Conn.conn, err)
+			handler(nil, nil, err)
 			return
 		}
 		c.Conn.handlers = append(c.Conn.handlers, resHandler{c: c.Conn.conn, t: time.Now(), h: handler})
@@ -172,13 +194,13 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 			if c.Proxy != nil {
 				proxyURL, err := c.Proxy(req)
 				if err != nil {
-					handler(nil, c.Conn.conn, err)
+					handler(nil, nil, err)
 					return
 				}
 				if proxyURL != nil {
 					dialer, err := proxy_FromURL(proxyURL, netDialerFunc(netDial))
 					if err != nil {
-						handler(nil, c.Conn.conn, err)
+						handler(nil, nil, err)
 						return
 					}
 					netDial = dialer.Dial
@@ -187,7 +209,7 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 
 			netConn, err := netDial("tcp", addr)
 			if err != nil {
-				handler(nil, c.Conn.conn, err)
+				handler(nil, nil, err)
 				return
 			}
 
@@ -195,7 +217,7 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 			case "http":
 				nbc, err := nbio.NBConn(netConn)
 				if err != nil {
-					handler(nil, c.Conn.conn, err)
+					handler(nil, nil, err)
 					return
 				}
 
@@ -218,19 +240,19 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 				tlsConn := tls.NewConn(netConn, tlsConfig, true, false, mempool.DefaultMemPool)
 				err = tlsConn.Handshake()
 				if err != nil {
-					handler(nil, c.Conn.conn, err)
+					handler(nil, nil, err)
 					return
 				}
 				if !tlsConfig.InsecureSkipVerify {
 					if err := tlsConn.VerifyHostname(tlsConfig.ServerName); err != nil {
-						handler(nil, c.Conn.conn, err)
+						handler(nil, nil, err)
 						return
 					}
 				}
 
 				nbc, err := nbio.NBConn(tlsConn.Conn())
 				if err != nil {
-					handler(nil, c.Conn.conn, err)
+					handler(nil, nil, err)
 					return
 				}
 

@@ -42,7 +42,7 @@ func main() {
 			Engine: engine,
 		}).Dial(u.String(), nil, newUpgrader())
 		if err != nil {
-			log.Fatal("dial:", err)
+			panic(fmt.Errorf("dial: %v", err))
 		}
 		c.WriteMessage(websocket.TextMessage, []byte("hello"))
 	}

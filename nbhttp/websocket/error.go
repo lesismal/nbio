@@ -40,4 +40,6 @@ var (
 	ErrBadHandshake = errors.New("websocket: bad handshake")
 
 	ErrInvalidCompression = errors.New("websocket: invalid compression negotiation")
+
+	ErrMalformedURL = errors.New("malformed ws or wss URL")
 )

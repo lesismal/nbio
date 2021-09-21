@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
@@ -39,26 +38,6 @@ func (d *Dialer) Dial(urlStr string, requestHeader http.Header, upgrader *Upgrad
 	return d.DialContext(context.Background(), urlStr, requestHeader, upgrader)
 }
 
-var errMalformedURL = errors.New("malformed ws or wss URL")
-
-func hostPortNoPort(u *url.URL) (hostPort, hostNoPort string) {
-	hostPort = u.Host
-	hostNoPort = u.Host
-	if i := strings.LastIndex(u.Host, ":"); i > strings.LastIndex(u.Host, "]") {
-		hostNoPort = hostNoPort[:i]
-	} else {
-		switch u.Scheme {
-		case "wss":
-			hostPort += ":443"
-		case "https":
-			hostPort += ":443"
-		default:
-			hostPort += ":80"
-		}
-	}
-	return hostPort, hostNoPort
-}
-
 var DefaultDialer = &Dialer{
 	Proxy: http.ProxyFromEnvironment,
 }
@@ -80,11 +59,11 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 	case "wss":
 		u.Scheme = "https"
 	default:
-		return nil, nil, errMalformedURL
+		return nil, nil, ErrMalformedURL
 	}
 
 	if u.User != nil {
-		return nil, nil, errMalformedURL
+		return nil, nil, ErrMalformedURL
 	}
 
 	req := &http.Request{
@@ -142,6 +121,11 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 	httpCli.Do(req, d.TLSClientConfig, func(resp *http.Response, conn net.Conn, err error) {
 		res = resp
 
+		if err != nil {
+			errCh <- err
+			return
+		}
+
 		nbc, ok := conn.(*nbio.Conn)
 		if !ok {
 			tlsConn, ok := conn.(*tls.Conn)
@@ -191,11 +175,8 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			}
 
 			remoteCompressionEnabled = true
-			upgrader.enableWriteCompression = true
 			break
 		}
-
-		conn.SetDeadline(time.Time{})
 
 		wsConn = newConn(upgrader, conn, resp.Header.Get("Sec-Websocket-Protocol"), remoteCompressionEnabled)
 		wsConn.Engine = d.Engine
@@ -211,6 +192,13 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		errCh <- nil
 	})
 
-	err = <-errCh
+	select {
+	case err = <-errCh:
+	case <-ctx.Done():
+		err = nbhttp.ErrClientTimeout
+	}
+	if err != nil {
+		httpCli.CloseWithError(err)
+	}
 	return wsConn, res, err
 }
