@@ -30,9 +30,17 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.NewUpgrader()
 	upgrader.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
-		c.WriteMessage(messageType, data)
+		err := c.WriteMessage(messageType, data)
+		if err != nil {
+			fmt.Println("OnMessage Error:", c.RemoteAddr().String(), err)
+			c.Close()
+		}
 		fmt.Println("OnMessage:", messageType, string(data))
-		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
+		err = c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
+		if err != nil {
+			fmt.Println("OnMessage Error:", c.RemoteAddr().String(), err)
+			c.Close()
+		}
 	})
 	upgrader.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
@@ -54,8 +62,6 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
-	tlsConfig.BuildNameToCertificate()
-
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 

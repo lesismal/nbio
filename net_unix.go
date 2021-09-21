@@ -39,6 +39,7 @@ func sockaddrToAddr(sa syscall.Sockaddr) net.Addr {
 	return a
 }
 
+/*
 func getSockaddr(proto, addr string) (sa syscall.Sockaddr, soType int, err error) {
 	var tcp *net.TCPAddr
 
@@ -84,7 +85,9 @@ func getSockaddr(proto, addr string) (sa syscall.Sockaddr, soType int, err error
 
 	return nil, -1, errors.New("unsupported protocol")
 }
+*/
 
+/*
 func determineTCPProto(proto string, ip *net.TCPAddr) (string, error) {
 	if ip.IP.To4() != nil {
 		return "tcp4", nil
@@ -154,6 +157,7 @@ func listen(network, address string, backlogNum int64) (int, error) {
 
 	return fd, nil
 }
+*/
 
 func dupStdConn(conn net.Conn) (*Conn, error) {
 	sc, ok := conn.(interface {

@@ -25,10 +25,10 @@ func isValidCompressionLevel(level int) bool {
 	return minCompressionLevel <= level && level <= maxCompressionLevel
 }
 
-func decompressReader(r io.Reader) io.ReadCloser {
+func decompressReader(r io.Reader) (io.ReadCloser, error) {
 	fr, _ := flateReaderPool.Get().(io.ReadCloser)
-	fr.(flate.Resetter).Reset(r, nil)
-	return &flateReadWrapper{fr}
+	err := fr.(flate.Resetter).Reset(r, nil)
+	return &flateReadWrapper{fr}, err
 }
 
 type flateReadWrapper struct {

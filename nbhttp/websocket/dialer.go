@@ -178,7 +178,11 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			break
 		}
 
-		wsConn = newConn(upgrader, conn, resp.Header.Get("Sec-Websocket-Protocol"), remoteCompressionEnabled)
+		wsConn, err = newConn(upgrader, conn, resp.Header.Get("Sec-Websocket-Protocol"), remoteCompressionEnabled)
+		if err != nil {
+			errCh <- ErrBadHandshake
+			return
+		}
 		wsConn.Engine = d.Engine
 		wsConn.OnClose(upgrader.onClose)
 

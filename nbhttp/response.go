@@ -76,7 +76,11 @@ func (res *Response) WriteHeader(statusCode int) {
 			}
 		}
 
-		res.checkChunked()
+		err := res.checkChunked()
+		if err != nil {
+			logging.Error("checkCunked failed ", err)
+
+		}
 	}
 }
 

@@ -36,7 +36,7 @@ const (
 
 	// state: Body Chunk
 	stateHeaderOverLF
-	stateBodyChunkSizeBlankLine
+	stateBodyChunkSizeBlankLine //nolint:deadcode,varcheck // needed for indexing but not used
 	stateBodyChunkSizeBefore
 	stateBodyChunkSize
 	stateBodyChunkSizeLF

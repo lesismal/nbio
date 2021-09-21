@@ -323,14 +323,16 @@ func (e *Engine) DataHandlerTLS(c *nbio.Conn, data []byte) {
 			_, nread, err := tlsConn.AppendAndRead(data, buffer)
 			data = nil
 			if err != nil {
-				c.CloseWithError(err)
+				err = c.CloseWithError(err)
+				logging.Debug("close with error failed: %v", err)
 				return
 			}
 			if nread > 0 {
 				err := parser.Read(buffer[:nread])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
-					c.CloseWithError(err)
+					err = c.CloseWithError(err)
+					logging.Debug("close with error failed: %v", err)
 					return
 				}
 			}
@@ -476,7 +478,11 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		parser.Engine = engine
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		err := c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		if err != nil {
+			logging.Error("failed to set read dead line: %v", err)
+		}
+
 		c.OnData(engine.DataHandler)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
@@ -672,7 +678,12 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		parser.Engine = engine
 		processor.(*ServerProcessor).parser = parser
 		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		err := c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
+		if err != nil {
+			logging.Error("failed to set read deadline: %v", err)
+			c.Close()
+			return
+		}
 
 		c.OnData(engine.DataHandlerTLS)
 	})

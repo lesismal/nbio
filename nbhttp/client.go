@@ -15,6 +15,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -133,11 +134,17 @@ func (c *httpConn) onResponse(res *http.Response, err error) {
 							c.CloseWithError(ErrClientTimeout)
 						})
 					} else {
-						c.conn.SetReadDeadline(deadline)
+						err := c.conn.SetReadDeadline(deadline)
+						if err != nil {
+							logging.Error("failed to set read dead line: %v", err)
+						}
 					}
 				}
 			} else {
-				c.conn.SetReadDeadline(time.Time{})
+				err = c.conn.SetReadDeadline(time.Time{})
+				if err != nil {
+					logging.Error("failed to set read dead line: %v", err)
+				}
 			}
 		}
 		if len(c.handlers) == 0 {
@@ -229,7 +236,11 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 				nbc.SetSession(parser)
 
 				nbc.OnData(c.Engine.DataHandler)
-				c.Engine.AddConn(nbc)
+				_, err = c.Engine.AddConn(nbc)
+				if err != nil {
+					handler(nil, nil, err)
+					return
+				}
 			case "https":
 				if tlsConfig == nil {
 					tlsConfig = &tls.Config{}

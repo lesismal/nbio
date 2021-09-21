@@ -17,6 +17,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
@@ -66,7 +67,10 @@ func NewUpgrader() *Upgrader {
 			u.conn.Close()
 			return
 		}
-		c.WriteMessage(PongMessage, []byte(data))
+		err := c.WriteMessage(PongMessage, []byte(data))
+		if err != nil {
+			u.Close(nil, err)
+		}
 	}
 	u.pongMessageHandler = func(*Conn, string) {}
 	u.closeMessageHandler = func(c *Conn, code int, text string) {
@@ -76,7 +80,10 @@ func NewUpgrader() *Upgrader {
 		buf := mempool.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
-		u.conn.WriteMessage(CloseMessage, buf)
+		err := u.conn.WriteMessage(CloseMessage, buf)
+		if err != nil {
+			logging.Error("failed to write close message", err)
+		}
 		mempool.Free(buf)
 	}
 	return u
@@ -253,10 +260,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	buf = append(buf, "\r\n"...)
 
 	if u.HandshakeTimeout > 0 {
-		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
+		err := conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
+		if err != nil {
+			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+		}
 	}
 
-	u.conn = newConn(u, conn, subprotocol, compress)
+	u.conn, err = newConn(u, conn, subprotocol, compress)
+	if err != nil {
+		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+	}
 	u.Engine = parser.Engine
 	u.conn.Engine = parser.Engine
 
@@ -346,7 +359,10 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if fin {
 				if u.compress {
 					var b []byte
-					rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
+					rc, err := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
+					if err != nil {
+						break
+					}
 					b, err = readAll(rc, len(u.message)*2)
 					mempool.Free(u.message)
 					u.message = b
@@ -443,12 +459,18 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 			if !validCloseCode(code) || !c.Engine.CheckUtf8(data[2:]) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
-				c.WriteMessage(CloseMessage, protoErrorCode)
+				err := c.WriteMessage(CloseMessage, protoErrorCode)
+				if err != nil {
+					logging.Error("failed to send close message: %v", err)
+				}
 			} else {
 				u.closeMessageHandler(c, code, string(data[2:]))
 			}
 		} else {
-			c.WriteMessage(CloseMessage, nil)
+			err := c.WriteMessage(CloseMessage, nil)
+			if err != nil {
+				logging.Error("failed to send close message: %v", err)
+			}
 		}
 		// close immediately, no need to wait for data flushed on a blocked conn
 		c.Close()
@@ -549,15 +571,15 @@ var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
 func acceptKeyString(challengeKey string) string {
 	h := sha1.New()
-	h.Write([]byte(challengeKey))
-	h.Write(keyGUID)
+	h.Write([]byte(challengeKey)) //nolint:errcheck // not sure what to do with this
+	h.Write(keyGUID)              //nolint:errcheck // not sure what to do with this
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
 func acceptKeyBytes(challengeKey string) []byte {
 	h := sha1.New()
-	h.Write([]byte(challengeKey))
-	h.Write(keyGUID)
+	h.Write([]byte(challengeKey)) //nolint:errcheck // not sure what to do with this
+	h.Write(keyGUID)              //nolint:errcheck // not sure what to do with this
 	sum := h.Sum(nil)
 	buf := make([]byte, base64.StdEncoding.EncodedLen(len(sum)))
 	base64.StdEncoding.Encode(buf, sum)

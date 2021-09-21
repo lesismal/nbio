@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lesismal/nbio/logging"
 )
 
 var (
@@ -224,11 +226,15 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	response := NewResponse(p.parser, request, p.enableSendfile)
 	parser.Execute(func() {
 		p.handler.ServeHTTP(response, request)
-		p.flushResponse(response)
+		err := p.flushResponse(response)
+		if err != nil {
+			logging.Error("failed to flush http response: %v", err)
+		}
 	})
 }
 
-func (p *ServerProcessor) flushResponse(res *Response) {
+func (p *ServerProcessor) flushResponse(res *Response) error {
+	var err error
 	if p.conn != nil {
 		req := res.request
 		if !res.hijacked {
@@ -237,18 +243,19 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 				p.conn.Close()
 				releaseRequest(req)
 				releaseResponse(res)
-				return
+				return nil
 			}
 		}
 		if req.Close {
 			// the data may still in the send queue
 			p.conn.Close()
 		} else if p.parser == nil || p.parser.Upgrader == nil {
-			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+			err = p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 		}
 		releaseRequest(req)
 		releaseResponse(res)
 	}
+	return err
 }
 
 // Close .

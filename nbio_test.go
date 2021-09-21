@@ -213,9 +213,15 @@ func TestFuzz(t *testing.T) {
 	c, err := Dial("tcp", addr)
 	if err == nil {
 		log.Printf("Dial tcp4: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
-		g.AddConn(c)
+		_, err := g.AddConn(c)
+		if err != nil {
+			log.Printf("failed to addConn %v", err)
+		}
 		c.SetWriteDeadline(time.Now().Add(time.Second))
-		c.Write([]byte{1})
+		_, err = c.Write([]byte{1})
+		if err != nil {
+			log.Printf("failed to write one byte: %v", err)
+		}
 
 		time.Sleep(time.Second / 10)
 
@@ -223,12 +229,18 @@ func TestFuzz(t *testing.T) {
 		bs = append(bs, []byte{2})
 		bs = append(bs, []byte{3})
 		bs = append(bs, []byte{4})
-		c.Writev(bs)
+		_, err = c.Writev(bs)
+		if err != nil {
+			log.Printf("failed to write one byte: %v", err)
+		}
 
 		time.Sleep(time.Second / 10)
 
 		c.Close()
-		c.Write([]byte{1})
+		_, err = c.Write([]byte{1})
+		if err != nil {
+			log.Printf("failed to write one byte: %v", err)
+		}
 	} else {
 		log.Panicf("Dial tcp4: %v", err)
 	}
@@ -242,7 +254,10 @@ func TestFuzz(t *testing.T) {
 
 func TestHeapTimer(t *testing.T) {
 	g := NewGopher(Config{})
-	g.Start()
+	err := g.Start()
+	if err != nil {
+		t.Fatalf("failed to start: %v", err)
+	}
 	defer g.Stop()
 
 	timeout := time.Second / 10
