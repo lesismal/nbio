@@ -1,3 +1,4 @@
+//go:build !unit
 // +build !unit
 
 // run this test via :go test -tags=integration .
@@ -54,7 +55,6 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
-	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)

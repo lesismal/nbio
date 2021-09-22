@@ -44,6 +44,8 @@ type Conn struct {
 	chWaitWrite chan struct{}
 
 	execList []func()
+
+	DataHandler func(c *Conn, data []byte)
 }
 
 // Hash returns a hash code

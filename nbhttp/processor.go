@@ -45,6 +45,7 @@ func releaseRequest(req *http.Request) {
 			br.close()
 			bodyReaderPool.Put(br)
 		}
+		// fast gc for fields
 		*req = emptyRequest
 		requestPool.Put(req)
 	}
@@ -69,7 +70,7 @@ type Processor interface {
 	OnBody(data []byte)
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
-	Close()
+	Close(p *Parser, err error)
 }
 
 // ServerProcessor .
@@ -99,6 +100,7 @@ func (p *ServerProcessor) Conn() net.Conn {
 func (p *ServerProcessor) OnMethod(method string) {
 	if p.request == nil {
 		p.request = requestPool.Get().(*http.Request)
+		*p.request = *p.parser.Engine.emptyRequest
 		p.request.Method = method
 		p.request.Header = http.Header{}
 	} else {
@@ -250,41 +252,8 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 }
 
 // Close .
-func (p *ServerProcessor) Close() {
-	// active := atomic.AddInt32(&p.active, 1)
-	// if (active & 0x2) > 0x1 {
-	// 	return
-	// }
-	// p.release()
-}
+func (p *ServerProcessor) Close(parser *Parser, err error) {
 
-func (p *ServerProcessor) release() {
-	// if p.request != nil {
-	// 	releaseRequest(p.request)
-	// }
-	// for _, res := range p.resQueue {
-	// 	releaseRequest(res.request)
-	// 	releaseResponse(res)
-	// }
-
-	// p.conn = nil
-	// p.parser = nil
-	// p.request = nil
-	// p.handler = nil
-	// p.executor = nil
-	// p.resQueue = nil
-	// p.enableSendfile = false
-	// // p.isUpgrade = false
-	// // p.active = 0
-
-	// serverProcessorPool.Put(p)
-}
-
-// HandleMessage .
-func (p *ServerProcessor) HandleMessage(handler http.Handler) {
-	if handler != nil {
-		p.handler = handler
-	}
 }
 
 // NewServerProcessor .
@@ -314,14 +283,14 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.
 
 // ClientProcessor .
 type ClientProcessor struct {
-	conn     net.Conn
+	conn     *httpConn
 	response *http.Response
-	handler  func(*http.Response)
+	handler  func(res *http.Response, err error)
 }
 
 // Conn .
 func (p *ClientProcessor) Conn() net.Conn {
-	return p.conn
+	return p.conn.conn
 }
 
 // OnMethod .
@@ -387,27 +356,17 @@ func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ClientProcessor) OnComplete(parser *Parser) {
-	p.handler(p.response)
+	p.handler(p.response, nil)
 	p.response = nil
 }
 
 // Close .
-func (p *ClientProcessor) Close() {
-
-}
-
-// HandleMessage .
-func (p *ClientProcessor) HandleMessage(handler func(*http.Response)) {
-	if handler != nil {
-		p.handler = handler
-	}
+func (p *ClientProcessor) Close(parser *Parser, err error) {
+	p.conn.CloseWithError(err)
 }
 
 // NewClientProcessor .
-func NewClientProcessor(conn net.Conn, handler func(*http.Response)) Processor {
-	if handler == nil {
-		panic(errors.New("invalid handler for ClientProcessor: nil"))
-	}
+func NewClientProcessor(conn *httpConn, handler func(res *http.Response, err error)) Processor {
 	return &ClientProcessor{
 		conn:    conn,
 		handler: handler,
@@ -468,12 +427,7 @@ func (p *EmptyProcessor) OnComplete(parser *Parser) {
 }
 
 // Close .
-func (p *EmptyProcessor) Close() {
-
-}
-
-// HandleMessage .
-func (p *EmptyProcessor) HandleMessage(handler http.Handler) {
+func (p *EmptyProcessor) Close(parser *Parser, err error) {
 
 }
 

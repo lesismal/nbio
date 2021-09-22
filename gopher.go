@@ -7,9 +7,10 @@ package nbio
 import (
 	"container/heap"
 	"net"
-	"runtime/debug"
+	"runtime"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
 )
@@ -324,7 +325,8 @@ func (g *Gopher) removeTimer(it *htimer) {
 		heap.Remove(&g.timers, index)
 		if len(g.timers) > 0 {
 			if index == 0 {
-				g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+				g.trigger.Reset(time.Until(g.timers[0].expire))
+
 			}
 		} else {
 			g.trigger.Reset(timeForever)
@@ -345,7 +347,7 @@ func (g *Gopher) resetTimer(it *htimer) {
 	if g.timers[index] == it {
 		heap.Fix(&g.timers, index)
 		if index == 0 || it.index == 0 {
-			g.trigger.Reset(g.timers[0].expire.Sub(time.Now()))
+			g.trigger.Reset(time.Until(g.timers[0].expire))
 		}
 	}
 }
@@ -371,8 +373,10 @@ func (g *Gopher) timerLoop() {
 					defer func() {
 						err := recover()
 						if err != nil {
-							logging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
-							debug.PrintStack()
+							const size = 64 << 10
+							buf := make([]byte, size)
+							buf = buf[:runtime.Stack(buf, false)]
+							logging.Error("Gopher[%v] exec call failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
 						}
 					}()
 					f()
@@ -382,7 +386,7 @@ func (g *Gopher) timerLoop() {
 			for {
 				g.tmux.Lock()
 				if g.timers.Len() == 0 {
-					// g.trigger.Reset(timeForever)
+					g.trigger.Reset(timeForever)
 					g.tmux.Unlock()
 					break
 				}
@@ -395,8 +399,10 @@ func (g *Gopher) timerLoop() {
 						defer func() {
 							err := recover()
 							if err != nil {
-								logging.Error("Gopher[%v] exec timer failed: %v", g.Name, err)
-								debug.PrintStack()
+								const size = 64 << 10
+								buf := make([]byte, size)
+								buf = buf[:runtime.Stack(buf, false)]
+								logging.Error("Gopher[%v] exec timer failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
 							}
 						}()
 						it.f()

@@ -157,9 +157,9 @@ func isHex(c byte) bool {
 	return hexCharMap[c]
 }
 
-func isAlphaNum(c byte) bool {
-	return alphaNumCharMap[c]
-}
+// func isAlphaNum(c byte) bool {
+// 	return alphaNumCharMap[c]
+// }
 
 func isToken(c byte) bool {
 	return tokenCharMap[c]

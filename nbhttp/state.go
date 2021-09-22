@@ -36,7 +36,6 @@ const (
 
 	// state: Body Chunk
 	stateHeaderOverLF
-	stateBodyChunkSizeBlankLine
 	stateBodyChunkSizeBefore
 	stateBodyChunkSize
 	stateBodyChunkSizeLF

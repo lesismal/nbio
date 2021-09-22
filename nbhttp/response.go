@@ -192,9 +192,9 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 // checkChunked .
-func (res *Response) checkChunked() error {
+func (res *Response) checkChunked() {
 	if res.chunkChecked {
-		return nil
+		return
 	}
 
 	res.chunkChecked = true
@@ -218,8 +218,6 @@ func (res *Response) checkChunked() error {
 	if res.chunked {
 		delete(res.header, "Content-Length")
 	}
-
-	return nil
 }
 
 // flush .

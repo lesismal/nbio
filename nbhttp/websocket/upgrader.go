@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
@@ -55,7 +56,7 @@ type Upgrader struct {
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
 	onClose          func(c *Conn, err error)
 
-	Server *nbhttp.Server
+	Engine *nbhttp.Engine
 }
 
 func NewUpgrader() *Upgrader {
@@ -106,7 +107,7 @@ func (u *Upgrader) OnOpen(h func(*Conn)) {
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.Server.ReleaseWebsocketPayload {
+			if c.Engine.ReleaseWebsocketPayload {
 				defer mempool.Free(data)
 			}
 			h(c, messageType, data)
@@ -117,7 +118,7 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			if c.Server.ReleaseWebsocketPayload {
+			if c.Engine.ReleaseWebsocketPayload {
 				defer mempool.Free(data)
 			}
 			h(c, messageType, fin, data)
@@ -126,9 +127,7 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 }
 
 func (u *Upgrader) OnClose(h func(*Conn, error)) {
-	if h != nil {
-		u.onClose = h
-	}
+	u.onClose = h
 }
 
 func (u *Upgrader) EnableCompression(enable bool) {
@@ -257,9 +256,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	u.conn = newConn(u, conn, false, subprotocol, compress)
-	u.Server = parser.Server
-	u.conn.Server = parser.Server
+	u.conn = newConn(u, conn, subprotocol, compress)
+	u.Engine = parser.Engine
+	u.conn.Engine = parser.Engine
 
 	if u.openHandler != nil {
 		u.openHandler(u.conn)
@@ -330,7 +329,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					frame = mempool.Malloc(bl)
 					copy(frame, body)
 				}
-				if u.opcode == TextMessage && len(frame) > 0 && !u.Server.CheckUtf8(frame) {
+				if u.opcode == TextMessage && len(frame) > 0 && !u.Engine.CheckUtf8(frame) {
 					u.conn.Close()
 				} else {
 					u.handleDataFrame(p, u.conn, u.opcode, fin, frame)
@@ -413,7 +412,7 @@ func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType
 }
 
 func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
-	if u.opcode == TextMessage && !u.Server.CheckUtf8(u.message) {
+	if u.opcode == TextMessage && !u.Engine.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
 	}
@@ -441,7 +440,7 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 	case CloseMessage:
 		if len(data) >= 2 {
 			code := int(binary.BigEndian.Uint16(data[:2]))
-			if !validCloseCode(code) || !c.Server.CheckUtf8(data[2:]) {
+			if !validCloseCode(code) || !c.Engine.CheckUtf8(data[2:]) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
 				c.WriteMessage(CloseMessage, protoErrorCode)
@@ -548,6 +547,13 @@ func subprotocols(r *http.Request) []string {
 
 var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
+func acceptKeyString(challengeKey string) string {
+	h := sha1.New()
+	h.Write([]byte(challengeKey))
+	h.Write(keyGUID)
+	return base64.StdEncoding.EncodeToString(h.Sum(nil))
+}
+
 func acceptKeyBytes(challengeKey string) []byte {
 	h := sha1.New()
 	h.Write([]byte(challengeKey))
@@ -556,6 +562,14 @@ func acceptKeyBytes(challengeKey string) []byte {
 	buf := make([]byte, base64.StdEncoding.EncodedLen(len(sum)))
 	base64.StdEncoding.Encode(buf, sum)
 	return buf
+}
+
+func challengeKey() (string, error) {
+	p := make([]byte, 16)
+	if _, err := io.ReadFull(rand.Reader, p); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(p), nil
 }
 
 func checkSameOrigin(r *http.Request) bool {

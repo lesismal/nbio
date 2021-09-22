@@ -14,7 +14,7 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
-const maxSendfileSize = 4 << 20
+// const maxSendfileSize = 4 << 20
 
 // SendFile .
 func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {

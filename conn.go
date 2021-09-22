@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// OnData registers callback for data
+func (c *Conn) OnData(h func(conn *Conn, data []byte)) {
+	c.DataHandler = h
+}
+
 // Dial wraps net.Dial
 func Dial(network string, address string) (*Conn, error) {
 	conn, err := net.Dial(network, address)

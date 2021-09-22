@@ -11,7 +11,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
@@ -48,7 +47,7 @@ type Conn struct {
 	session interface{}
 
 	onClose func(c *Conn, err error)
-	Server  *nbhttp.Server
+	Engine  *nbhttp.Engine
 }
 
 func validCloseCode(code int) bool {
@@ -102,15 +101,16 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 			}
 		}
 
-		nbc, ok := c.Conn.(*nbio.Conn)
-		if ok {
-			nbc.Lock()
-			defer nbc.Unlock()
-			closed, err := nbc.IsClosed()
-			if closed {
-				c.onClose(c, err)
-			}
-		}
+		// now all the upgrade, frames/messages and close are called in order
+		// nbc, ok := c.Conn.(*nbio.Conn)
+		// if ok {
+		// 	nbc.Lock()
+		// 	defer nbc.Unlock()
+		// 	closed, err := nbc.IsClosed()
+		// 	if closed {
+		// 		c.onClose(c, err)
+		// 	}
+		// }
 	}
 }
 
@@ -139,10 +139,11 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		cw := compressWriter(w, c.compressionLevel)
 		_, err := cw.Write(data)
 		if err != nil {
-			return err
+			compress = false
+		} else {
+			cw.Close()
+			data = w.Bytes()
 		}
-		cw.Close()
-		data = w.Bytes()
 	}
 
 	if len(data) == 0 {
@@ -151,8 +152,8 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		sendOpcode := true
 		for len(data) > 0 {
 			n := len(data)
-			if n > c.Server.MaxWebsocketFramePayloadSize {
-				n = c.Server.MaxWebsocketFramePayloadSize
+			if n > c.Engine.MaxWebsocketFramePayloadSize {
+				n = c.Engine.MaxWebsocketFramePayloadSize
 			}
 			err := c.writeFrame(messageType, sendOpcode, n == len(data), data[:n], compress)
 			if err != nil {
@@ -257,7 +258,7 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-func newConn(u *Upgrader, c net.Conn, compress bool, subprotocol string, remoteCompressionEnabled bool) *Conn {
+func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool) *Conn {
 	conn := &Conn{
 		Conn:                     c,
 		subprotocol:              subprotocol,
