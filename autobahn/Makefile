@@ -10,6 +10,4 @@ summary:
 	chmod -R 700 $(PWD)/report/
 	cat $(PWD)/report/output/index.json
 
-
-
 .PHONY: clean summary
