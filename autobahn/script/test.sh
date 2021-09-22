@@ -1,8 +1,7 @@
 #!/bin/bash
 set -x
-FOLLOW_LOGS=0
-mode
-spec
+set -e
+FOLLOW_LOGS=1
 
 while [[ $# -gt 0 ]]; do
 	key="$1"
@@ -17,18 +16,18 @@ while [[ $# -gt 0 ]]; do
 			autobahn)
 				mode=$3
 				spec=$4
-				docker build .. --file autobahn/docker/autobahn/Dockerfile --tag nbio-autobahn
+				docker build . --file autobahn/docker/autobahn/Dockerfile --tag nbio-autobahn
 				shift
 			;;
 			server)
-				docker build .. --file autobahn/docker/server/Dockerfile --tag nbio-server --build-arg testfile=$3
+				docker build . --file autobahn/docker/server/Dockerfile --tag nbio-server --build-arg testfile=$3
 				shift
 			;;
 			*)
 				mode=$2
 				spec=$3
-				docker build .. --file autobahn/docker/autobahn/Dockerfile --tag nbio-autobahn
-				docker build .. --file autobahn/docker/server/Dockerfile --tag nbio-server --build-arg testfile=$4
+				docker build . --file autobahn/docker/autobahn/Dockerfile --tag nbio-autobahn
+				docker build . --file autobahn/docker/server/Dockerfile --tag nbio-server --build-arg testfile=$4
 			;;
 		esac
 		;;
@@ -94,8 +93,8 @@ docker run \
 	--tty \
 	--detach \
 	--network="host" \
-	-v $(pwd)/config:/config \
-	-v $(pwd)/report:/report \
+	-v $(pwd)/autobahn/config:/config \
+	-v $(pwd)/autobahn/report:/report \
    	--name="$autobahn" \
 	"nbio-autobahn"\
  	--mode=${mode} --spec=${spec}
