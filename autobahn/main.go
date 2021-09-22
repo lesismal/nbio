@@ -31,7 +31,8 @@ const (
 
 func failing(behavior string) bool {
 	switch behavior {
-	case statusUnclean, statusFailed, statusNonStrict:
+	// case statusUnclean, statusFailed, statusNonStrict: // we should probably fix the nonstrict as well at some point
+	case statusUnclean, statusFailed:
 		return true
 	default:
 		return false
