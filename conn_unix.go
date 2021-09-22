@@ -84,7 +84,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	c.g.beforeWrite(c)
 
 	n, err := c.write(b)
-	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
@@ -128,7 +128,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	default:
 		n, err = c.writev(in)
 	}
-	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
@@ -320,7 +320,7 @@ func (c *Conn) write(b []byte) (int, error) {
 
 	if len(c.writeBuffer) == 0 {
 		n, err := syscall.Write(int(c.fd), b)
-		if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+		if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 			return n, err
 		}
 		if n < 0 {
@@ -354,7 +354,7 @@ func (c *Conn) flush() error {
 	old := c.writeBuffer
 
 	n, err := syscall.Write(int(c.fd), old)
-	if err != nil && err != syscall.EINTR && err != syscall.EAGAIN {
+	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
@@ -470,14 +470,6 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	return syscall.Close(c.fd)
-}
-
-func newConn(fd int, lAddr, rAddr net.Addr) *Conn {
-	return &Conn{
-		fd:    fd,
-		lAddr: lAddr,
-		rAddr: rAddr,
-	}
 }
 
 // NBConn converts net.Conn to *Conn

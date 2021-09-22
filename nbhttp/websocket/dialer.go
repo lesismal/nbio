@@ -128,13 +128,13 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 
 		nbc, ok := conn.(*nbio.Conn)
 		if !ok {
-			tlsConn, ok := conn.(*tls.Conn)
-			if !ok {
+			tlsConn, tlsOk := conn.(*tls.Conn)
+			if !tlsOk {
 				errCh <- ErrBadHandshake
 				return
 			}
-			nbc, ok = tlsConn.Conn().(*nbio.Conn)
-			if !ok {
+			nbc, tlsOk = tlsConn.Conn().(*nbio.Conn)
+			if !tlsOk {
 				errCh <- errors.New(http.StatusText(http.StatusInternalServerError))
 				return
 			}

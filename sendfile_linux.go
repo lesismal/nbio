@@ -8,6 +8,7 @@
 package nbio
 
 import (
+	"errors"
 	"os"
 	"syscall"
 )
@@ -67,10 +68,10 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		} else if n == 0 && err == nil {
 			break
 		}
-		if err == syscall.EINTR {
+		if errors.Is(err, syscall.EINTR) {
 			continue
 		}
-		if err == syscall.EAGAIN {
+		if errors.Is(err, syscall.EAGAIN) {
 			c.modWrite()
 			if c.chWaitWrite == nil {
 				c.chWaitWrite = make(chan struct{}, 1)

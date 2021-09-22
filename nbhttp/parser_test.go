@@ -1,6 +1,7 @@
 package nbhttp
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -11,52 +12,95 @@ import (
 
 func TestServerParserContentLength(t *testing.T) {
 	data := []byte("POST /echo HTTP/1.1\r\nEmpty:\r\n Empty2:\r\nHost : localhost:8080   \r\nConnection: close \r\n Accept-Encoding :  gzip , deflate ,br  \r\n\r\n")
-	testParser(t, false, data)
+	err := testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 
 	data = []byte("POST /echo HTTP/1.1\r\nHost: localhost:8080\r\n Connection: close \r\nContent-Length :  0\r\nAccept-Encoding : gzip \r\n\r\n")
-	testParser(t, false, data)
+	err = testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 
 	data = []byte("POST /echo HTTP/1.1\r\nHost: localhost:8080\r\n Connection: close \r\nContent-Length :  5\r\nAccept-Encoding : gzip \r\n\r\nhello")
-	testParser(t, false, data)
+	err = testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func TestServerParserChunks(t *testing.T) {
 	data := []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n4   \r\nbody\r\n0  \r\n\r\n")
-	testParser(t, false, data)
+	err := testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
+
 	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n0\r\n\r\n")
-	testParser(t, false, data)
+	err = testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func TestServerParserTrailer(t *testing.T) {
 	data := []byte("POST / HTTP/1.1\r\nHost : localhost:1235\r\n User-Agent  : Go-http-client/1.1   \r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip  \r\n\r\n4\r\nbody\r\n0\r\n  Md5  : 841a2d689ad86bd1611447453c22c6fc \r\n Size  : 4  \r\n\r\n")
-	testParser(t, false, data)
+	err := testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip  \r\n\r\n0\r\nMd5 : 841a2d689ad86bd1611447453c22c6fc \r\n Size: 4 \r\n\r\n")
-	testParser(t, false, data)
+	err = testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func TestClientParserContentLength(t *testing.T) {
 	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\n Connection: close \r\n Accept-Encoding : gzip  \r\n\r\n")
-	testParser(t, true, data)
+	err := testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 
 	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\n Connection: close \r\n Content-Length :  0\r\nAccept-Encoding : gzip \r\n\r\n")
-	testParser(t, true, data)
+	err = testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 
 	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:8080\r\n Connection: close \r\n Content-Length :  5\r\nAccept-Encoding : gzip \r\n\r\nhello")
-	testParser(t, true, data)
+	err = testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func TestClientParserChunks(t *testing.T) {
 	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\n Transfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\n\r\n")
-	testParser(t, true, data)
+	err := testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nAccept-Encoding: gzip\r\n\r\n0\r\n\r\n")
-	testParser(t, true, data)
+	err = testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func TestClientParserTrailer(t *testing.T) {
 	data := []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\n User-Agent: Go-http-client/1.1\r\n Transfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n4\r\nbody\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
-	testParser(t, true, data)
+	err := testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 	data = []byte("HTTP/1.1 200 OK\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding : chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip\r\n\r\n0\r\nMd5: 841a2d689ad86bd1611447453c22c6fc\r\nSize: 4\r\n\r\n")
-	testParser(t, true, data)
+	err = testParser(t, true, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func testParser(t *testing.T, isClient bool, data []byte) error {
@@ -67,7 +111,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	}
 
 	for i := 0; i < len(data)-1; i++ {
-		err := parser.Read(append([]byte{}, data[i:i+1]...))
+		err = parser.Read(append([]byte{}, data[i:i+1]...))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,7 +214,7 @@ func pirntMessage(w http.ResponseWriter, request *http.Request) {
 			if n > 0 {
 				nread += n
 			}
-			if err == io.EOF {
+			if errors.Is(err, io.EOF) {
 				break
 			}
 		}

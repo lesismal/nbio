@@ -8,6 +8,7 @@
 package nbio
 
 import (
+	"errors"
 	"io"
 	"net"
 	"runtime"
@@ -30,9 +31,7 @@ const (
 	epollEventsError     = syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP
 
 	epollEventsReadET      = syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET
-	epollEventsWriteET     = syscall.EPOLLOUT | EPOLLET
 	epollEventsReadWriteET = syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET
-	epollEventsErrorET     = syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | EPOLLET
 )
 
 type poller struct {
@@ -110,7 +109,8 @@ func (p *poller) acceptorLoop() {
 	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
-			c, err := NBConn(conn)
+			var c *Conn
+			c, err = NBConn(conn)
 			if err != nil {
 				conn.Close()
 				continue
@@ -118,7 +118,8 @@ func (p *poller) acceptorLoop() {
 			o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
 			o.addConn(c)
 		} else {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+			var ne net.Error
+			if ok := errors.As(err, &ne); ok && ne.Temporary() {
 				logging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
@@ -147,7 +148,7 @@ func (p *poller) readWriteLoop() {
 
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
-		if err != nil && err != syscall.EINTR {
+		if err != nil && !errors.Is(err, syscall.EINTR) {
 			return
 		}
 
@@ -183,10 +184,10 @@ func (p *poller) readWriteLoop() {
 									p.g.onData(c, buffer[:n])
 								}
 								p.g.payback(c, buffer)
-								if err == syscall.EINTR {
+								if errors.Is(err, syscall.EINTR) {
 									continue
 								}
-								if err == syscall.EAGAIN {
+								if errors.Is(err, syscall.EAGAIN) {
 									break
 								}
 								if err != nil || n == 0 {

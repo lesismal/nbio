@@ -145,7 +145,10 @@ func client(count int) error {
 		TLSClientConfig: tlsConfig,
 	}
 
-	c, _, err := dialer.Dial(u.String(), nil)
+	c, resp, err := dialer.Dial(u.String(), nil)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
 	if err != nil {
 		log.Fatal("dial:", err)
 	}

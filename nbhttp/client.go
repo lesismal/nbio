@@ -215,7 +215,8 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 
 			switch req.URL.Scheme {
 			case "http":
-				nbc, err := nbio.NBConn(netConn)
+				var nbc *nbio.Conn
+				nbc, err = nbio.NBConn(netConn)
 				if err != nil {
 					handler(nil, nil, err)
 					return
@@ -379,9 +380,9 @@ func (hpd *httpProxyDialer) Dial(network string, addr string) (net.Conn, error) 
 		Header: connectHeader,
 	}
 
-	if err := connectReq.Write(conn); err != nil {
+	if errWrite := connectReq.Write(conn); errWrite != nil {
 		conn.Close()
-		return nil, err
+		return nil, errWrite
 	}
 
 	br := bufio.NewReader(conn)
@@ -390,6 +391,7 @@ func (hpd *httpProxyDialer) Dial(network string, addr string) (net.Conn, error) 
 		conn.Close()
 		return nil, err
 	}
+	resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		conn.Close()

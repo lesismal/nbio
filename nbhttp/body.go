@@ -79,13 +79,12 @@ func (br *BodyReader) Close() error {
 	return nil
 }
 
-func (br *BodyReader) close() error {
+func (br *BodyReader) close() {
 	if br.buffer != nil {
 		mempool.Free(br.buffer)
 		br.buffer = nil
 		br.index = 0
 	}
-	return nil
 }
 
 // NewBodyReader creates a BodyReader
