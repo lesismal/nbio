@@ -268,7 +268,11 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 				nbc.SetSession(parser)
 
 				nbc.OnData(c.Engine.DataHandlerTLS)
-				c.Engine.AddConn(nbc)
+				_, err = c.Engine.AddConn(nbc)
+				if err != nil {
+					handler(nil, nil, err)
+					return
+				}
 			default:
 				handler(nil, c.Conn.conn, ErrClientUnsupportedSchema)
 				return

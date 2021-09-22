@@ -139,10 +139,11 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		cw := compressWriter(w, c.compressionLevel)
 		_, err := cw.Write(data)
 		if err != nil {
-			return err
+			compress = false
+		} else {
+			cw.Close()
+			data = w.Bytes()
 		}
-		cw.Close()
-		data = w.Bytes()
 	}
 
 	if len(data) == 0 {

@@ -84,7 +84,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	c.g.beforeWrite(c)
 
 	n, err := c.write(b)
-	if err != nil && errors.Is(err, syscall.EINTR) && errors.Is(err, syscall.EAGAIN) {
+	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
@@ -128,7 +128,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	default:
 		n, err = c.writev(in)
 	}
-	if err != nil && errors.Is(err, syscall.EINTR) && errors.Is(err, syscall.EAGAIN) {
+	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)

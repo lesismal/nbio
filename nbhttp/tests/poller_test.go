@@ -1,3 +1,4 @@
+//go:build !unit
 // +build !unit
 
 // run this test via :go test -tags=integration .
