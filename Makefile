@@ -13,3 +13,16 @@ lint:
 
 test:
 	$(GO) test $(PACKAGES)
+
+clean:
+	rm -f bin/autobahn_server
+	rm -fr autobahn/report/*
+	
+bin/reporter:
+	go build -o bin/reporter ./autobahn
+
+autobahn: clean bin/reporter
+	./autobahn/script/test.sh --build --follow-logs
+	bin/reporter $(PWD)/autobahn/report/index.json
+
+.PHONY: all vet lint test clean  autobahn
