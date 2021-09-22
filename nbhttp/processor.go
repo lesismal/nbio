@@ -100,7 +100,9 @@ func (p *ServerProcessor) Conn() net.Conn {
 func (p *ServerProcessor) OnMethod(method string) {
 	if p.request == nil {
 		p.request = requestPool.Get().(*http.Request)
-		*p.request = *p.parser.Engine.emptyRequest
+		if p.parser != nil {
+			*p.request = *p.parser.Engine.emptyRequest
+		}
 		p.request.Method = method
 		p.request.Header = http.Header{}
 	} else {
