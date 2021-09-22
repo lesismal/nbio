@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	maxFrameHeaderSize         = 14
 	maxControlFramePayloadSize = 125
 )
 
@@ -125,6 +124,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		if len(data) > maxControlFramePayloadSize {
 			return ErrInvalidControlFrame
 		}
+	case FragmentMessage:
 	default:
 	}
 

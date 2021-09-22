@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"compress/flate"
+	"errors"
 	"io"
 	"sync"
 )
@@ -40,7 +41,7 @@ func (r *flateReadWrapper) Read(p []byte) (int, error) {
 		return 0, io.ErrClosedPipe
 	}
 	n, err := r.fr.Read(p)
-	if err == io.EOF {
+	if errors.Is(err, io.EOF) {
 		// Preemptively place the reader back in the pool. This helps with
 		// scenarios where the application does not call NextReader() soon after
 		// this final read.

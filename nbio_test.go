@@ -19,7 +19,7 @@ var testfile = "test_tmp.file"
 var gopher *Gopher
 
 func init() {
-	if err := ioutil.WriteFile(testfile, make([]byte, 1024*100), 0666); err != nil {
+	if err := ioutil.WriteFile(testfile, make([]byte, 1024*100), 0600); err != nil {
 		log.Panicf("write file failed: %v", err)
 	}
 
@@ -247,13 +247,13 @@ func TestHeapTimer(t *testing.T) {
 
 	timeout := time.Second / 10
 
-	testHeapTimerNormal(g, t, timeout)
-	testHeapTimerExecPanic(g, t, timeout)
-	testHeapTimerNormalExecMany(g, t, timeout)
-	testHeapTimerExecManyRandtime(g, t, timeout)
+	testHeapTimerNormal(g, timeout)
+	testHeapTimerExecPanic(g, timeout)
+	testHeapTimerNormalExecMany(g, timeout)
+	testHeapTimerExecManyRandtime(g)
 }
 
-func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
+func testHeapTimerNormal(g *Gopher, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
 	g.AfterFunc(timeout*5, func() {
@@ -290,13 +290,13 @@ func testHeapTimerNormal(g *Gopher, t *testing.T, timeout time.Duration) {
 	}
 }
 
-func testHeapTimerExecPanic(g *Gopher, t *testing.T, timeout time.Duration) {
+func testHeapTimerExecPanic(g *Gopher, timeout time.Duration) {
 	g.afterFunc(timeout, func() {
 		panic("test")
 	})
 }
 
-func testHeapTimerNormalExecMany(g *Gopher, t *testing.T, timeout time.Duration) {
+func testHeapTimerNormalExecMany(g *Gopher, timeout time.Duration) {
 	ch4 := make(chan int, 5)
 	for i := 0; i < 5; i++ {
 		n := i + 1
@@ -319,7 +319,7 @@ func testHeapTimerNormalExecMany(g *Gopher, t *testing.T, timeout time.Duration)
 	}
 }
 
-func testHeapTimerExecManyRandtime(g *Gopher, t *testing.T, timeout time.Duration) {
+func testHeapTimerExecManyRandtime(g *Gopher) {
 	its := make([]*htimer, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {

@@ -17,6 +17,7 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
@@ -66,7 +67,12 @@ func NewUpgrader() *Upgrader {
 			u.conn.Close()
 			return
 		}
-		c.WriteMessage(PongMessage, []byte(data))
+		err := c.WriteMessage(PongMessage, []byte(data))
+		if err != nil {
+			logging.Error("failed to send pong %v", err)
+			u.conn.Close()
+			return
+		}
 	}
 	u.pongMessageHandler = func(*Conn, string) {}
 	u.closeMessageHandler = func(c *Conn, code int, text string) {
@@ -203,12 +209,12 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	nbc, ok := conn.(*nbio.Conn)
 	if !ok {
-		tlsConn, ok := conn.(*tls.Conn)
-		if !ok {
+		tlsConn, tlsOk := conn.(*tls.Conn)
+		if !tlsOk {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
-		nbc, ok = tlsConn.Conn().(*nbio.Conn)
-		if !ok {
+		nbc, tlsOk = tlsConn.Conn().(*nbio.Conn)
+		if !tlsOk {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
 	}
@@ -407,7 +413,7 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType, fin bool, data []byte) {
 	h := u.dataFrameHandler
 	p.Execute(func() {
-		h(u.conn, opcode, fin, data)
+		h(c, opcode, fin, data)
 	})
 }
 
@@ -456,6 +462,8 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 		u.pingMessageHandler(c, string(data))
 	case PongMessage:
 		u.pongMessageHandler(c, string(data))
+	case FragmentMessage:
+		panic("handleWsMessage should never be called on a message fragment")
 	default:
 		c.Close()
 	}
@@ -511,7 +519,7 @@ func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, 
 	return opcode, body, ok, fin, res1, res2, res3
 }
 
-func (u *Upgrader) returnError(w http.ResponseWriter, r *http.Request, status int, err error) error {
+func (u *Upgrader) returnError(w http.ResponseWriter, _ *http.Request, status int, err error) error {
 	w.Header().Set("Sec-Websocket-Version", "13")
 	http.Error(w, http.StatusText(status), status)
 	return err
@@ -548,14 +556,14 @@ func subprotocols(r *http.Request) []string {
 var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
 func acceptKeyString(challengeKey string) string {
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec // per websocket protocol spec
 	h.Write([]byte(challengeKey))
 	h.Write(keyGUID)
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
 func acceptKeyBytes(challengeKey string) []byte {
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec // per websocket protocol spec
 	h.Write([]byte(challengeKey))
 	h.Write(keyGUID)
 	sum := h.Sum(nil)
