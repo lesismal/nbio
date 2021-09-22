@@ -176,10 +176,6 @@ func main() {
 	os.Exit(rc)
 }
 
-type spec struct {
-	OutDir string `json:"outdir"`
-}
-
 type report map[string]server
 
 type server map[string]entry

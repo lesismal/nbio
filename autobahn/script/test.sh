@@ -17,18 +17,18 @@ while [[ $# -gt 0 ]]; do
 			autobahn)
 				mode=$3
 				spec=$4
-				docker build .. --file docker/autobahn/Dockerfile --tag nbio-autobahn
+				docker build .. --file autobahn/docker/autobahn/Dockerfile --tag nbio-autobahn
 				shift
 			;;
 			server)
-				docker build .. --file docker/server/Dockerfile --tag nbio-server --build-arg testfile=$3
+				docker build .. --file autobahn/docker/server/Dockerfile --tag nbio-server --build-arg testfile=$3
 				shift
 			;;
 			*)
 				mode=$2
 				spec=$3
-				docker build .. --file docker/autobahn/Dockerfile --tag nbio-autobahn
-				docker build .. --file docker/server/Dockerfile --tag nbio-server --build-arg testfile=$4
+				docker build .. --file autobahn/docker/autobahn/Dockerfile --tag nbio-autobahn
+				docker build .. --file autobahn/docker/server/Dockerfile --tag nbio-server --build-arg testfile=$4
 			;;
 		esac
 		;;
