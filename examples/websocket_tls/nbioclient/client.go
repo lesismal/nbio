@@ -31,7 +31,7 @@ func newUpgrader() *websocket.Upgrader {
 }
 
 func main() {
-	engine := nbhttp.NewEngine(nbhttp.Config{})
+	engine := nbhttp.NewEngineTLS(nbhttp.Config{})
 	err := engine.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
@@ -42,7 +42,7 @@ func main() {
 		InsecureSkipVerify: true,
 	}
 	for i := 0; i < 1; i++ {
-		u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/ws"}
+		u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/wss"}
 		c, _, err := (&websocket.Dialer{
 			TLSClientConfig: tlsConfig,
 			Engine:          engine,
