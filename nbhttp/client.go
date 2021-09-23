@@ -274,7 +274,7 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 					return
 				}
 			default:
-				handler(nil, c.Conn.conn, ErrClientUnsupportedSchema)
+				handler(nil, nil, ErrClientUnsupportedSchema)
 				return
 			}
 
