@@ -155,9 +155,6 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		}
 
 		remoteCompressionEnabled := false
-		if resp == nil {
-			panic("response should not be nil")
-		}
 		if resp.StatusCode != 101 ||
 			!headerContains(resp.Header, "Upgrade", "websocket") ||
 			!headerContains(resp.Header, "Connection", "upgrade") ||
