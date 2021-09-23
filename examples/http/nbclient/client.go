@@ -62,7 +62,7 @@ func main() {
 					if err != nil {
 						log.Fatal(err)
 					}
-					cli.Do(req, nil, func(res *http.Response, conn net.Conn, err error) {
+					cli.Do(req, func(res *http.Response, conn net.Conn, err error) {
 						if err != nil {
 							atomic.AddUint64(&failed, 1)
 							fmt.Println("Do failed:", err)

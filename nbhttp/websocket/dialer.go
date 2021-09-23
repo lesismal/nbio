@@ -7,30 +7,29 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
-// ErrBadHandshake is returned when the server response to opening handshake is
-// invalid.
-// var ErrBadHandshake = errors.New("websocket: bad handshake")
-
-// var errInvalidCompression = errors.New("websocket: invalid compression negotiation")
-
 type Dialer struct {
-	Proxy func(*http.Request) (*url.URL, error)
+	Engine *nbhttp.Engine
+
+	Jar http.CookieJar
+
+	Timeout time.Duration
 
 	TLSClientConfig *tls.Config
+
+	Proxy func(*http.Request) (*url.URL, error)
+
+	CheckRedirect func(req *http.Request, via []*http.Request) error
 
 	Subprotocols []string
 
 	EnableCompression bool
-
-	Jar http.CookieJar
-
-	Engine *nbhttp.Engine
 }
 
 // Dial creates a new client connection by calling DialContext with a background context.
@@ -113,12 +112,19 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		req.Header["Sec-WebSocket-Extensions"] = []string{"permessage-deflate; server_no_context_takeover; client_no_context_takeover"}
 	}
 
-	httpCli := nbhttp.NewClient(d.Engine)
+	httpCli := &nbhttp.Client{
+		Engine:          d.Engine,
+		Jar:             d.Jar,
+		Timeout:         d.Timeout,
+		TLSClientConfig: d.TLSClientConfig,
+		Proxy:           d.Proxy,
+		CheckRedirect:   d.CheckRedirect,
+	}
 
 	var wsConn *Conn
 	var res *http.Response
 	var errCh = make(chan error, 1)
-	httpCli.Do(req, d.TLSClientConfig, func(resp *http.Response, conn net.Conn, err error) {
+	httpCli.Do(req, func(resp *http.Response, conn net.Conn, err error) {
 		res = resp
 
 		if err != nil {

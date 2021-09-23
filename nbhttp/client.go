@@ -25,39 +25,31 @@ type Client struct {
 
 	Engine *Engine
 
-	Transport http.RoundTripper
+	Jar http.CookieJar
+
+	Timeout time.Duration
+
+	TLSClientConfig *tls.Config
+
+	Proxy func(*http.Request) (*url.URL, error)
 
 	CheckRedirect func(req *http.Request, via []*http.Request) error
 
-	Jar http.CookieJar
-
-	Timeout                     time.Duration
+	// todo
 	MaxConcurrencyPerConnection int
 	MaxIdleConns                int
 	MaxIdleConnsPerHost         int
 	MaxConnsPerHost             int
 	IdleConnTimeout             time.Duration
 
-	// http.Transport
-	Proxy func(*http.Request) (*url.URL, error)
-	// DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
-	// Dial            func(network, addr string) (net.Conn, error)
-	// DialTLSContext  func(ctx context.Context, network, addr string) (net.Conn, error)
-	// DialTLS         func(network, addr string) (net.Conn, error)
-	// TLSClientConfig *tls.Config
 	// TLSHandshakeTimeout time.Duration
 	// DisableKeepAlives bool
 	// DisableCompression bool
-	// MaxIdleConns int
-	// MaxIdleConnsPerHost int
-	// MaxConnsPerHost int
-	// IdleConnTimeout time.Duration
 	// ResponseHeaderTimeout time.Duration
 	// ExpectContinueTimeout time.Duration
 	// TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper
 	// ProxyConnectHeader http.Header
 	// GetProxyConnectHeader func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error)
-
 }
 
 func (c *Client) Close() {
@@ -146,7 +138,7 @@ func (c *httpConn) onResponse(res *http.Response, err error) {
 	}
 }
 
-func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *http.Response, conn net.Conn, err error)) {
+func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	originHandler := handler
 	handler = func(res *http.Response, conn net.Conn, err error) {
 		if err == nil && c.Timeout > 0 && conn != nil {
@@ -232,6 +224,7 @@ func (c *Client) Do(req *http.Request, tlsConfig *tls.Config, handler func(res *
 				nbc.OnData(c.Engine.DataHandler)
 				c.Engine.AddConn(nbc)
 			case "https":
+				tlsConfig := c.TLSClientConfig
 				if tlsConfig == nil {
 					tlsConfig = &tls.Config{}
 				} else {
