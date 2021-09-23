@@ -42,7 +42,7 @@ func main() {
 		InsecureSkipVerify: true,
 	}
 	for i := 0; i < 1; i++ {
-		u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/wss"}
+		u := url.URL{Scheme: "wss", Host: "localhost:8888", Path: "/wss"}
 		c, _, err := (&websocket.Dialer{
 			TLSClientConfig: tlsConfig,
 			Engine:          engine,
