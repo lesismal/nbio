@@ -116,17 +116,14 @@ func (c *httpConn) onResponse(res *http.Response, err error) {
 		c.handlers = c.handlers[1:]
 		if c.cli.Timeout > 0 {
 			if len(c.handlers) > 0 {
-				now := time.Now()
-				if len(c.handlers) > 0 {
-					head = c.handlers[0]
-					deadline := head.t.Add(c.cli.Timeout)
-					if deadline.Before(now) {
-						c.executor(func() {
-							c.CloseWithError(ErrClientTimeout)
-						})
-					} else {
-						c.conn.SetReadDeadline(deadline)
-					}
+				head = c.handlers[0]
+				deadline := head.t.Add(c.cli.Timeout)
+				if time.Now().After(deadline) {
+					c.executor(func() {
+						c.CloseWithError(ErrClientTimeout)
+					})
+				} else {
+					c.conn.SetReadDeadline(deadline)
 				}
 			} else {
 				c.conn.SetReadDeadline(time.Time{})
@@ -220,6 +217,9 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
 				parser.Conn = nbc
 				parser.Engine = c.Engine
+				parser.OnClose(func(p *Parser, err error) {
+					c.Conn.CloseWithError(err)
+				})
 				nbc.SetSession(parser)
 
 				nbc.OnData(c.Engine.DataHandler)
@@ -254,11 +254,14 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 				isNonblock := true
 				tlsConn.ResetConn(nbc, isNonblock)
 
-				c.Conn = &httpConn{cli: c, conn: tlsConn}
+				c.Conn = &httpConn{cli: c, conn: tlsConn, executor: nbc.Execute}
 				processor := NewClientProcessor(c.Conn, c.Conn.onResponse)
 				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
 				parser.Conn = tlsConn
 				parser.Engine = c.Engine
+				parser.OnClose(func(p *Parser, err error) {
+					c.Conn.CloseWithError(err)
+				})
 				nbc.SetSession(parser)
 
 				nbc.OnData(c.Engine.DataHandlerTLS)

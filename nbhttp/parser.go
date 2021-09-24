@@ -45,6 +45,8 @@ type Parser struct {
 
 	errClose error
 
+	onClose func(p *Parser, err error)
+
 	Processor Processor
 
 	Upgrader Upgrader
@@ -62,6 +64,10 @@ func (p *Parser) nextState(state int8) {
 	default:
 		p.state = state
 	}
+}
+
+func (p *Parser) OnClose(h func(p *Parser, err error)) {
+	p.onClose = h
 }
 
 func (p *Parser) Close(err error) {
@@ -84,6 +90,9 @@ func (p *Parser) Close(err error) {
 	}
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)
+	}
+	if p.onClose != nil {
+		p.onClose(p, err)
 	}
 }
 
