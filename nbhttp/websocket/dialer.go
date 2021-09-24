@@ -129,12 +129,22 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 
 	var wsConn *Conn
 	var res *http.Response
-	var errCh = make(chan error, 1)
+	var errCh = make(chan error)
 	httpCli.Do(req, func(resp *http.Response, conn net.Conn, err error) {
 		res = resp
 
+		notifyResult := func() {
+			select {
+			case errCh <- err:
+			case <-ctx.Done():
+				if conn != nil {
+					conn.Close()
+				}
+			}
+		}
+
 		if err != nil {
-			errCh <- err
+			notifyResult()
 			return
 		}
 
@@ -142,19 +152,22 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		if !ok {
 			tlsConn, tlsOk := conn.(*tls.Conn)
 			if !tlsOk {
-				errCh <- ErrBadHandshake
+				err = ErrBadHandshake
+				notifyResult()
 				return
 			}
 			nbc, tlsOk = tlsConn.Conn().(*nbio.Conn)
 			if !tlsOk {
-				errCh <- errors.New(http.StatusText(http.StatusInternalServerError))
+				err = errors.New(http.StatusText(http.StatusInternalServerError))
+				notifyResult()
 				return
 			}
 		}
 
 		parser, ok := nbc.Session().(*nbhttp.Parser)
 		if !ok {
-			errCh <- errors.New(http.StatusText(http.StatusInternalServerError))
+			err = errors.New(http.StatusText(http.StatusInternalServerError))
+			notifyResult()
 			return
 		}
 
@@ -171,7 +184,8 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			!headerContains(resp.Header, "Upgrade", "websocket") ||
 			!headerContains(resp.Header, "Connection", "upgrade") ||
 			resp.Header.Get("Sec-Websocket-Accept") != acceptKeyString(challengeKey) {
-			errCh <- ErrBadHandshake
+			err = ErrBadHandshake
+			notifyResult()
 			return
 		}
 
@@ -182,7 +196,8 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			_, snct := ext["server_no_context_takeover"]
 			_, cnct := ext["client_no_context_takeover"]
 			if !snct || !cnct {
-				errCh <- ErrInvalidCompression
+				err = ErrInvalidCompression
+				notifyResult()
 				return
 			}
 
@@ -201,7 +216,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			upgrader.openHandler(wsConn)
 		}
 
-		errCh <- nil
+		notifyResult()
 	})
 
 	select {
