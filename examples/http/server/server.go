@@ -17,6 +17,7 @@ var (
 )
 
 func onEcho(w http.ResponseWriter, r *http.Request) {
+	// time.Sleep(time.Second * 5)
 	// data, _ := io.ReadAll(r.Body)
 	data := r.Body.(*nbhttp.BodyReader).RawBody()
 	if len(data) > 0 {

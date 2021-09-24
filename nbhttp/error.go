@@ -86,5 +86,9 @@ var (
 	// ErrClientUnsupportedSchema.
 	ErrClientUnsupportedSchema = errors.New("unsupported schema")
 
+	// ErrClientTimeout.
 	ErrClientTimeout = errors.New("timeout")
+
+	// ErrClientClosed.
+	ErrClientClosed = errors.New("http client closed")
 )

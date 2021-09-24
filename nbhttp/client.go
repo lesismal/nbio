@@ -14,33 +14,31 @@ import (
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/mempool"
 )
 
 type Client struct {
 	mux sync.Mutex
 
-	Conn *httpConn
+	Conn  *httpConn
+	conns map[*httpConn]struct{}
 
 	Engine *Engine
 
 	Jar http.CookieJar
 
 	Timeout time.Duration
-
-	TLSClientConfig *tls.Config
-
-	Proxy func(*http.Request) (*url.URL, error)
-
-	CheckRedirect func(req *http.Request, via []*http.Request) error
-
 	// todo
 	MaxConcurrencyPerConnection int
 	MaxIdleConns                int
 	MaxIdleConnsPerHost         int
 	MaxConnsPerHost             int
 	IdleConnTimeout             time.Duration
+
+	TLSClientConfig *tls.Config
+
+	Proxy func(*http.Request) (*url.URL, error)
+
+	CheckRedirect func(req *http.Request, via []*http.Request) error
 
 	// TLSHandshakeTimeout time.Duration
 	// DisableKeepAlives bool
@@ -68,229 +66,13 @@ func (c *Client) CloseWithError(err error) {
 	}
 }
 
-type resHandler struct {
-	c net.Conn
-	t time.Time
-	h func(res *http.Response, conn net.Conn, err error)
-}
-
-type httpConn struct {
-	cli      *Client
-	conn     net.Conn
-	mux      sync.Mutex
-	handlers []resHandler
-	executor func(f func())
-}
-
-func (c *httpConn) Close() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	for _, h := range c.handlers {
-		h.h(nil, c.conn, io.EOF)
-	}
-	c.handlers = nil
-	if c.conn != nil {
-		c.conn.Close()
-	}
-}
-
-func (c *httpConn) CloseWithError(err error) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	for _, h := range c.handlers {
-		h.h(nil, c.conn, err)
-	}
-	c.handlers = nil
-	if c.conn != nil {
-		c.conn.Close()
-	}
-}
-
-func (c *httpConn) onResponse(res *http.Response, err error) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
-	if len(c.handlers) > 0 {
-		head := c.handlers[0]
-		head.h(res, c.conn, err)
-		c.handlers = c.handlers[1:]
-		if c.cli.Timeout > 0 {
-			if len(c.handlers) > 0 {
-				head = c.handlers[0]
-				deadline := head.t.Add(c.cli.Timeout)
-				if time.Now().After(deadline) {
-					c.executor(func() {
-						c.CloseWithError(ErrClientTimeout)
-					})
-				} else {
-					c.conn.SetReadDeadline(deadline)
-				}
-			} else {
-				c.conn.SetReadDeadline(time.Time{})
-			}
-		}
-		if len(c.handlers) == 0 {
-			c.handlers = nil
-		}
-	}
-}
-
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	c.mux.Lock()
-	c.Engine.ExecuteClient(func() {
-		defer c.mux.Unlock()
-
-		originHandler := handler
-		handler = func(res *http.Response, conn net.Conn, err error) {
-			if err == nil && c.Timeout > 0 && conn != nil {
-				conn.SetReadDeadline(time.Time{})
-			}
-			originHandler(res, conn, err)
-		}
-		sendRequest := func() {
-			err := req.Write(c.Conn.conn)
-			if err != nil {
-				handler(nil, nil, err)
-				return
-			}
-			c.Conn.handlers = append(c.Conn.handlers, resHandler{c: c.Conn.conn, t: time.Now(), h: handler})
-		}
-
-		var deadline time.Time
-		if c.Timeout > 0 {
-			deadline = time.Now().Add(c.Timeout)
-		}
-
-		if c.Conn == nil {
-
-			var timeout time.Duration
-			if c.Timeout > 0 {
-				timeout = time.Until(deadline)
-				if timeout <= 0 {
-					handler(nil, nil, ErrClientTimeout)
-					return
-				}
-			}
-
-			strs := strings.Split(req.URL.Host, ":")
-			host := strs[0]
-			port := req.URL.Scheme
-			if len(strs) >= 2 {
-				port = strs[1]
-			}
-			addr := host + ":" + port
-
-			var netDial netDialerFunc
-			if c.Timeout <= 0 {
-				netDial = func(network, addr string) (net.Conn, error) {
-					return net.Dial(network, addr)
-				}
-			} else {
-				netDial = func(network, addr string) (net.Conn, error) {
-					conn, err := net.DialTimeout(network, addr, timeout)
-					if err == nil {
-						conn.SetReadDeadline(deadline)
-					}
-					return conn, err
-				}
-			}
-
-			if c.Proxy != nil {
-				proxyURL, err := c.Proxy(req)
-				if err != nil {
-					handler(nil, nil, err)
-					return
-				}
-				if proxyURL != nil {
-					dialer, err := proxy_FromURL(proxyURL, netDial)
-					if err != nil {
-						handler(nil, nil, err)
-						return
-					}
-					netDial = dialer.Dial
-				}
-			}
-
-			netConn, err := netDial("tcp", addr)
-			if err != nil {
-				handler(nil, nil, err)
-				return
-			}
-
-			switch req.URL.Scheme {
-			case "http":
-				var nbc *nbio.Conn
-				nbc, err = nbio.NBConn(netConn)
-				if err != nil {
-					handler(nil, nil, err)
-					return
-				}
-
-				c.Conn = &httpConn{cli: c, conn: nbc, executor: nbc.Execute}
-				processor := NewClientProcessor(c.Conn, c.Conn.onResponse)
-				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
-				parser.Conn = nbc
-				parser.Engine = c.Engine
-				parser.OnClose(func(p *Parser, err error) {
-					c.Conn.CloseWithError(err)
-				})
-				nbc.SetSession(parser)
-
-				nbc.OnData(c.Engine.DataHandler)
-				c.Engine.AddConn(nbc)
-			case "https":
-				tlsConfig := c.TLSClientConfig
-				if tlsConfig == nil {
-					tlsConfig = &tls.Config{}
-				} else {
-					tlsConfig = tlsConfig.Clone()
-				}
-				tlsConfig.ServerName = req.URL.Host
-				tlsConn := tls.NewConn(netConn, tlsConfig, true, false, mempool.DefaultMemPool)
-				err = tlsConn.Handshake()
-				if err != nil {
-					handler(nil, nil, err)
-					return
-				}
-				if !tlsConfig.InsecureSkipVerify {
-					if err := tlsConn.VerifyHostname(tlsConfig.ServerName); err != nil {
-						handler(nil, nil, err)
-						return
-					}
-				}
-
-				nbc, err := nbio.NBConn(tlsConn.Conn())
-				if err != nil {
-					handler(nil, nil, err)
-					return
-				}
-
-				isNonblock := true
-				tlsConn.ResetConn(nbc, isNonblock)
-
-				c.Conn = &httpConn{cli: c, conn: tlsConn, executor: nbc.Execute}
-				processor := NewClientProcessor(c.Conn, c.Conn.onResponse)
-				parser := NewParser(processor, true, c.Engine.ReadLimit, nbc.Execute)
-				parser.Conn = tlsConn
-				parser.Engine = c.Engine
-				parser.OnClose(func(p *Parser, err error) {
-					c.Conn.CloseWithError(err)
-				})
-				nbc.SetSession(parser)
-
-				nbc.OnData(c.Engine.DataHandlerTLS)
-				_, err = c.Engine.AddConn(nbc)
-				if err != nil {
-					handler(nil, nil, err)
-					return
-				}
-			default:
-				handler(nil, nil, ErrClientUnsupportedSchema)
-				return
-			}
-		}
-		sendRequest()
-	})
+	defer c.mux.Unlock()
+	if c.Conn == nil {
+		c.Conn = &httpConn{cli: c}
+	}
+	c.Conn.Do(req, handler)
 }
 
 func NewClient(engine *Engine) *Client {

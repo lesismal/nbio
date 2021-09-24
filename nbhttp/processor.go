@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	emptyRequest  = http.Request{}
-	emptyResponse = Response{}
+	emptyRequest     = http.Request{}
+	emptyResponse    = Response{}
+	emptyStdResponse = http.Response{}
 
 	requestPool = sync.Pool{
 		New: func() interface{} {
@@ -28,6 +29,12 @@ var (
 	responsePool = sync.Pool{
 		New: func() interface{} {
 			return &Response{}
+		},
+	}
+
+	stdResponsePool = sync.Pool{
+		New: func() interface{} {
+			return &http.Response{}
 		},
 	}
 
@@ -55,6 +62,13 @@ func releaseResponse(res *Response) {
 	if res != nil {
 		*res = emptyResponse
 		responsePool.Put(res)
+	}
+}
+
+func releaseStdResponse(res *http.Response) {
+	if res != nil {
+		*res = emptyStdResponse
+		stdResponsePool.Put(res)
 	}
 }
 
@@ -285,7 +299,8 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.
 
 // ClientProcessor .
 type ClientProcessor struct {
-	conn     *httpConn
+	conn *httpConn
+	// parser   *Parser
 	response *http.Response
 	handler  func(res *http.Response, err error)
 }
@@ -311,10 +326,13 @@ func (p *ClientProcessor) OnProto(proto string) error {
 		return fmt.Errorf("%s %q", "malformed HTTP version", proto)
 	}
 	if p.response == nil {
-		p.response = &http.Response{
-			Proto:  proto,
-			Header: http.Header{},
-		}
+		// p.response = &http.Response{
+		// 	Proto:  proto,
+		// 	Header: http.Header{},
+		// }
+		p.response = stdResponsePool.Get().(*http.Response)
+		p.response.Proto = proto
+		p.response.Header = http.Header{}
 	} else {
 		p.response.Proto = proto
 	}
@@ -358,8 +376,12 @@ func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ClientProcessor) OnComplete(parser *Parser) {
-	p.handler(p.response, nil)
+	res := p.response
 	p.response = nil
+	parser.Execute(func() {
+		p.handler(res, nil)
+		releaseStdResponse(res)
+	})
 }
 
 // Close .
