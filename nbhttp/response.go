@@ -311,7 +311,7 @@ func (res *Response) eoncodeHead() {
 	res.buffer = data
 }
 
-func (res *Response) flushTrailer(conn net.Conn) error {
+func (res *Response) flushTrailer(conn io.Writer) error {
 	var err error
 
 	if !res.chunked {

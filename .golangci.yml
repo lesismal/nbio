@@ -635,14 +635,19 @@ linters-settings:
 linters:
   disable-all: false
   enable:
-    - megacheck
+    - dogsled
+    - dupl
+    - importas
+    - gci
+    - goconst
+    - godot
+    - godox
     - govet
+    - megacheck
+    - misspell
+    - nolintlint
     - wastedassign
     - unconvert
-    - nolintlint
-    - goconst
-    - godox
-    - godot
   enable-all: false
   disable:
     - maligned

@@ -198,44 +198,34 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
+func (c *Conn) setDeadline(timer **htimer, returnErr error, t time.Time) error {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+	if c.closed {
+		return nil
+	}
+	if !t.IsZero() {
+		now := time.Now()
+		if *timer == nil {
+			*timer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(returnErr) })
+		} else {
+			(*timer).Reset(t.Sub(now))
+		}
+	} else if *timer != nil {
+		(*timer).Stop()
+		(*timer) = nil
+	}
+	return nil
+}
+
 // SetReadDeadline implements SetReadDeadline.
 func (c *Conn) SetReadDeadline(t time.Time) error {
-	c.mux.Lock()
-	if !c.closed {
-		if !t.IsZero() {
-			now := time.Now()
-			if c.rTimer == nil {
-				c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
-			} else {
-				c.rTimer.Reset(t.Sub(now))
-			}
-		} else if c.rTimer != nil {
-			c.rTimer.Stop()
-			c.rTimer = nil
-		}
-	}
-	c.mux.Unlock()
-	return nil
+	return c.setDeadline(&c.rTimer, errReadTimeout, t)
 }
 
 // SetWriteDeadline implements SetWriteDeadline.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
-	c.mux.Lock()
-	if !c.closed {
-		if !t.IsZero() {
-			now := time.Now()
-			if c.wTimer == nil {
-				c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
-			} else {
-				c.wTimer.Reset(t.Sub(now))
-			}
-		} else if c.wTimer != nil {
-			c.wTimer.Stop()
-			c.wTimer = nil
-		}
-	}
-	c.mux.Unlock()
-	return nil
+	return c.setDeadline(&c.wTimer, errWriteTimeout, t)
 }
 
 // SetNoDelay implements SetNoDelay.
