@@ -41,8 +41,9 @@ func main() {
 	for i := 0; i < 1; i++ {
 		u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/ws"}
 		dialer := &websocket.Dialer{
-			Engine:   engine,
-			Upgrader: newUpgrader(),
+			Engine:      engine,
+			Upgrader:    newUpgrader(),
+			DialTimeout: time.Second * 3,
 		}
 		c, _, err := dialer.Dial(u.String(), nil)
 		if err != nil {

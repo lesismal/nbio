@@ -136,26 +136,41 @@ func (c *httpConn) onResponse(res *http.Response, err error) {
 }
 
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
-	originHandler := handler
-	handler = func(res *http.Response, conn net.Conn, err error) {
-		if err == nil && c.Timeout > 0 && conn != nil {
-			conn.SetReadDeadline(time.Time{})
-		}
-		originHandler(res, conn, err)
-	}
-	sendRequest := func() {
-		err := req.Write(c.Conn.conn)
-		if err != nil {
-			handler(nil, nil, err)
-			return
-		}
-		c.Conn.handlers = append(c.Conn.handlers, resHandler{c: c.Conn.conn, t: time.Now(), h: handler})
-	}
-
 	c.mux.Lock()
-	if c.Conn == nil {
-		c.Engine.ExecuteClient(func() {
-			defer c.mux.Unlock()
+	c.Engine.ExecuteClient(func() {
+		defer c.mux.Unlock()
+
+		originHandler := handler
+		handler = func(res *http.Response, conn net.Conn, err error) {
+			if err == nil && c.Timeout > 0 && conn != nil {
+				conn.SetReadDeadline(time.Time{})
+			}
+			originHandler(res, conn, err)
+		}
+		sendRequest := func() {
+			err := req.Write(c.Conn.conn)
+			if err != nil {
+				handler(nil, nil, err)
+				return
+			}
+			c.Conn.handlers = append(c.Conn.handlers, resHandler{c: c.Conn.conn, t: time.Now(), h: handler})
+		}
+
+		var deadline time.Time
+		if c.Timeout > 0 {
+			deadline = time.Now().Add(c.Timeout)
+		}
+
+		if c.Conn == nil {
+
+			var timeout time.Duration
+			if c.Timeout > 0 {
+				timeout = time.Until(deadline)
+				if timeout <= 0 {
+					handler(nil, nil, ErrClientTimeout)
+					return
+				}
+			}
 
 			strs := strings.Split(req.URL.Host, ":")
 			host := strs[0]
@@ -172,8 +187,7 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 				}
 			} else {
 				netDial = func(network, addr string) (net.Conn, error) {
-					deadline := time.Now().Add(c.Timeout)
-					conn, err := net.DialTimeout(network, addr, c.Timeout)
+					conn, err := net.DialTimeout(network, addr, timeout)
 					if err == nil {
 						conn.SetReadDeadline(deadline)
 					}
@@ -274,13 +288,9 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 				handler(nil, nil, ErrClientUnsupportedSchema)
 				return
 			}
-
-			sendRequest()
-		})
-	} else {
-		defer c.mux.Unlock()
+		}
 		sendRequest()
-	}
+	})
 }
 
 func NewClient(engine *Engine) *Client {

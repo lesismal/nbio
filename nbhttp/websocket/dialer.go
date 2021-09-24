@@ -47,15 +47,15 @@ type Dialer struct {
 }
 
 // Dial creates a new client connection by calling DialContext with a background context.
-func (d *Dialer) Dial(urlStr string, requestHeader http.Header) (*Conn, *http.Response, error) {
+func (d *Dialer) Dial(urlStr string, requestHeader http.Header, v ...interface{}) (*Conn, *http.Response, error) {
 	ctx := context.Background()
 	if d.DialTimeout > 0 {
 		ctx, d.Cancel = context.WithTimeout(ctx, d.DialTimeout)
 	}
-	return d.DialContext(ctx, urlStr, requestHeader)
+	return d.DialContext(ctx, urlStr, requestHeader, v...)
 }
 
-func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header) (*Conn, *http.Response, error) {
+func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header, v ...interface{}) (*Conn, *http.Response, error) {
 	if d.Cancel != nil {
 		defer d.Cancel()
 	}
@@ -135,6 +135,20 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		req.Header[secWebsocketExtHeaderField] = []string{"permessage-deflate; server_no_context_takeover; client_no_context_takeover"}
 	}
 
+	var asyncHandler func(*Conn, *http.Response, error)
+	if len(v) > 0 {
+		if h, ok := v[0].(func(*Conn, *http.Response, error)); ok {
+			asyncHandler = h
+		}
+	}
+
+	var wsConn *Conn
+	var res *http.Response
+	var errCh chan error
+	if asyncHandler == nil {
+		errCh = make(chan error)
+	}
+
 	httpCli := &nbhttp.Client{
 		Engine:          d.Engine,
 		Jar:             d.Jar,
@@ -143,25 +157,25 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		Proxy:           d.Proxy,
 		CheckRedirect:   d.CheckRedirect,
 	}
-
-	var wsConn *Conn
-	var res *http.Response
-	var errCh = make(chan error)
 	httpCli.Do(req, func(resp *http.Response, conn net.Conn, err error) {
 		res = resp
 
-		notifyResult := func() {
-			select {
-			case errCh <- err:
-			case <-ctx.Done():
-				if conn != nil {
-					conn.Close()
+		notifyResult := func(e error) {
+			if asyncHandler == nil {
+				select {
+				case errCh <- e:
+				case <-ctx.Done():
+					if conn != nil {
+						conn.Close()
+					}
 				}
+			} else {
+				asyncHandler(wsConn, res, e)
 			}
 		}
 
 		if err != nil {
-			notifyResult()
+			notifyResult(err)
 			return
 		}
 
@@ -170,13 +184,13 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			tlsConn, tlsOk := conn.(*tls.Conn)
 			if !tlsOk {
 				err = ErrBadHandshake
-				notifyResult()
+				notifyResult(err)
 				return
 			}
 			nbc, tlsOk = tlsConn.Conn().(*nbio.Conn)
 			if !tlsOk {
 				err = errors.New(http.StatusText(http.StatusInternalServerError))
-				notifyResult()
+				notifyResult(err)
 				return
 			}
 		}
@@ -184,7 +198,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		parser, ok := nbc.Session().(*nbhttp.Parser)
 		if !ok {
 			err = errors.New(http.StatusText(http.StatusInternalServerError))
-			notifyResult()
+			notifyResult(err)
 			return
 		}
 
@@ -202,7 +216,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			!headerContains(resp.Header, "Connection", "upgrade") ||
 			resp.Header.Get("Sec-Websocket-Accept") != acceptKeyString(challengeKey) {
 			err = ErrBadHandshake
-			notifyResult()
+			notifyResult(err)
 			return
 		}
 
@@ -214,7 +228,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			_, cnct := ext["client_no_context_takeover"]
 			if !snct || !cnct {
 				err = ErrInvalidCompression
-				notifyResult()
+				notifyResult(err)
 				return
 			}
 
@@ -233,16 +247,20 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			upgrader.openHandler(wsConn)
 		}
 
-		notifyResult()
+		notifyResult(err)
 	})
 
-	select {
-	case err = <-errCh:
-	case <-ctx.Done():
-		err = nbhttp.ErrClientTimeout
+	if asyncHandler == nil {
+		select {
+		case err = <-errCh:
+		case <-ctx.Done():
+			err = nbhttp.ErrClientTimeout
+		}
+		if err != nil {
+			httpCli.CloseWithError(err)
+		}
+		return wsConn, res, err
 	}
-	if err != nil {
-		httpCli.CloseWithError(err)
-	}
-	return wsConn, res, err
+
+	return nil, nil, nil
 }

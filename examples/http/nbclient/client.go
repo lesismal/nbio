@@ -42,7 +42,10 @@ func main() {
 		idx := i
 		go func() {
 			count := 0
-			cli := nbhttp.NewClient(engine)
+			cli := &nbhttp.Client{
+				Engine:  engine,
+				Timeout: time.Second * 3,
+			}
 			func() {
 				var doRequest func(int)
 				doRequest = func(cnt int) {

@@ -6,7 +6,11 @@ package nbio
 
 import (
 	"net"
+	"runtime"
 	"time"
+	"unsafe"
+
+	"github.com/lesismal/nbio/logging"
 )
 
 // OnData registers callback for data.
@@ -69,7 +73,17 @@ func (c *Conn) Execute(f func()) {
 		c.g.Execute(func() {
 			i := 0
 			for {
-				f()
+				func() {
+					defer func() {
+						if err := recover(); err != nil {
+							const size = 64 << 10
+							buf := make([]byte, size)
+							buf = buf[:runtime.Stack(buf, false)]
+							logging.Error("conn execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+						}
+					}()
+					f()
+				}()
 
 				c.mux.Lock()
 				i++
