@@ -637,6 +637,9 @@ linters:
   enable:
     - megacheck
     - govet
+    - wastedassign
+    - unconvert
+    - nolintlint
   enable-all: false
   disable:
     - maligned

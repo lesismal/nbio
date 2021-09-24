@@ -32,7 +32,7 @@ func WrapOpen(tlsConfig *Config, isClient bool, h func(c *nbio.Conn, tlsConn *Co
 		}
 		if tlsConn == nil && !isClient {
 			tlsConn = tls.NewConn(c, tlsConfig, isClient, true, mempool.DefaultMemPool)
-			c.SetSession((*Conn)(tlsConn))
+			c.SetSession(tlsConn)
 		}
 		if h != nil {
 			h(c, tlsConn)

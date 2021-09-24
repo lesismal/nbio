@@ -183,7 +183,7 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 			})
 			if ok {
 				ns, err := nc.Sendfile(f, lr.N)
-				return int64(ns), err
+				return ns, err
 			}
 		}
 	}

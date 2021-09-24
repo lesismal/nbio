@@ -63,7 +63,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	}
 	c.mux.Unlock()
 
-	n, err := syscall.Read(int(c.fd), b)
+	n, err := syscall.Read(c.fd, b)
 	if err == nil {
 		c.g.afterRead(c)
 	}
@@ -319,7 +319,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	}
 
 	if len(c.writeBuffer) == 0 {
-		n, err := syscall.Write(int(c.fd), b)
+		n, err := syscall.Write(c.fd, b)
 		if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 			return n, err
 		}
@@ -353,7 +353,7 @@ func (c *Conn) flush() error {
 
 	old := c.writeBuffer
 
-	n, err := syscall.Write(int(c.fd), old)
+	n, err := syscall.Write(c.fd, old)
 	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
@@ -429,7 +429,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 }
 
 func (c *Conn) overflow(n int) bool {
-	return c.g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > int(c.g.maxWriteBufferSize))
+	return c.g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > c.g.maxWriteBufferSize)
 }
 
 func (c *Conn) closeWithError(err error) error {

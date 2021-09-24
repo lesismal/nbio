@@ -21,9 +21,9 @@ func (g *Gopher) Start() error {
 	var err error
 
 	for i := 0; i < len(g.addrs); i++ {
-		g.listeners[i], err = newPoller(g, true, int(i))
+		g.listeners[i], err = newPoller(g, true, i)
 		if err != nil {
-			for j := 0; j < int(i); j++ {
+			for j := 0; j < i; j++ {
 				g.listeners[j].stop()
 			}
 			return err
@@ -31,17 +31,17 @@ func (g *Gopher) Start() error {
 	}
 
 	for i := 0; i < g.pollerNum; i++ {
-		g.pollers[i], err = newPoller(g, false, int(i))
+		g.pollers[i], err = newPoller(g, false, i)
 		if err != nil {
-			for j := 0; j < int(len(g.lfds)); j++ {
+			for j := 0; j < len(g.lfds); j++ {
 				syscall.Close(g.lfds[j])
 			}
 
-			for j := 0; j < int(len(g.listeners)); j++ {
+			for j := 0; j < len(g.listeners); j++ {
 				g.listeners[j].stop()
 			}
 
-			for j := 0; j < int(i); j++ {
+			for j := 0; j < i; j++ {
 				g.pollers[j].stop()
 			}
 			return err

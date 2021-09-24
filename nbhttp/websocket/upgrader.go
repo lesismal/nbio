@@ -594,7 +594,7 @@ func checkSameOrigin(r *http.Request) bool {
 }
 
 func headerContains(header http.Header, name string, value string) bool {
-	t := ""
+	var t string
 	values := header[name]
 	for _, s := range values {
 		for {

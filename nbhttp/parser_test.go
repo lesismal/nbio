@@ -148,7 +148,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 		tmp := data
 		reads := [][]byte{}
 		for len(tmp) > 0 {
-			nRead := int(rand.Intn(len(tmp)) + 1)
+			nRead := rand.Intn(len(tmp)) + 1
 			readBuf := append([]byte{}, tmp[:nRead]...)
 			reads = append(reads, readBuf)
 			tmp = tmp[nRead:]
