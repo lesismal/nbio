@@ -9,12 +9,12 @@ import (
 	"time"
 )
 
-// OnData registers callback for data
+// OnData registers callback for data.
 func (c *Conn) OnData(h func(conn *Conn, data []byte)) {
 	c.DataHandler = h
 }
 
-// Dial wraps net.Dial
+// Dial wraps net.Dial.
 func Dial(network string, address string) (*Conn, error) {
 	conn, err := net.Dial(network, address)
 	if err != nil {
@@ -23,7 +23,7 @@ func Dial(network string, address string) (*Conn, error) {
 	return NBConn(conn)
 }
 
-// DialTimeout wraps net.DialTimeout
+// DialTimeout wraps net.DialTimeout.
 func DialTimeout(network string, address string, timeout time.Duration) (*Conn, error) {
 	conn, err := net.DialTimeout(network, address, timeout)
 	if err != nil {

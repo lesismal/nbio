@@ -115,7 +115,7 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
+			o := p.g.pollers[c.fd%len(p.g.pollers)]
 			o.addConn(c)
 		} else {
 			var ne net.Error
@@ -136,7 +136,6 @@ func (p *poller) readWriteLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	fd := 0
 	msec := -1
 	events := make([]syscall.EpollEvent, 1024)
 
@@ -160,7 +159,7 @@ func (p *poller) readWriteLoop() {
 		msec = 20
 
 		for _, ev := range events[:n] {
-			fd = int(ev.Fd)
+			fd := int(ev.Fd)
 			switch fd {
 			case p.evtfd:
 			default:

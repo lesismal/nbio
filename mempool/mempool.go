@@ -14,7 +14,7 @@ const maxAppendSize = 1024 * 1024 * 4
 
 var DefaultMemPool = New(64)
 
-// MemPool
+// MemPool.
 type MemPool struct {
 	minSize int
 	pool    sync.Pool
@@ -121,7 +121,7 @@ func (mp *MemPool) saveAllocStack(buf []byte) {
 	mp.allocStacks[p] = getStack()
 }
 
-// NativeAllocator definition
+// NativeAllocator definition.
 type NativeAllocator struct{}
 
 // Malloc .
@@ -143,17 +143,17 @@ func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
 func (a *NativeAllocator) Free(buf []byte) {
 }
 
-// Malloc exports default package method
+// Malloc exports default package method.
 func Malloc(size int) []byte {
 	return DefaultMemPool.Malloc(size)
 }
 
-// Realloc exports default package method
+// Realloc exports default package method.
 func Realloc(buf []byte, size int) []byte {
 	return DefaultMemPool.Realloc(buf, size)
 }
 
-// Free exports default package method
+// Free exports default package method.
 func Free(buf []byte) {
 	DefaultMemPool.Free(buf)
 }

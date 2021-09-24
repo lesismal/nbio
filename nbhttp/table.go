@@ -101,7 +101,7 @@ var (
 		'~':  true,
 	}
 
-	// headerCharMap = [256]bool{}
+	// headerCharMap = [256]bool{}.
 
 	numCharMap      = [256]bool{}
 	hexCharMap      = [256]bool{}

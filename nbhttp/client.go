@@ -188,7 +188,7 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 					return
 				}
 				if proxyURL != nil {
-					dialer, err := proxy_FromURL(proxyURL, netDialerFunc(netDial))
+					dialer, err := proxy_FromURL(proxyURL, netDial)
 					if err != nil {
 						handler(nil, nil, err)
 						return
@@ -565,7 +565,7 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " failed to connect: " + failure)
 	}
 
-	bytesToDiscard := 0
+	var bytesToDiscard int
 	switch buf[3] {
 	case proxy_socks5IP4:
 		bytesToDiscard = net.IPv4len

@@ -35,7 +35,7 @@ var (
 	// 	New: func() interface{} {
 	// 		return &ServerProcessor{}
 	// 	},
-	// }
+	// }.
 )
 
 func releaseRequest(req *http.Request) {
@@ -188,7 +188,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Host = request.URL.Host
 	}
 
-	request.TransferEncoding = request.Header["Transfer-Encoding"]
+	request.TransferEncoding = request.Header[transferEncodingHeader]
 
 	if request.ProtoMajor < 1 {
 		request.Close = true

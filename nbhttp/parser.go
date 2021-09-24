@@ -16,6 +16,12 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
+const (
+	transferEncodingHeader = "Transfer-Encoding"
+	trailerHeader          = "Trailer"
+	contentLengthHeader    = "Content-Length"
+)
+
 // Parser .
 type Parser struct {
 	mux sync.Mutex
@@ -357,7 +363,7 @@ UPGRADER:
 					p.headerValue = string(data[start:i])
 				}
 				switch p.headerKey {
-				case "Transfer-Encoding", "Trailer", "Content-Length":
+				case transferEncodingHeader, trailerHeader, contentLengthHeader:
 					if p.header == nil {
 						p.header = http.Header{}
 					}
@@ -387,7 +393,7 @@ UPGRADER:
 					p.headerValue = string(data[start:i])
 				}
 				switch p.headerKey {
-				case "Transfer-Encoding", "Trailer", "Content-Length":
+				case transferEncodingHeader, trailerHeader, contentLengthHeader:
 					if p.header == nil {
 						p.header = http.Header{}
 					}
@@ -639,11 +645,11 @@ Exit:
 }
 
 func (p *Parser) parseTransferEncoding() error {
-	raw, present := p.header["Transfer-Encoding"]
+	raw, present := p.header[transferEncodingHeader]
 	if !present {
 		return nil
 	}
-	delete(p.header, "Transfer-Encoding")
+	delete(p.header, transferEncodingHeader)
 
 	if len(raw) != 1 {
 		return fmt.Errorf("too many transfer encodings: %q", raw)
@@ -651,14 +657,14 @@ func (p *Parser) parseTransferEncoding() error {
 	if strings.ToLower(textproto.TrimString(raw[0])) != "chunked" {
 		return fmt.Errorf("unsupported transfer encoding: %q", raw[0])
 	}
-	delete(p.header, "Content-Length")
+	delete(p.header, contentLengthHeader)
 	p.chunked = true
 
 	return nil
 }
 
 func (p *Parser) parseContentLength() (err error) {
-	if cl := p.header.Get("Content-Length"); cl != "" {
+	if cl := p.header.Get(contentLengthHeader); cl != "" {
 		if p.chunked {
 			return ErrUnexpectedContentLength
 		}
@@ -691,12 +697,12 @@ func (p *Parser) parseTrailer() error {
 	}
 	header := p.header
 
-	trailers, ok := header["Trailer"]
+	trailers, ok := header[trailerHeader]
 	if !ok {
 		return nil
 	}
 
-	header.Del("Trailer")
+	header.Del(trailerHeader)
 
 	trailer := http.Header{}
 	for _, key := range trailers {
@@ -707,7 +713,7 @@ func (p *Parser) parseTrailer() error {
 		if !strings.Contains(key, ",") {
 			key = http.CanonicalHeaderKey(key)
 			switch key {
-			case "Transfer-Encoding", "Trailer", "Content-Length":
+			case transferEncodingHeader, trailerHeader, contentLengthHeader:
 				return fmt.Errorf("%s %q", "bad trailer key", key)
 			default:
 				trailer[key] = nil
@@ -718,7 +724,7 @@ func (p *Parser) parseTrailer() error {
 			if k = textproto.TrimString(k); k != "" {
 				k = http.CanonicalHeaderKey(k)
 				switch k {
-				case "Transfer-Encoding", "Trailer", "Content-Length":
+				case transferEncodingHeader, trailerHeader, contentLengthHeader:
 					return fmt.Errorf("%s %q", "bad trailer key", k)
 				default:
 					trailer[k] = nil

@@ -85,6 +85,7 @@ func main() {
 			http.FileServer(http.Dir(base)),
 		))
 		log.Fatal(http.ListenAndServe(addr, nil))
+
 		return
 	}
 
