@@ -25,7 +25,7 @@ type BodyReader struct {
 	buffer []byte
 }
 
-// Read implements io.Reader
+// Read implements io.Reader.
 func (br *BodyReader) Read(p []byte) (int, error) {
 	need := len(p)
 	available := len(br.buffer) - br.index
@@ -74,7 +74,7 @@ func (br *BodyReader) TakeOver() []byte {
 	return b
 }
 
-// Close implements io. Closer
+// Close implements io. Closer.
 func (br *BodyReader) Close() error {
 	return nil
 }
@@ -87,7 +87,7 @@ func (br *BodyReader) close() {
 	}
 }
 
-// NewBodyReader creates a BodyReader
+// NewBodyReader creates a BodyReader.
 func NewBodyReader(data []byte) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
 	if len(data) > 0 {

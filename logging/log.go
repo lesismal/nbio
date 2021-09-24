@@ -17,7 +17,7 @@ var (
 	// Output is used to receive log output.
 	Output = os.Stdout
 
-	// DefaultLogger is the default logger and is used by arpc
+	// DefaultLogger is the default logger and is used by arpc.
 	DefaultLogger Logger = &logger{level: LevelInfo}
 )
 
@@ -36,7 +36,7 @@ const (
 	LevelNone
 )
 
-// Logger defines log interface
+// Logger defines log interface.
 type Logger interface {
 	SetLevel(lvl int)
 	Debug(format string, v ...interface{})

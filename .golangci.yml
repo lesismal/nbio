@@ -640,6 +640,9 @@ linters:
     - wastedassign
     - unconvert
     - nolintlint
+    - goconst
+    - godox
+    - godot
   enable-all: false
   disable:
     - maligned

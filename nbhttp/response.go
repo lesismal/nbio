@@ -67,12 +67,12 @@ func (res *Response) WriteHeader(statusCode int) {
 			res.statusCode = statusCode
 		}
 
-		if cl := res.header.Get("Content-Length"); cl != "" {
+		if cl := res.header.Get(contentLengthHeader); cl != "" {
 			v, err := strconv.ParseInt(cl, 10, 64)
 			if err == nil && v >= 0 {
 			} else {
 				logging.Error("http: invalid Content-Length of %q", cl)
-				res.header.Del("Content-Length")
+				res.header.Del(contentLengthHeader)
 			}
 		}
 
@@ -133,7 +133,7 @@ func (res *Response) Write(data []byte) (int, error) {
 		return conn.Write(buf)
 	}
 
-	if len(res.header["Content-Length"]) > 0 {
+	if len(res.header[contentLengthHeader]) > 0 {
 		res.eoncodeHead()
 
 		buf := res.buffer
@@ -149,7 +149,7 @@ func (res *Response) Write(data []byte) (int, error) {
 	}
 
 	res.bodyBuffer = append(res.bodyBuffer, data...)
-	// res.header["Content-Length"] = []string{res.formatInt(l, 10)}
+	// res.header[contentLengthHeader] = []string{res.formatInt(l, 10)}
 	return l, nil
 }
 
@@ -202,21 +202,21 @@ func (res *Response) checkChunked() {
 	// res.WriteHeader(http.StatusOK)
 
 	if res.request.ProtoAtLeast(1, 1) {
-		for _, v := range res.header["Transfer-Encoding"] {
+		for _, v := range res.header[transferEncodingHeader] {
 			if v == "chunked" {
 				res.chunked = true
 			}
 		}
 		if !res.chunked {
-			if len(res.header["Trailer"]) > 0 {
+			if len(res.header[trailerHeader]) > 0 {
 				res.chunked = true
-				hs := res.header["Transfer-Encoding"]
-				res.header["Transfer-Encoding"] = append(hs, "chunked")
+				hs := res.header[transferEncodingHeader]
+				res.header[transferEncodingHeader] = append(hs, "chunked")
 			}
 		}
 	}
 	if res.chunked {
-		delete(res.header, "Content-Length")
+		delete(res.header, contentLengthHeader)
 	}
 }
 
@@ -288,7 +288,7 @@ func (res *Response) eoncodeHead() {
 	}
 
 	res.trailer = map[string]string{}
-	trailers := res.header["Trailer"]
+	trailers := res.header[trailerHeader]
 	for _, k := range trailers {
 		res.trailer[k] = ""
 	}

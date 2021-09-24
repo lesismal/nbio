@@ -16,7 +16,7 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
-// Start init and start pollers
+// Start init and start pollers.
 func (g *Gopher) Start() error {
 	var err error
 
@@ -69,7 +69,7 @@ func (g *Gopher) Start() error {
 	return nil
 }
 
-// NewGopher is a factory impl
+// NewGopher is a factory impl.
 func NewGopher(conf Config) *Gopher {
 	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {

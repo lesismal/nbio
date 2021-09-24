@@ -12,7 +12,7 @@ type Conn = tls.Conn
 // Config .
 type Config = tls.Config
 
-// Dial returns a net.Conn to be added to a Gopher
+// Dial returns a net.Conn to be added to a Gopher.
 func Dial(network, addr string, config *Config) (*tls.Conn, error) {
 	tlsConn, err := tls.Dial(network, addr, config, mempool.DefaultMemPool)
 	if err != nil {
@@ -22,7 +22,7 @@ func Dial(network, addr string, config *Config) (*tls.Conn, error) {
 	return tlsConn, nil
 }
 
-// WrapOpen returns an opening handler of nbio.Gopher
+// WrapOpen returns an opening handler of nbio.Gopher.
 func WrapOpen(tlsConfig *Config, isClient bool, h func(c *nbio.Conn, tlsConn *Conn)) func(c *nbio.Conn) {
 	return func(c *nbio.Conn) {
 		var tlsConn *tls.Conn
@@ -40,7 +40,7 @@ func WrapOpen(tlsConfig *Config, isClient bool, h func(c *nbio.Conn, tlsConn *Co
 	}
 }
 
-// WrapClose returns an closing handler of nbio.Gopher
+// WrapClose returns an closing handler of nbio.Gopher.
 func WrapClose(h func(c *nbio.Conn, tlsConn *Conn, err error)) func(c *nbio.Conn, err error) {
 	return func(c *nbio.Conn, err error) {
 		if h != nil && c != nil {
@@ -53,7 +53,7 @@ func WrapClose(h func(c *nbio.Conn, tlsConn *Conn, err error)) func(c *nbio.Conn
 	}
 }
 
-// WrapData returns a data handler of nbio.Gopher
+// WrapData returns a data handler of nbio.Gopher.
 func WrapData(h func(c *nbio.Conn, tlsConn *Conn, data []byte), args ...interface{}) func(c *nbio.Conn, data []byte) {
 	getBuffer := func() []byte {
 		return make([]byte, 2048)

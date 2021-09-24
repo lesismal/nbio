@@ -21,7 +21,7 @@ const (
 
 type MessageType int8
 
-// The message types are defined in RFC 6455, section 11.8.t
+// The message types are defined in RFC 6455, section 11.8.t .
 const (
 	FragmentMessage MessageType = 0 // Must be preceded by Text or Binary message
 	TextMessage     MessageType = 1
@@ -167,12 +167,12 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	return nil
 }
 
-// Session returns user session
+// Session returns user session.
 func (c *Conn) Session() interface{} {
 	return c.session
 }
 
-// SetSession sets user session
+// SetSession sets user session.
 func (c *Conn) SetSession(session interface{}) {
 	c.session = session
 }
@@ -235,7 +235,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	return err
 }
 
-// overwrite nbio.Conn.Write
+// overwrite nbio.Conn.Write.
 func (c *Conn) Write(data []byte) (int, error) {
 	return -1, ErrInvalidWriteCalling
 }

@@ -17,7 +17,7 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
-// Conn implements net.Conn
+// Conn implements net.Conn.
 type Conn struct {
 	mux sync.Mutex
 
@@ -48,14 +48,14 @@ type Conn struct {
 	DataHandler func(c *Conn, data []byte)
 }
 
-// Hash returns a hash code
+// Hash returns a hash code.
 func (c *Conn) Hash() int {
 	return c.fd
 }
 
-// Read implements Read
+// Read implements Read.
 func (c *Conn) Read(b []byte) (int, error) {
-	// use lock to prevent multiple conn data confusion when fd is reused on unix
+	// use lock to prevent multiple conn data confusion when fd is reused on unix.
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -71,7 +71,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	return n, err
 }
 
-// Write implements Write
+// Write implements Write.
 func (c *Conn) Write(b []byte) (int, error) {
 	defer c.g.onWriteBufferFree(c, b)
 
@@ -104,7 +104,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// Writev implements Writev
+// Writev implements Writev.
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	defer func() {
 		for _, v := range in {
@@ -147,7 +147,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	return n, err
 }
 
-// Close implements Close
+// Close implements Close.
 func (c *Conn) Close() error {
 	return c.closeWithError(nil)
 }
@@ -157,17 +157,17 @@ func (c *Conn) CloseWithError(err error) error {
 	return c.closeWithError(err)
 }
 
-// LocalAddr implements LocalAddr
+// LocalAddr implements LocalAddr.
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
-// RemoteAddr implements RemoteAddr
+// RemoteAddr implements RemoteAddr.
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.rAddr
 }
 
-// SetDeadline implements SetDeadline
+// SetDeadline implements SetDeadline.
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -198,7 +198,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-// SetReadDeadline implements SetReadDeadline
+// SetReadDeadline implements SetReadDeadline.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -218,7 +218,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline implements SetWriteDeadline
+// SetWriteDeadline implements SetWriteDeadline.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -238,7 +238,7 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// SetNoDelay implements SetNoDelay
+// SetNoDelay implements SetNoDelay.
 func (c *Conn) SetNoDelay(nodelay bool) error {
 	if nodelay {
 		return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1)
@@ -246,17 +246,17 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 0)
 }
 
-// SetReadBuffer implements SetReadBuffer
+// SetReadBuffer implements SetReadBuffer.
 func (c *Conn) SetReadBuffer(bytes int) error {
 	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, bytes)
 }
 
-// SetWriteBuffer implements SetWriteBuffer
+// SetWriteBuffer implements SetWriteBuffer.
 func (c *Conn) SetWriteBuffer(bytes int) error {
 	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, bytes)
 }
 
-// SetKeepAlive implements SetKeepAlive
+// SetKeepAlive implements SetKeepAlive.
 func (c *Conn) SetKeepAlive(keepalive bool) error {
 	if keepalive {
 		return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1)
@@ -264,7 +264,7 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0)
 }
 
-// SetKeepAlivePeriod implements SetKeepAlivePeriod
+// SetKeepAlivePeriod implements SetKeepAlivePeriod.
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	return errors.New("not supported")
 	// d += (time.Second - time.Nanosecond)
@@ -275,7 +275,7 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	// return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
 }
 
-// SetLinger implements SetLinger
+// SetLinger implements SetLinger.
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return syscall.SetsockoptLinger(c.fd, syscall.SOL_SOCKET, syscall.SO_LINGER, &syscall.Linger{
 		Onoff:  onoff,  // 1
@@ -283,12 +283,12 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	})
 }
 
-// Session returns user session
+// Session returns user session.
 func (c *Conn) Session() interface{} {
 	return c.session
 }
 
-// SetSession sets user session
+// SetSession sets user session.
 func (c *Conn) SetSession(session interface{}) {
 	c.session = session
 }
@@ -472,7 +472,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	return syscall.Close(c.fd)
 }
 
-// NBConn converts net.Conn to *Conn
+// NBConn converts net.Conn to *Conn.
 func NBConn(conn net.Conn) (*Conn, error) {
 	if conn == nil {
 		return nil, errors.New("invalid conn: nil")

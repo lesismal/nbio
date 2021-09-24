@@ -14,6 +14,16 @@ import (
 	"github.com/lesismal/nbio/nbhttp"
 )
 
+const (
+	hostHeaderField                = "Host"
+	upgradeHeaderField             = "Upgrade"
+	connectionHeaderField          = "Connection"
+	secWebsocketKeyHeaderField     = "Sec-Websocket-Key"
+	secWebsocketVersionHeaderField = "Sec-Websocket-Version"
+	secWebsocketExtHeaderField     = "Sec-Websocket-Extensions"
+	secWebsocketProtoHeaderField   = "Sec-Websocket-Protocol"
+)
+
 type Dialer struct {
 	Engine *nbhttp.Engine
 
@@ -87,35 +97,35 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		}
 	}
 
-	req.Header["Upgrade"] = []string{"websocket"}
-	req.Header["Connection"] = []string{"Upgrade"}
-	req.Header["Sec-WebSocket-Key"] = []string{challengeKey}
-	req.Header["Sec-WebSocket-Version"] = []string{"13"}
+	req.Header[upgradeHeaderField] = []string{"websocket"}
+	req.Header[connectionHeaderField] = []string{"Upgrade"}
+	req.Header[secWebsocketKeyHeaderField] = []string{challengeKey}
+	req.Header[secWebsocketVersionHeaderField] = []string{"13"}
 	if len(d.Subprotocols) > 0 {
-		req.Header["Sec-WebSocket-Protocol"] = []string{strings.Join(d.Subprotocols, ", ")}
+		req.Header[secWebsocketProtoHeaderField] = []string{strings.Join(d.Subprotocols, ", ")}
 	}
 	for k, vs := range requestHeader {
 		switch {
-		case k == "Host":
+		case k == hostHeaderField:
 			if len(vs) > 0 {
 				req.Host = vs[0]
 			}
-		case k == "Upgrade" ||
-			k == "Connection" ||
-			k == "Sec-Websocket-Key" ||
-			k == "Sec-Websocket-Version" ||
-			k == "Sec-Websocket-Extensions" ||
-			(k == "Sec-Websocket-Protocol" && len(d.Subprotocols) > 0):
+		case k == upgradeHeaderField ||
+			k == connectionHeaderField ||
+			k == secWebsocketKeyHeaderField ||
+			k == secWebsocketVersionHeaderField ||
+			k == secWebsocketExtHeaderField ||
+			(k == secWebsocketProtoHeaderField && len(d.Subprotocols) > 0):
 			return nil, nil, errors.New("websocket: duplicate header not allowed: " + k)
-		case k == "Sec-Websocket-Protocol":
-			req.Header["Sec-WebSocket-Protocol"] = vs
+		case k == secWebsocketProtoHeaderField:
+			req.Header[secWebsocketProtoHeaderField] = vs
 		default:
 			req.Header[k] = vs
 		}
 	}
 
 	if d.EnableCompression {
-		req.Header["Sec-WebSocket-Extensions"] = []string{"permessage-deflate; server_no_context_takeover; client_no_context_takeover"}
+		req.Header[secWebsocketExtHeaderField] = []string{"permessage-deflate; server_no_context_takeover; client_no_context_takeover"}
 	}
 
 	httpCli := &nbhttp.Client{
@@ -205,7 +215,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			break
 		}
 
-		wsConn = newConn(upgrader, conn, resp.Header.Get("Sec-Websocket-Protocol"), remoteCompressionEnabled)
+		wsConn = newConn(upgrader, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled)
 		wsConn.Engine = d.Engine
 		wsConn.OnClose(upgrader.onClose)
 

@@ -34,11 +34,11 @@ var (
 	// DefaultHTTPWriteBufferSize .
 	DefaultHTTPWriteBufferSize = 1024 * 2
 
-	// DefaultMaxWebsocketFramePayloadSize
+	// DefaultMaxWebsocketFramePayloadSize.
 	DefaultMaxWebsocketFramePayloadSize = 1024 * 32
 
 	// DefaultMessageHandlerPoolSize .
-	// DefaultMessageHandlerPoolSize = runtime.NumCPU() * 256
+	// DefaultMessageHandlerPoolSize = runtime.NumCPU() * 256.
 
 	// DefaultMessageHandlerTaskIdleTime .
 	DefaultMessageHandlerTaskIdleTime = time.Second * 60
@@ -154,12 +154,12 @@ type Engine struct {
 	ExecuteClient func(f func())
 }
 
-// OnOpen registers callback for new connection
+// OnOpen registers callback for new connection.
 func (e *Engine) OnOpen(h func(c *nbio.Conn)) {
 	e._onOpen = h
 }
 
-// OnClose registers callback for disconnected
+// OnClose registers callback for disconnected.
 func (e *Engine) OnClose(h func(c *nbio.Conn, err error)) {
 	e._onClose = h
 }

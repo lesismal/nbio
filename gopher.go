@@ -34,7 +34,7 @@ var (
 	MaxOpenFiles = 1024 * 1024
 )
 
-// Config Of Gopher
+// Config Of Gopher.
 type Config struct {
 	// Name describes your gopher name for logging, it's set to "NB" by default.
 	Name string
@@ -81,7 +81,7 @@ type Config struct {
 	EpollMod int
 }
 
-// Gopher is a manager of poller
+// Gopher is a manager of poller.
 type Gopher struct {
 	sync.WaitGroup
 	mux  sync.Mutex
@@ -130,7 +130,7 @@ type Gopher struct {
 	Execute func(f func())
 }
 
-// Stop pollers
+// Stop pollers.
 func (g *Gopher) Stop() {
 	g.onStop()
 
@@ -164,7 +164,7 @@ func (g *Gopher) Stop() {
 	logging.Info("Gopher[%v] stop", g.Name)
 }
 
-// AddConn adds conn to a poller
+// AddConn adds conn to a poller.
 func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
 	c, err := NBConn(conn)
 	if err != nil {
@@ -174,7 +174,7 @@ func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
 	return c, nil
 }
 
-// OnOpen registers callback for new connection
+// OnOpen registers callback for new connection.
 func (g *Gopher) OnOpen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -182,7 +182,7 @@ func (g *Gopher) OnOpen(h func(c *Conn)) {
 	g.onOpen = h
 }
 
-// OnClose registers callback for disconnected
+// OnClose registers callback for disconnected.
 func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -194,12 +194,12 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 	}
 }
 
-// OnRead registers callback for reading event
+// OnRead registers callback for reading event.
 func (g *Gopher) OnRead(h func(c *Conn)) {
 	g.onRead = h
 }
 
-// OnData registers callback for data
+// OnData registers callback for data.
 func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -207,7 +207,7 @@ func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
 	g.onData = h
 }
 
-// OnReadBufferAlloc registers callback for memory allocating
+// OnReadBufferAlloc registers callback for memory allocating.
 func (g *Gopher) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -215,7 +215,7 @@ func (g *Gopher) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	g.onReadBufferAlloc = h
 }
 
-// OnReadBufferFree registers callback for memory release
+// OnReadBufferFree registers callback for memory release.
 func (g *Gopher) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -223,7 +223,7 @@ func (g *Gopher) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	g.onReadBufferFree = h
 }
 
-// OnWriteBufferRelease registers callback for write buffer memory release
+// OnWriteBufferRelease registers callback for write buffer memory release.
 func (g *Gopher) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -232,7 +232,7 @@ func (g *Gopher) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 }
 
 // BeforeRead registers callback before syscall.Read
-// the handler would be called on windows
+// the handler would be called on windows.
 func (g *Gopher) BeforeRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -241,7 +241,7 @@ func (g *Gopher) BeforeRead(h func(c *Conn)) {
 }
 
 // AfterRead registers callback after syscall.Read
-// the handler would be called on *nix
+// the handler would be called on *nix.
 func (g *Gopher) AfterRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -250,7 +250,7 @@ func (g *Gopher) AfterRead(h func(c *Conn)) {
 }
 
 // BeforeWrite registers callback befor syscall.Write and syscall.Writev
-// the handler would be called on windows
+// the handler would be called on windows.
 func (g *Gopher) BeforeWrite(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
@@ -266,7 +266,7 @@ func (g *Gopher) OnStop(h func()) {
 	g.onStop = h
 }
 
-// After used as time.After
+// After used as time.After.
 func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
 	c := make(chan time.Time, 1)
 	g.afterFunc(timeout, func() {
@@ -275,7 +275,7 @@ func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
 	return c
 }
 
-// AfterFunc used as time.AfterFunc
+// AfterFunc used as time.AfterFunc.
 func (g *Gopher) AfterFunc(timeout time.Duration, f func()) *Timer {
 	ht := g.afterFunc(timeout, f)
 	return &Timer{htimer: ht}
@@ -334,7 +334,7 @@ func (g *Gopher) removeTimer(it *htimer) {
 	}
 }
 
-// ResetTimer removes a timer
+// ResetTimer removes a timer.
 func (g *Gopher) resetTimer(it *htimer) {
 	g.tmux.Lock()
 	defer g.tmux.Unlock()
@@ -419,7 +419,7 @@ func (g *Gopher) timerLoop() {
 	}
 }
 
-// PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd
+// PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
 func (g *Gopher) PollerBuffer(c *Conn) []byte {
 	return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
 }
