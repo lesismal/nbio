@@ -39,7 +39,6 @@ func newUpgrader() *websocket.Upgrader {
 }
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	flag.Parse()
 	upgrader := newUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -52,6 +51,8 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
+
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
@@ -60,7 +61,6 @@ func main() {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
-	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)

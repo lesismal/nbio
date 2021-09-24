@@ -17,6 +17,8 @@ import (
 type Dialer struct {
 	Engine *nbhttp.Engine
 
+	Upgrader *Upgrader
+
 	Jar http.CookieJar
 
 	DialTimeout time.Duration
@@ -35,17 +37,22 @@ type Dialer struct {
 }
 
 // Dial creates a new client connection by calling DialContext with a background context.
-func (d *Dialer) Dial(urlStr string, requestHeader http.Header, upgrader *Upgrader) (*Conn, *http.Response, error) {
+func (d *Dialer) Dial(urlStr string, requestHeader http.Header) (*Conn, *http.Response, error) {
 	ctx := context.Background()
 	if d.DialTimeout > 0 {
 		ctx, d.Cancel = context.WithTimeout(ctx, d.DialTimeout)
 	}
-	return d.DialContext(ctx, urlStr, requestHeader, upgrader)
+	return d.DialContext(ctx, urlStr, requestHeader)
 }
 
-func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header, upgrader *Upgrader) (*Conn, *http.Response, error) {
+func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header) (*Conn, *http.Response, error) {
 	if d.Cancel != nil {
 		defer d.Cancel()
+	}
+
+	upgrader := d.Upgrader
+	if upgrader == nil {
+		return nil, nil, errors.New("invalid Upgrader: nil")
 	}
 
 	challengeKey, err := challengeKey()

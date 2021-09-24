@@ -45,10 +45,13 @@ func main() {
 	}
 	for i := 0; i < 1; i++ {
 		u := url.URL{Scheme: "wss", Host: "localhost:8888", Path: "/wss"}
-		c, _, err := (&websocket.Dialer{
-			TLSClientConfig: tlsConfig,
+		dialer := &websocket.Dialer{
 			Engine:          engine,
-		}).Dial(u.String(), nil, newUpgrader())
+			Upgrader:        newUpgrader(),
+			DialTimeout:     time.Second * 3,
+			TLSClientConfig: tlsConfig,
+		}
+		c, _, err := dialer.Dial(u.String(), nil)
 		if err != nil {
 			panic(fmt.Errorf("dial: %v", err))
 		}

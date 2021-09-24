@@ -17,7 +17,9 @@ func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
 	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
-		c.WriteMessage(messageType, data)
+		time.AfterFunc(time.Second, func() {
+			c.WriteMessage(messageType, data)
+		})
 		log.Println("onEcho:", string(data))
 	})
 
@@ -38,9 +40,11 @@ func main() {
 
 	for i := 0; i < 1; i++ {
 		u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/ws"}
-		c, _, err := (&websocket.Dialer{
-			Engine: engine,
-		}).Dial(u.String(), nil, newUpgrader())
+		dialer := &websocket.Dialer{
+			Engine:   engine,
+			Upgrader: newUpgrader(),
+		}
+		c, _, err := dialer.Dial(u.String(), nil)
 		if err != nil {
 			panic(fmt.Errorf("dial: %v", err))
 		}
