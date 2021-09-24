@@ -175,9 +175,10 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 				}
 			} else {
 				netDial = func(network, addr string) (net.Conn, error) {
+					deadline := time.Now().Add(c.Timeout)
 					conn, err := net.DialTimeout(network, addr, c.Timeout)
 					if err == nil {
-						conn.SetReadDeadline(time.Now().Add(c.Timeout))
+						conn.SetReadDeadline(deadline)
 					}
 					return conn, err
 				}
