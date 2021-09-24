@@ -20,6 +20,9 @@ const (
 	transferEncodingHeader = "Transfer-Encoding"
 	trailerHeader          = "Trailer"
 	contentLengthHeader    = "Content-Length"
+
+	MaxUint = ^uint(0)
+	MaxInt  = int64(int(MaxUint >> 1))
 )
 
 // Parser .
@@ -100,6 +103,20 @@ func (p *Parser) Close(err error) {
 	if p.onClose != nil {
 		p.onClose(p, err)
 	}
+}
+
+func parseAndValidateChunkSize(originalStr string) (int, error) {
+	chunkSize, err := strconv.ParseInt(originalStr, 16, 63)
+	if err != nil {
+		return -1, fmt.Errorf("chunk size parse error %v: %w", originalStr, err)
+	}
+	if chunkSize < 0 {
+		return -1, fmt.Errorf("chunk size zero")
+	}
+	if chunkSize > MaxInt {
+		return -1, fmt.Errorf("chunk size greater than max int %d", chunkSize)
+	}
+	return int(chunkSize), nil
 }
 
 // Read .
@@ -451,32 +468,29 @@ UPGRADER:
 			switch c {
 			case ' ':
 				if p.chunkSize < 0 {
-					cs := string(data[start:i])
-					chunkSize, err := strconv.ParseInt(cs, 16, 63)
-					if err != nil || chunkSize < 0 {
-						return fmt.Errorf("invalid chunk size %v", cs)
+					chunkSize, err := parseAndValidateChunkSize(string(data[start:i]))
+					if err != nil {
+						return err
 					}
-					p.chunkSize = int(chunkSize)
+					p.chunkSize = chunkSize
 				}
 			case '\r':
 				if p.chunkSize < 0 {
-					cs := string(data[start:i])
-					chunkSize, err := strconv.ParseInt(cs, 16, 63)
-					if err != nil || chunkSize < 0 {
-						return fmt.Errorf("invalid chunk size %v", cs)
+					chunkSize, err := parseAndValidateChunkSize(string(data[start:i]))
+					if err != nil {
+						return err
 					}
-					p.chunkSize = int(chunkSize)
+					p.chunkSize = chunkSize
 				}
 				start = i + 1
 				p.nextState(stateBodyChunkSizeLF)
 			default:
 				if !isHex(c) && p.chunkSize < 0 {
-					cs := string(data[start:i])
-					chunkSize, err := strconv.ParseInt(cs, 16, 63)
-					if err != nil || chunkSize < 0 {
-						return fmt.Errorf("invalid chunk size %v", cs)
+					chunkSize, err := parseAndValidateChunkSize(string(data[start:i]))
+					if err != nil {
+						return err
 					}
-					p.chunkSize = int(chunkSize)
+					p.chunkSize = chunkSize
 				}
 			}
 		case stateBodyChunkSizeLF:
@@ -682,7 +696,10 @@ func (p *Parser) parseContentLength() (err error) {
 			return fmt.Errorf("%s %q", "bad Content-Length", cl)
 		}
 		if l < 0 {
-			return ErrInvalidContentLength
+			return fmt.Errorf("length less than zero (%d): %w", l, ErrInvalidContentLength)
+		}
+		if l > MaxInt {
+			return fmt.Errorf("length greater than maxint (%d): %w", l, ErrInvalidContentLength)
 		}
 		p.contentLength = int(l)
 	} else {
