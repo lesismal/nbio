@@ -19,7 +19,9 @@ func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
 	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
-		c.WriteMessage(messageType, data)
+		time.AfterFunc(time.Second, func() {
+			c.WriteMessage(messageType, data)
+		})
 		log.Println("onEcho:", string(data))
 	})
 

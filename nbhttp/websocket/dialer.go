@@ -19,7 +19,7 @@ type Dialer struct {
 
 	Jar http.CookieJar
 
-	Timeout time.Duration
+	DialTimeout time.Duration
 
 	TLSClientConfig *tls.Config
 
@@ -30,18 +30,24 @@ type Dialer struct {
 	Subprotocols []string
 
 	EnableCompression bool
+
+	Cancel context.CancelFunc
 }
 
 // Dial creates a new client connection by calling DialContext with a background context.
 func (d *Dialer) Dial(urlStr string, requestHeader http.Header, upgrader *Upgrader) (*Conn, *http.Response, error) {
-	return d.DialContext(context.Background(), urlStr, requestHeader, upgrader)
-}
-
-var DefaultDialer = &Dialer{
-	Proxy: http.ProxyFromEnvironment,
+	ctx := context.Background()
+	if d.DialTimeout > 0 {
+		ctx, d.Cancel = context.WithTimeout(ctx, d.DialTimeout)
+	}
+	return d.DialContext(ctx, urlStr, requestHeader, upgrader)
 }
 
 func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header, upgrader *Upgrader) (*Conn, *http.Response, error) {
+	if d.Cancel != nil {
+		defer d.Cancel()
+	}
+
 	challengeKey, err := challengeKey()
 	if err != nil {
 		return nil, nil, err
@@ -115,7 +121,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 	httpCli := &nbhttp.Client{
 		Engine:          d.Engine,
 		Jar:             d.Jar,
-		Timeout:         d.Timeout,
+		Timeout:         d.DialTimeout,
 		TLSClientConfig: d.TLSClientConfig,
 		Proxy:           d.Proxy,
 		CheckRedirect:   d.CheckRedirect,
