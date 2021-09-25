@@ -60,6 +60,10 @@ type Upgrader struct {
 	Engine *nbhttp.Engine
 }
 
+func (u *Upgrader) CompressionEnabled() bool {
+	return u.compress
+}
+
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{}
 	u.pingMessageHandler = func(c *Conn, data string) {
