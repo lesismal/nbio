@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,12 +13,21 @@ import (
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
+var onDataFrame = flag.Bool("UseOnDataFrame", false, "Server will use OnDataFrame api instead of OnMessage")
+
 func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
-	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		// echo
-		c.WriteMessage(messageType, data)
-	})
+	if *onDataFrame {
+		u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+			// echo
+			c.WriteFrame(messageType, true, fin, data)
+		})
+	} else {
+		u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+			// echo
+			c.WriteMessage(messageType, data)
+		})
+	}
 
 	u.OnClose(func(c *websocket.Conn, err error) {
 		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
@@ -38,6 +48,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	flag.Parse()
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/ws", onWebsocket)
 

@@ -19,8 +19,7 @@ import (
 type Client struct {
 	mux sync.Mutex
 
-	Conn  *httpConn
-	conns map[*httpConn]struct{}
+	Conn *httpConn
 
 	Engine *Engine
 

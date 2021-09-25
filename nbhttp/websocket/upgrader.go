@@ -341,7 +341,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					u.handleDataFrame(p, u.conn, u.opcode, fin, frame)
 				}
 			}
-			if bl > 0 {
+			if bl > 0 && u.messageHandler != nil {
 				if u.message == nil {
 					u.message = mempool.Malloc(len(body))
 					copy(u.message, body)
@@ -350,18 +350,24 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				}
 			}
 			if fin {
-				if u.compress {
-					var b []byte
-					rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-					b, err = readAll(rc, len(u.message)*2)
-					mempool.Free(u.message)
-					u.message = b
-					rc.Close()
-					if err != nil {
-						break
+				if u.messageHandler != nil {
+					if u.compress {
+						var b []byte
+						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
+						b, err = readAll(rc, len(u.message)*2)
+						mempool.Free(u.message)
+						u.message = b
+						rc.Close()
+						if err != nil {
+							break
+						}
 					}
+					u.handleMessage(p, u.opcode, u.message)
 				}
-				u.handleMessage(p, u.opcode, u.message)
+				u.compress = false
+				u.expectingFragments = false
+				u.message = nil
+				u.opcode = 0
 			} else {
 				u.expectingFragments = true
 			}
@@ -427,10 +433,6 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 		u.handleWsMessage(u.conn, opcode, body)
 	})
 
-	u.compress = false
-	u.expectingFragments = false
-	u.message = nil
-	u.opcode = 0
 }
 
 func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {

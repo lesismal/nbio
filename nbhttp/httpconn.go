@@ -24,7 +24,6 @@ type httpConn struct {
 	cli      *Client
 	conn     net.Conn
 	handlers []resHandler
-	executor func(f func())
 
 	closed bool
 
