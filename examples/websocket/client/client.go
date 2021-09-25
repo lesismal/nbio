@@ -65,7 +65,7 @@ func main() {
 				return
 			}
 			if receiveType != websocket.TextMessage {
-				log.Println("received type != websocket.TextMessage")
+				log.Printf("received type(%d) != websocket.TextMessage(%d)\n", receiveType, websocket.TextMessage)
 				return
 
 			}
