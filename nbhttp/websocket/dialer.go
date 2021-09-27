@@ -149,7 +149,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		errCh = make(chan error)
 	}
 
-	httpCli := &nbhttp.Client{
+	cliConn := &nbhttp.ClientConn{
 		Engine:          d.Engine,
 		Jar:             d.Jar,
 		Timeout:         d.DialTimeout,
@@ -157,7 +157,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		Proxy:           d.Proxy,
 		CheckRedirect:   d.CheckRedirect,
 	}
-	httpCli.Do(req, func(resp *http.Response, conn net.Conn, err error) {
+	cliConn.Do(req, func(resp *http.Response, conn net.Conn, err error) {
 		res = resp
 
 		notifyResult := func(e error) {
@@ -257,7 +257,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			err = nbhttp.ErrClientTimeout
 		}
 		if err != nil {
-			httpCli.CloseWithError(err)
+			cliConn.CloseWithError(err)
 		}
 		return wsConn, res, err
 	}

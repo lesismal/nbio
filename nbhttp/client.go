@@ -11,67 +11,169 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 )
 
-type Client struct {
-	mux sync.Mutex
+func newHostConns(cli *Client) *hostConns {
+	hcs := &hostConns{
+		cli:        cli,
+		maxConnNum: 1024, // 1024 by default
+	}
+	if cli.MaxConnsPerHost > 0 {
+		hcs.maxConnNum = int32(cli.MaxConnsPerHost)
+	}
+	hcs.chConnss = make(chan *ClientConn, hcs.maxConnNum)
 
-	Conn *httpConn
+	return hcs
+}
+
+type hostConns struct {
+	cli        *Client
+	connNum    int32
+	maxConnNum int32
+	chConnss   chan *ClientConn
+}
+
+func (hcs *hostConns) releaseConn(hc *ClientConn) {
+	hcs.chConnss <- hc
+}
+
+func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
+	c := hcs.cli
+	if !c.closed {
+		timer := time.NewTimer(c.Timeout)
+		defer timer.Stop()
+
+		// 1. fast get an existed free connection
+		select {
+		case hc, ok := <-hcs.chConnss:
+			if !ok {
+				return nil, nil, ErrClientClosed
+			}
+			return hcs, hc, nil
+		case <-timer.C:
+			return nil, nil, ErrClientTimeout
+		default:
+		}
+
+		// 2. try to create a new connection if the num of existed connections is smaller than maxConnNum
+		if atomic.AddInt32(&hcs.connNum, 1) <= hcs.maxConnNum {
+			hc := &ClientConn{
+				Engine:          c.Engine,
+				Jar:             c.Jar,
+				Timeout:         c.Timeout,
+				IdleConnTimeout: c.IdleConnTimeout,
+				TLSClientConfig: c.TLSClientConfig,
+				Proxy:           c.Proxy,
+				CheckRedirect:   c.CheckRedirect,
+			}
+			return hcs, hc, nil
+		}
+		atomic.AddInt32(&hcs.connNum, -1)
+
+		// 3. wait for an old connection
+		select {
+		case hc, ok := <-hcs.chConnss:
+			if !ok {
+				return nil, nil, ErrClientClosed
+			}
+			return hcs, hc, nil
+		case <-timer.C:
+			return nil, nil, ErrClientTimeout
+		}
+	}
+
+	return nil, nil, ErrClientClosed
+}
+
+type Client struct {
+	mux    sync.Mutex
+	closed bool
+
+	Conn *ClientConn
+
+	connsMux     sync.RWMutex
+	connsOfHosts map[string]*hostConns
 
 	Engine *Engine
 
 	Jar http.CookieJar
 
 	Timeout time.Duration
-	// todo
-	MaxConcurrencyPerConnection int
-	MaxIdleConns                int
-	MaxIdleConnsPerHost         int
-	MaxConnsPerHost             int
-	IdleConnTimeout             time.Duration
+
+	MaxConnsPerHost int32
+	IdleConnTimeout time.Duration
 
 	TLSClientConfig *tls.Config
 
 	Proxy func(*http.Request) (*url.URL, error)
 
 	CheckRedirect func(req *http.Request, via []*http.Request) error
-
-	// TLSHandshakeTimeout time.Duration
-	// DisableKeepAlives bool
-	// DisableCompression bool
-	// ResponseHeaderTimeout time.Duration
-	// ExpectContinueTimeout time.Duration
-	// TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper
-	// ProxyConnectHeader http.Header
-	// GetProxyConnectHeader func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error)
 }
 
 func (c *Client) Close() {
 	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.Conn != nil {
-		c.Conn.Close()
+	closed := c.closed
+	c.closed = true
+	c.mux.Unlock()
+	if !closed {
+		if c.Conn != nil {
+			c.Conn.Close()
+		}
 	}
 }
 
 func (c *Client) CloseWithError(err error) {
 	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.Conn != nil {
-		c.Conn.CloseWithError(err)
+	closed := c.closed
+	c.closed = true
+	c.mux.Unlock()
+	if !closed {
+		if c.Conn != nil {
+			c.Conn.CloseWithError(err)
+		}
 	}
 }
 
-func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.Conn == nil {
-		c.Conn = &httpConn{cli: c}
+func (c *Client) getConn(host string) (*hostConns, *ClientConn, error) {
+	c.connsMux.Lock()
+	if c.closed {
+		c.connsMux.Unlock()
+		return nil, nil, ErrClientClosed
 	}
-	c.Conn.Do(req, handler)
+
+	if c.connsOfHosts == nil {
+		c.connsOfHosts = map[string]*hostConns{}
+	}
+	hcs, ok := c.connsOfHosts[host]
+	if !ok {
+		hcs = newHostConns(c)
+		c.connsOfHosts[host] = hcs
+	}
+	c.connsMux.Unlock()
+
+	return hcs.getConn()
+}
+
+func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
+	c.Engine.ExecuteClient(func() {
+		host := req.URL.Host
+		hcs, hc, err := c.getConn(host)
+		if err != nil {
+			handler(nil, nil, err)
+			return
+		}
+		if hc.closed {
+			hc.Reset()
+		}
+		hc.Do(req, func(res *http.Response, conn net.Conn, err error) {
+			hcs.releaseConn(hc)
+			handler(res, conn, err)
+		})
+	})
 }
 
 func NewClient(engine *Engine) *Client {
