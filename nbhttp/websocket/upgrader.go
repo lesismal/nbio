@@ -60,6 +60,11 @@ type Upgrader struct {
 	Engine *nbhttp.Engine
 }
 
+// CompressionEnabled .
+func (u *Upgrader) CompressionEnabled() bool {
+	return u.compress
+}
+
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{}
