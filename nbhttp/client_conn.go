@@ -23,6 +23,7 @@ type resHandler struct {
 	h func(res *http.Response, conn net.Conn, err error)
 }
 
+// ClientConn .
 type ClientConn struct {
 	mux      sync.Mutex
 	conn     net.Conn
@@ -47,12 +48,14 @@ type ClientConn struct {
 	CheckRedirect func(req *http.Request, via []*http.Request) error
 }
 
+// Reset .
 func (c *ClientConn) Reset() {
 	c.conn = nil
 	c.handlers = nil
 	c.closed = false
 }
 
+// OnClose .
 func (c *ClientConn) OnClose(h func()) {
 	if h == nil {
 		return
@@ -67,16 +70,12 @@ func (c *ClientConn) OnClose(h func()) {
 	}
 }
 
+// Close .
 func (c *ClientConn) Close() {
-	c.mux.Lock()
-	closed := c.closed
-	c.closed = true
-	c.mux.Unlock()
-	if !closed {
-		c.closeWithErrorWithoutLock(io.EOF)
-	}
+	c.CloseWithError(io.EOF)
 }
 
+// CloseWithError .
 func (c *ClientConn) CloseWithError(err error) {
 	c.mux.Lock()
 	closed := c.closed
@@ -133,6 +132,7 @@ func (c *ClientConn) onResponse(res *http.Response, err error) {
 	}
 }
 
+// Do .
 func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	c.mux.Lock()
 	defer func() {
@@ -213,7 +213,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 				return
 			}
 			if proxyURL != nil {
-				dialer, err := proxy_FromURL(proxyURL, netDial)
+				dialer, err := proxyFromURL(proxyURL, netDial)
 				if err != nil {
 					c.closeWithErrorWithoutLock(err)
 					return
@@ -289,7 +289,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			})
 			nbc.SetSession(parser)
 
-			nbc.OnData(engine.DataHandlerTLS)
+			nbc.OnData(engine.TLSDataHandler)
 			_, err = engine.AddConn(nbc)
 			if err != nil {
 				c.closeWithErrorWithoutLock(err)

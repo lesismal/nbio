@@ -34,7 +34,7 @@ var (
 	// DefaultHTTPWriteBufferSize .
 	DefaultHTTPWriteBufferSize = 1024 * 2
 
-	// DefaultMaxWebsocketFramePayloadSize.
+	// DefaultMaxWebsocketFramePayloadSize .
 	DefaultMaxWebsocketFramePayloadSize = 1024 * 32
 
 	// DefaultMessageHandlerPoolSize .
@@ -126,7 +126,7 @@ type Config struct {
 	Cancel  func()
 }
 
-// Server .
+// Engine .
 type Engine struct {
 	*nbio.Gopher
 	*Config
@@ -169,6 +169,7 @@ func (e *Engine) OnStop(h func()) {
 	e._onStop = h
 }
 
+// Online .
 func (e *Engine) Online() int {
 	return len(e.conns)
 }
@@ -189,6 +190,7 @@ func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 	}
 }
 
+// Shutdown .
 func (e *Engine) Shutdown(ctx context.Context) error {
 	pollIntervalBase := time.Millisecond
 	shutdownPollIntervalMax := time.Millisecond * 200
@@ -235,6 +237,7 @@ Exit:
 	return nil
 }
 
+// InitTLSBuffers .
 func (e *Engine) InitTLSBuffers() {
 	if e.tlsBuffers != nil {
 		return
@@ -264,18 +267,22 @@ func (e *Engine) InitTLSBuffers() {
 	}
 }
 
+// TLSConfig .
 func (e *Engine) TLSConfig() *tls.Config {
 	return e.tlsConfig
 }
 
+// SetTLSConfig .
 func (e *Engine) SetTLSConfig(tlsConfig *tls.Config) {
 	e.tlsConfig = tlsConfig
 }
 
+// TLSBuffer .
 func (e *Engine) TLSBuffer(c *nbio.Conn) []byte {
 	return e.getTLSBuffer(c)
 }
 
+// DataHandler .
 func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -297,11 +304,10 @@ func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 		logging.Debug("parser.Read failed: %v", err)
 		c.CloseWithError(err)
 	}
-	// c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
-
 }
 
-func (e *Engine) DataHandlerTLS(c *nbio.Conn, data []byte) {
+// TLSDataHandler .
+func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	defer func() {
 		if err := recover(); err != nil {
 			const size = 64 << 10
@@ -678,7 +684,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		c.SetSession(parser)
 		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
 
-		c.OnData(engine.DataHandlerTLS)
+		c.OnData(engine.TLSDataHandler)
 	})
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {

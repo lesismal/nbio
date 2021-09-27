@@ -20,7 +20,10 @@ import (
 )
 
 const (
+	// EPOLLLT .
 	EPOLLLT = 0
+
+	// EPOLLET .
 	EPOLLET = 0x80000000
 )
 
