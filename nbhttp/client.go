@@ -24,7 +24,7 @@ func newHostConns(cli *Client) *hostConns {
 		maxConnNum: 1024, // 1024 by default
 	}
 	if cli.MaxConnsPerHost > 0 {
-		hcs.maxConnNum = int32(cli.MaxConnsPerHost)
+		hcs.maxConnNum = cli.MaxConnsPerHost
 	}
 	hcs.chConnss = make(chan *ClientConn, hcs.maxConnNum)
 
