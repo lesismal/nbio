@@ -25,7 +25,7 @@ func (np *FixedNoOrderPool) GoByIndex(index int, f func()) {
 	np.Go(f)
 }
 
-// Go .
+// Stop .
 func (np *FixedNoOrderPool) Stop() {
 	close(np.chTask)
 }

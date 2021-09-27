@@ -12,9 +12,10 @@ import (
 
 const maxAppendSize = 1024 * 1024 * 4
 
+// DefaultMemPool .
 var DefaultMemPool = New(64)
 
-// MemPool.
+// MemPool .
 type MemPool struct {
 	minSize int
 	pool    sync.Pool
@@ -25,6 +26,7 @@ type MemPool struct {
 	freeStacks  map[*byte]string
 }
 
+// New .
 func New(minSize int) *MemPool {
 	if minSize <= 0 {
 		minSize = 64
@@ -42,6 +44,7 @@ func New(minSize int) *MemPool {
 	return mp
 }
 
+// Malloc .
 func (mp *MemPool) Malloc(size int) []byte {
 	pbuf := mp.pool.Get().(*[]byte)
 	need := size - cap(*pbuf)

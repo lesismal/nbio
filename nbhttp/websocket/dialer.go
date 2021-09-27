@@ -24,6 +24,7 @@ const (
 	secWebsocketProtoHeaderField   = "Sec-Websocket-Protocol"
 )
 
+// Dialer .
 type Dialer struct {
 	Engine *nbhttp.Engine
 
@@ -46,7 +47,7 @@ type Dialer struct {
 	Cancel context.CancelFunc
 }
 
-// Dial creates a new client connection by calling DialContext with a background context.
+// Dial .
 func (d *Dialer) Dial(urlStr string, requestHeader http.Header, v ...interface{}) (*Conn, *http.Response, error) {
 	ctx := context.Background()
 	if d.DialTimeout > 0 {
@@ -55,6 +56,7 @@ func (d *Dialer) Dial(urlStr string, requestHeader http.Header, v ...interface{}
 	return d.DialContext(ctx, urlStr, requestHeader, v...)
 }
 
+// DialContext .
 func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header, v ...interface{}) (*Conn, *http.Response, error) {
 	if d.Cancel != nil {
 		defer d.Cancel()

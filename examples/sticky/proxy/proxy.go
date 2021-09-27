@@ -86,6 +86,7 @@ func stickyTunnel(clientConn *net.TCPConn, dst string, interval time.Duration, f
 	}
 }
 
+// Run .
 func Run(src string, dst string, interval time.Duration, f func(max int) int) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp4", src)
 	if err != nil {

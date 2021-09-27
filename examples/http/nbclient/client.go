@@ -37,7 +37,7 @@ func main() {
 	}
 	defer engine.Stop()
 
-	chWaitHttps := make(chan struct{})
+	chWaitHTTPS := make(chan struct{})
 	for i := 0; i < 2; i++ {
 		idx := i
 		go func() {
@@ -52,12 +52,12 @@ func main() {
 					var err error
 					var req *http.Request
 					if idx%2 == 0 {
-						<-chWaitHttps
+						<-chWaitHTTPS
 						req, err = http.NewRequest("GET", "http://localhost:8888/echo", nil)
 					} else {
 						defer func() {
-							old := chWaitHttps
-							chWaitHttps = make(chan struct{})
+							old := chWaitHTTPS
+							chWaitHTTPS = make(chan struct{})
 							close(old)
 						}()
 						req, err = http.NewRequest("GET", "https://github.com/lesismal", nil)
@@ -70,22 +70,21 @@ func main() {
 							atomic.AddUint64(&failed, 1)
 							fmt.Println("Do failed:", err)
 							return
-						} else {
-							atomic.AddUint64(&success, 1)
-							if err == nil && res.Body != nil {
-								defer res.Body.Close()
-								// body, err := io.ReadAll(res.Body)
-								// if err == nil {
-								// 	fmt.Println(string(body))
-								// }
-							}
-							fmt.Printf("request success %v: %v%v\n", count, req.URL.Host, req.URL.Path)
-
-							time.AfterFunc(time.Second, func() {
-								count++
-								doRequest(count)
-							})
 						}
+						atomic.AddUint64(&success, 1)
+						if err == nil && res.Body != nil {
+							defer res.Body.Close()
+							// body, err := io.ReadAll(res.Body)
+							// if err == nil {
+							// 	fmt.Println(string(body))
+							// }
+						}
+						fmt.Printf("request success %v: %v%v\n", count, req.URL.Host, req.URL.Path)
+
+						time.AfterFunc(time.Second, func() {
+							count++
+							doRequest(count)
+						})
 					})
 				}
 				doRequest(count)

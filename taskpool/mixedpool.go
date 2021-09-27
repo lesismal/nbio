@@ -12,6 +12,7 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
+// MixedPool .
 type MixedPool struct {
 	*FixedNoOrderPool
 	cuncurrent int32
@@ -56,7 +57,7 @@ func (mp *MixedPool) GoByIndex(index int, f func()) {
 	mp.Go(f)
 }
 
-// Go .
+// Stop .
 func (mp *MixedPool) Stop() {
 	close(mp.chTask)
 }
