@@ -15,8 +15,8 @@ import (
 )
 
 var (
-	KeepaliveTime    = time.Second * 5
-	KeepaliveTimeout = KeepaliveTime + time.Second*3
+	keepaliveTime    = time.Second * 5
+	keepaliveTimeout = keepaliveTime + time.Second*3
 
 	server *nbhttp.Server
 )
@@ -28,13 +28,13 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 
 		// step 2: reset ping timer
 		keepaliveTimer := c.Session().(*nbio.Timer)
-		keepaliveTimer.Reset(KeepaliveTime)
+		keepaliveTimer.Reset(keepaliveTime)
 
 		// echo
 		c.WriteMessage(messageType, data)
 
 		// update read deadline
-		c.SetReadDeadline(time.Now().Add(KeepaliveTimeout))
+		c.SetReadDeadline(time.Now().Add(keepaliveTimeout))
 
 	})
 	upgrader.SetPongHandler(func(c *websocket.Conn, s string) {
@@ -42,10 +42,10 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 
 		// step 3: reset ping timer
 		keepaliveTimer := c.Session().(*nbio.Timer)
-		keepaliveTimer.Reset(KeepaliveTime)
+		keepaliveTimer.Reset(keepaliveTime)
 
 		// update read deadline
-		c.SetReadDeadline(time.Now().Add(KeepaliveTimeout))
+		c.SetReadDeadline(time.Now().Add(keepaliveTimeout))
 	})
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -64,10 +64,10 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		log.Println("++ ping")
 		wsConn.WriteMessage(websocket.PingMessage, nil)
 
-		keepaliveTimer := server.AfterFunc(KeepaliveTime, ping)
+		keepaliveTimer := server.AfterFunc(keepaliveTime, ping)
 		wsConn.SetSession(keepaliveTimer)
 	}
-	keepaliveTimer := server.AfterFunc(KeepaliveTime, ping)
+	keepaliveTimer := server.AfterFunc(keepaliveTime, ping)
 	wsConn.SetSession(keepaliveTimer)
 
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
@@ -78,7 +78,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		keepaliveTimer.Stop()
 	})
 	// init read deadline
-	wsConn.SetReadDeadline(time.Now().Add(KeepaliveTimeout))
+	wsConn.SetReadDeadline(time.Now().Add(keepaliveTimeout))
 }
 
 func main() {

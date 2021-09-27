@@ -18,7 +18,10 @@ import (
 )
 
 const (
+	// EPOLLLT .
 	EPOLLLT = 0
+
+	// EPOLLET .
 	EPOLLET = 1
 )
 

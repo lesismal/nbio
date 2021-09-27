@@ -51,6 +51,7 @@ func (c *Conn) IsClosed() (bool, error) {
 	return c.closed, c.closeErr
 }
 
+// ExecuteLen .
 func (c *Conn) ExecuteLen() int {
 	c.mux.Lock()
 	n := len(c.execList)
@@ -58,6 +59,7 @@ func (c *Conn) ExecuteLen() int {
 	return n
 }
 
+// Execute .
 func (c *Conn) Execute(f func()) {
 	c.mux.Lock()
 	if c.closed {
@@ -99,6 +101,7 @@ func (c *Conn) Execute(f func()) {
 	}
 }
 
+// MustExecute .
 func (c *Conn) MustExecute(f func()) {
 	c.mux.Lock()
 	isHead := (len(c.execList) == 0)

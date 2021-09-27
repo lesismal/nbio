@@ -19,18 +19,26 @@ const (
 	maxControlFramePayloadSize = 125
 )
 
+// MessageType .
 type MessageType int8
 
 // The message types are defined in RFC 6455, section 11.8.t .
 const (
+	// FragmentMessage .
 	FragmentMessage MessageType = 0 // Must be preceded by Text or Binary message
-	TextMessage     MessageType = 1
-	BinaryMessage   MessageType = 2
-	CloseMessage    MessageType = 8
-	PingMessage     MessageType = 9
-	PongMessage     MessageType = 10
+	// TextMessage .
+	TextMessage MessageType = 1
+	// BinaryMessage .
+	BinaryMessage MessageType = 2
+	// CloseMessage .
+	CloseMessage MessageType = 8
+	// PingMessage .
+	PingMessage MessageType = 9
+	// PongMessage .
+	PongMessage MessageType = 10
 )
 
+// Conn .
 type Conn struct {
 	net.Conn
 
@@ -89,6 +97,7 @@ func validCloseCode(code int) bool {
 	return false
 }
 
+// OnClose .
 func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h != nil {
 		c.onClose = func(c *Conn, err error) {
@@ -113,6 +122,7 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 	}
 }
 
+// WriteMessage .
 func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -146,9 +156,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		}
 	}
 
-	if len(data) == 0 {
-		return c.writeFrame(messageType, true, true, []byte{}, compress)
-	} else {
+	if len(data) > 0 {
 		sendOpcode := true
 		for len(data) > 0 {
 			n := len(data)
@@ -162,9 +170,10 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 			sendOpcode = false
 			data = data[n:]
 		}
+		return nil
 	}
 
-	return nil
+	return c.writeFrame(messageType, true, true, []byte{}, compress)
 }
 
 // Session returns user session.
@@ -181,11 +190,13 @@ type writeBuffer struct {
 	*bytes.Buffer
 }
 
+// Close .
 func (w *writeBuffer) Close() error {
 	mempool.Free(w.Bytes())
 	return nil
 }
 
+// WriteFrame .
 func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
 	return c.writeFrame(messageType, sendOpcode, fin, data, false)
 }
@@ -235,11 +246,12 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	return err
 }
 
-// overwrite nbio.Conn.Write.
+// Write overwrites nbio.Conn.Write.
 func (c *Conn) Write(data []byte) (int, error) {
 	return -1, ErrInvalidWriteCalling
 }
 
+// EnableWriteCompression .
 func (c *Conn) EnableWriteCompression(enable bool) {
 	if enable {
 		if c.remoteCompressionEnabled {
@@ -250,6 +262,7 @@ func (c *Conn) EnableWriteCompression(enable bool) {
 	}
 }
 
+// SetCompressionLevel .
 func (c *Conn) SetCompressionLevel(level int) error {
 	if !isValidCompressionLevel(level) {
 		return errors.New("websocket: invalid compression level")

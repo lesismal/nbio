@@ -82,6 +82,7 @@ func (res *Response) WriteHeader(statusCode int) {
 
 const maxPacketSize = 65536
 
+// WriteString .
 func (res *Response) WriteString(s string) (int, error) {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
@@ -153,6 +154,7 @@ func (res *Response) Write(data []byte) (int, error) {
 	return l, nil
 }
 
+// ReadFrom .
 func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 	c := res.parser.Processor.Conn()
 	if c == nil {

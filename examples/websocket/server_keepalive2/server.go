@@ -14,12 +14,13 @@ import (
 )
 
 var (
-	KeepaliveTime    = time.Second * 5
-	KeepaliveTimeout = KeepaliveTime + time.Second*3
+	keepaliveTime    = time.Second * 5
+	keepaliveTimeout = keepaliveTime + time.Second*3
 )
 
 var clientMgr *ClientMgr
 
+// ClientMgr .
 type ClientMgr struct {
 	mux           sync.Mutex
 	chStop        chan struct{}
@@ -27,6 +28,7 @@ type ClientMgr struct {
 	keepaliveTime time.Duration
 }
 
+// NewClientMgr .
 func NewClientMgr(keepaliveTime time.Duration) *ClientMgr {
 	return &ClientMgr{
 		chStop:        make(chan struct{}),
@@ -35,18 +37,21 @@ func NewClientMgr(keepaliveTime time.Duration) *ClientMgr {
 	}
 }
 
+// Add .
 func (cm *ClientMgr) Add(c *websocket.Conn) {
 	cm.mux.Lock()
 	defer cm.mux.Unlock()
 	cm.clients[c] = struct{}{}
 }
 
+// Delete .
 func (cm *ClientMgr) Delete(c *websocket.Conn) {
 	cm.mux.Lock()
 	defer cm.mux.Unlock()
 	delete(cm.clients, c)
 }
 
+// Run .
 func (cm *ClientMgr) Run() {
 	ticker := time.NewTicker(cm.keepaliveTime)
 	defer ticker.Stop()
@@ -68,6 +73,7 @@ func (cm *ClientMgr) Run() {
 	}
 }
 
+// Stop .
 func (cm *ClientMgr) Stop() {
 	close(cm.chStop)
 }
@@ -79,11 +85,11 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 		c.WriteMessage(messageType, data)
 
 		// update read deadline
-		c.SetReadDeadline(time.Now().Add(KeepaliveTimeout))
+		c.SetReadDeadline(time.Now().Add(keepaliveTimeout))
 	})
 	upgrader.SetPongHandler(func(c *websocket.Conn, s string) {
 		// update read deadline
-		c.SetReadDeadline(time.Now().Add(KeepaliveTimeout))
+		c.SetReadDeadline(time.Now().Add(keepaliveTimeout))
 	})
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -93,7 +99,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	wsConn := conn.(*websocket.Conn)
 
 	// init read deadline
-	wsConn.SetReadDeadline(time.Now().Add(KeepaliveTimeout))
+	wsConn.SetReadDeadline(time.Now().Add(keepaliveTimeout))
 
 	clientMgr.Add(wsConn)
 	wsConn.OnClose(func(c *websocket.Conn, err error) {
@@ -102,7 +108,7 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	clientMgr = NewClientMgr(KeepaliveTime)
+	clientMgr = NewClientMgr(keepaliveTime)
 	go clientMgr.Run()
 	defer clientMgr.Stop()
 

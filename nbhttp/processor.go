@@ -299,8 +299,7 @@ func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.
 
 // ClientProcessor .
 type ClientProcessor struct {
-	conn *httpConn
-	// parser   *Parser
+	conn     *ClientConn
 	response *http.Response
 	handler  func(res *http.Response, err error)
 }
@@ -390,7 +389,7 @@ func (p *ClientProcessor) Close(parser *Parser, err error) {
 }
 
 // NewClientProcessor .
-func NewClientProcessor(conn *httpConn, handler func(res *http.Response, err error)) Processor {
+func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err error)) Processor {
 	return &ClientProcessor{
 		conn:    conn,
 		handler: handler,

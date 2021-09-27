@@ -10,6 +10,7 @@ import (
 	"github.com/lesismal/llib/std/crypto/tls"
 )
 
+// Server .
 type Server struct {
 	*Engine
 }

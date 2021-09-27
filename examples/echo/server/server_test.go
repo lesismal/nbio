@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"testing"
 	"time"
@@ -34,14 +35,13 @@ func writeComplete(c *nbio.Conn, data []byte) (int, error) {
 		offset += n
 		if err != nil || offset == msgLen {
 			return offset, err
-		} else {
-			time.Sleep(time.Millisecond * 500)
 		}
+		time.Sleep(time.Millisecond * 500)
 	}
 
 }
 
-func server(ready chan struct{}) error {
+func server(ready chan error) error {
 	g := nbio.NewGopher(nbio.Config{
 		Network:            "tcp",
 		Addrs:              []string{addr},
@@ -60,14 +60,15 @@ func server(ready chan struct{}) error {
 
 	err := g.Start()
 	if err != nil {
-		return fmt.Errorf("nbio.Start failed: %w\n", err)
+		return fmt.Errorf("nbio.Start failed: %w", err)
 	}
-	ready <- struct{}{}
+	ready <- err
 	defer g.Stop()
 
 	g.Wait()
 	return nil
 }
+
 func client(msgLen int) error {
 	var (
 		ret  []byte
@@ -96,24 +97,27 @@ func client(msgLen int) error {
 		if len(ret) == len(buf) {
 			if bytes.Equal(buf, ret) {
 				return nil
-			} else {
-				return fmt.Errorf("ret, does not match buf")
 			}
+			return fmt.Errorf("ret, does not match buf")
 		}
 
 	}
 }
 func Test_main(t *testing.T) {
-	ready := make(chan struct{})
+	ready := make(chan error)
 	go func() {
 		err := server(ready)
 		if err != nil {
-			t.Fatal(err)
+			log.Fatal(err)
 		}
 	}()
-	<-ready
 
-	err := client(1024 * 1024 * 4)
+	err := <-ready
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	err = client(1024 * 1024 * 4)
 	if err != nil {
 		t.Fatal(err)
 	}

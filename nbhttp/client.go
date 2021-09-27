@@ -11,73 +11,176 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 )
 
-type Client struct {
-	mux sync.Mutex
+func newHostConns(cli *Client) *hostConns {
+	hcs := &hostConns{
+		cli:        cli,
+		conns:      map[*ClientConn]struct{}{},
+		maxConnNum: 1024, // 1024 by default
+	}
+	if cli.MaxConnsPerHost > 0 {
+		hcs.maxConnNum = cli.MaxConnsPerHost
+	}
+	hcs.chConnss = make(chan *ClientConn, hcs.maxConnNum)
 
-	Conn *httpConn
+	return hcs
+}
+
+type hostConns struct {
+	mux        sync.Mutex
+	cli        *Client
+	conns      map[*ClientConn]struct{}
+	connNum    int32
+	maxConnNum int32
+	chConnss   chan *ClientConn
+}
+
+func (hcs *hostConns) closeWithError(err error) {
+	hcs.mux.Lock()
+	for hc := range hcs.conns {
+		hc.CloseWithError(err)
+	}
+	hcs.mux.Unlock()
+}
+
+func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
+	c := hcs.cli
+	if !c.closed {
+		timer := time.NewTimer(c.Timeout)
+		defer timer.Stop()
+
+		// 1. fast get an existed free connection
+		select {
+		case hc, ok := <-hcs.chConnss:
+			if !ok {
+				return nil, nil, ErrClientClosed
+			}
+			return hcs, hc, nil
+		case <-timer.C:
+			return nil, nil, ErrClientTimeout
+		default:
+		}
+
+		// 2. try to create a new connection if the num of existed connections is smaller than maxConnNum
+		if atomic.AddInt32(&hcs.connNum, 1) <= hcs.maxConnNum {
+			hc := &ClientConn{
+				Engine:          c.Engine,
+				Jar:             c.Jar,
+				Timeout:         c.Timeout,
+				IdleConnTimeout: c.IdleConnTimeout,
+				TLSClientConfig: c.TLSClientConfig,
+				Proxy:           c.Proxy,
+				CheckRedirect:   c.CheckRedirect,
+			}
+			hcs.mux.Lock()
+			hcs.conns[hc] = struct{}{}
+			hcs.mux.Unlock()
+			return hcs, hc, nil
+		}
+		atomic.AddInt32(&hcs.connNum, -1)
+
+		// 3. wait for an old connection
+		select {
+		case hc, ok := <-hcs.chConnss:
+			if !ok {
+				return nil, nil, ErrClientClosed
+			}
+			return hcs, hc, nil
+		case <-timer.C:
+			return nil, nil, ErrClientTimeout
+		}
+	}
+
+	return nil, nil, ErrClientClosed
+}
+
+func (hcs *hostConns) releaseConn(hc *ClientConn) {
+	hcs.chConnss <- hc
+}
+
+// Client .
+type Client struct {
+	mux    sync.Mutex
+	closed bool
+
+	connsMux     sync.RWMutex
+	connsOfHosts map[string]*hostConns
 
 	Engine *Engine
 
 	Jar http.CookieJar
 
 	Timeout time.Duration
-	// todo
-	MaxConcurrencyPerConnection int
-	MaxIdleConns                int
-	MaxIdleConnsPerHost         int
-	MaxConnsPerHost             int
-	IdleConnTimeout             time.Duration
+
+	MaxConnsPerHost int32
+	IdleConnTimeout time.Duration
 
 	TLSClientConfig *tls.Config
 
 	Proxy func(*http.Request) (*url.URL, error)
 
 	CheckRedirect func(req *http.Request, via []*http.Request) error
-
-	// TLSHandshakeTimeout time.Duration
-	// DisableKeepAlives bool
-	// DisableCompression bool
-	// ResponseHeaderTimeout time.Duration
-	// ExpectContinueTimeout time.Duration
-	// TLSNextProto map[string]func(authority string, c *tls.Conn) RoundTripper
-	// ProxyConnectHeader http.Header
-	// GetProxyConnectHeader func(ctx context.Context, proxyURL *url.URL, target string) (http.Header, error)
 }
 
+// Close .
 func (c *Client) Close() {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.Conn != nil {
-		c.Conn.Close()
-	}
+	c.CloseWithError(io.EOF)
 }
 
+// CloseWithError .
 func (c *Client) CloseWithError(err error) {
 	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.Conn != nil {
-		c.Conn.CloseWithError(err)
+	if !c.closed {
+		c.closed = true
+		for _, hcs := range c.connsOfHosts {
+			hcs.closeWithError(err)
+		}
 	}
+	c.mux.Unlock()
 }
 
+func (c *Client) getConn(host string) (*hostConns, *ClientConn, error) {
+	c.connsMux.Lock()
+	if c.closed {
+		c.connsMux.Unlock()
+		return nil, nil, ErrClientClosed
+	}
+
+	if c.connsOfHosts == nil {
+		c.connsOfHosts = map[string]*hostConns{}
+	}
+	hcs, ok := c.connsOfHosts[host]
+	if !ok {
+		hcs = newHostConns(c)
+		c.connsOfHosts[host] = hcs
+	}
+	c.connsMux.Unlock()
+
+	return hcs.getConn()
+}
+
+// Do .
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-	if c.Conn == nil {
-		c.Conn = &httpConn{cli: c}
-	}
-	c.Conn.Do(req, handler)
-}
-
-func NewClient(engine *Engine) *Client {
-	return &Client{
-		Engine: engine,
-	}
+	c.Engine.ExecuteClient(func() {
+		host := req.URL.Host
+		hcs, hc, err := c.getConn(host)
+		if err != nil {
+			handler(nil, nil, err)
+			return
+		}
+		if hc.closed {
+			hc.Reset()
+		}
+		hc.Do(req, func(res *http.Response, conn net.Conn, err error) {
+			hcs.releaseConn(hc)
+			handler(res, conn, err)
+		})
+	})
 }
 
 type netDialerFunc func(network, addr string) (net.Conn, error)
@@ -86,18 +189,19 @@ func (fn netDialerFunc) Dial(network, addr string) (net.Conn, error) {
 	return fn(network, addr)
 }
 
-var proxy_proxySchemes map[string]func(*url.URL, proxy_Dialer) (proxy_Dialer, error)
+var proxySchemes map[string]func(*url.URL, proxyDialer) (proxyDialer, error)
 
-func proxy_RegisterDialerType(scheme string, f func(*url.URL, proxy_Dialer) (proxy_Dialer, error)) {
-	if proxy_proxySchemes == nil {
-		proxy_proxySchemes = make(map[string]func(*url.URL, proxy_Dialer) (proxy_Dialer, error))
+func proxyRegisterDialerType(scheme string, f func(*url.URL, proxyDialer) (proxyDialer, error)) {
+	if proxySchemes == nil {
+		proxySchemes = make(map[string]func(*url.URL, proxyDialer) (proxyDialer, error))
 	}
-	proxy_proxySchemes[scheme] = f
+	proxySchemes[scheme] = f
 }
-func proxy_FromURL(u *url.URL, forward proxy_Dialer) (proxy_Dialer, error) {
-	var auth *proxy_Auth
+
+func proxyFromURL(u *url.URL, forward proxyDialer) (proxyDialer, error) {
+	var auth *proxyAuth
 	if u.User != nil {
-		auth = new(proxy_Auth)
+		auth = new(proxyAuth)
 		auth.User = u.User.Username()
 		if p, ok := u.User.Password(); ok {
 			auth.Password = p
@@ -106,11 +210,11 @@ func proxy_FromURL(u *url.URL, forward proxy_Dialer) (proxy_Dialer, error) {
 
 	switch u.Scheme {
 	case "socks5":
-		return proxy_SOCKS5("tcp", u.Host, auth, forward)
+		return proxySOCKS5("tcp", u.Host, auth, forward)
 	}
 
-	if proxy_proxySchemes != nil {
-		if f, ok := proxy_proxySchemes[u.Scheme]; ok {
+	if proxySchemes != nil {
+		if f, ok := proxySchemes[u.Scheme]; ok {
 			return f(u, forward)
 		}
 	}
@@ -136,7 +240,7 @@ func hostPortNoPort(u *url.URL) (hostPort, hostNoPort string) {
 	return hostPort, hostNoPort
 }
 
-type proxy_Dialer interface {
+type proxyDialer interface {
 	Dial(network, addr string) (c net.Conn, err error)
 }
 
@@ -189,12 +293,12 @@ func (hpd *httpProxyDialer) Dial(network string, addr string) (net.Conn, error) 
 	return conn, nil
 }
 
-type proxy_Auth struct {
+type proxyAuth struct {
 	User, Password string
 }
 
-func proxy_SOCKS5(network, addr string, auth *proxy_Auth, forward proxy_Dialer) (proxy_Dialer, error) {
-	s := &proxy_socks5{
+func proxySOCKS5(network, addr string, auth *proxyAuth, forward proxyDialer) (proxyDialer, error) {
+	s := &proxySocks5{
 		network: network,
 		addr:    addr,
 		forward: forward,
@@ -207,28 +311,28 @@ func proxy_SOCKS5(network, addr string, auth *proxy_Auth, forward proxy_Dialer) 
 	return s, nil
 }
 
-type proxy_socks5 struct {
+type proxySocks5 struct {
 	user, password string
 	network, addr  string
-	forward        proxy_Dialer
+	forward        proxyDialer
 }
 
-const proxy_socks5Version = 5
+const proxySocks5Version = 5
 
 const (
-	proxy_socks5AuthNone     = 0
-	proxy_socks5AuthPassword = 2
+	proxySocks5AuthNone     = 0
+	proxySocks5AuthPassword = 2
 )
 
-const proxy_socks5Connect = 1
+const proxySocks5Connect = 1
 
 const (
-	proxy_socks5IP4    = 1
-	proxy_socks5Domain = 3
-	proxy_socks5IP6    = 4
+	proxySocks5IP4    = 1
+	proxySocks5Domain = 3
+	proxySocks5IP6    = 4
 )
 
-var proxy_socks5Errors = []string{
+var proxySocks5Errors = []string{
 	"",
 	"general failure",
 	"connection forbidden",
@@ -240,7 +344,7 @@ var proxy_socks5Errors = []string{
 	"address type not supported",
 }
 
-func (s *proxy_socks5) Dial(network, addr string) (net.Conn, error) {
+func (s *proxySocks5) Dial(network, addr string) (net.Conn, error) {
 	switch network {
 	case "tcp", "tcp6", "tcp4":
 	default:
@@ -258,7 +362,7 @@ func (s *proxy_socks5) Dial(network, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
-func (s *proxy_socks5) connect(conn net.Conn, target string) error {
+func (s *proxySocks5) connect(conn net.Conn, target string) error {
 	host, portStr, err := net.SplitHostPort(target)
 	if err != nil {
 		return err
@@ -275,11 +379,11 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 	// the size here is just an estimate
 	buf := make([]byte, 0, 6+len(host))
 
-	buf = append(buf, proxy_socks5Version)
+	buf = append(buf, proxySocks5Version)
 	if len(s.user) > 0 && len(s.user) < 256 && len(s.password) < 256 {
-		buf = append(buf, 2 /* num auth methods */, proxy_socks5AuthNone, proxy_socks5AuthPassword)
+		buf = append(buf, 2 /* num auth methods */, proxySocks5AuthNone, proxySocks5AuthPassword)
 	} else {
-		buf = append(buf, 1 /* num auth methods */, proxy_socks5AuthNone)
+		buf = append(buf, 1 /* num auth methods */, proxySocks5AuthNone)
 	}
 
 	if _, err := conn.Write(buf); err != nil {
@@ -297,7 +401,7 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 	}
 
 	// See RFC 1929
-	if buf[1] == proxy_socks5AuthPassword {
+	if buf[1] == proxySocks5AuthPassword {
 		buf = buf[:0]
 		buf = append(buf, 1 /* password protocol version */)
 		buf = append(buf, uint8(len(s.user)))
@@ -319,21 +423,21 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 	}
 
 	buf = buf[:0]
-	buf = append(buf, proxy_socks5Version, proxy_socks5Connect, 0 /* reserved */)
+	buf = append(buf, proxySocks5Version, proxySocks5Connect, 0 /* reserved */)
 
 	if ip := net.ParseIP(host); ip != nil {
 		if ip4 := ip.To4(); ip4 != nil {
-			buf = append(buf, proxy_socks5IP4)
+			buf = append(buf, proxySocks5IP4)
 			ip = ip4
 		} else {
-			buf = append(buf, proxy_socks5IP6)
+			buf = append(buf, proxySocks5IP6)
 		}
 		buf = append(buf, ip...)
 	} else {
 		if len(host) > 255 {
 			return errors.New("proxy: destination host name too long: " + host)
 		}
-		buf = append(buf, proxy_socks5Domain)
+		buf = append(buf, proxySocks5Domain)
 		buf = append(buf, byte(len(host)))
 		buf = append(buf, host...)
 	}
@@ -348,8 +452,8 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 	}
 
 	failure := "unknown error"
-	if int(buf[1]) < len(proxy_socks5Errors) {
-		failure = proxy_socks5Errors[buf[1]]
+	if int(buf[1]) < len(proxySocks5Errors) {
+		failure = proxySocks5Errors[buf[1]]
 	}
 
 	if len(failure) > 0 {
@@ -358,11 +462,11 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 
 	var bytesToDiscard int
 	switch buf[3] {
-	case proxy_socks5IP4:
+	case proxySocks5IP4:
 		bytesToDiscard = net.IPv4len
-	case proxy_socks5IP6:
+	case proxySocks5IP6:
 		bytesToDiscard = net.IPv6len
-	case proxy_socks5Domain:
+	case proxySocks5Domain:
 		_, err := io.ReadFull(conn, buf[:1])
 		if err != nil {
 			return errors.New("proxy: failed to read domain length from SOCKS5 proxy at " + s.addr + ": " + err.Error())
@@ -389,7 +493,7 @@ func (s *proxy_socks5) connect(conn net.Conn, target string) error {
 }
 
 func init() {
-	proxy_RegisterDialerType("http", func(proxyURL *url.URL, forwardDialer proxy_Dialer) (proxy_Dialer, error) {
+	proxyRegisterDialerType("http", func(proxyURL *url.URL, forwardDialer proxyDialer) (proxyDialer, error) {
 		return &httpProxyDialer{proxyURL: proxyURL, forwardDial: forwardDialer.Dial}, nil
 	})
 }

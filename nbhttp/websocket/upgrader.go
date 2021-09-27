@@ -60,10 +60,12 @@ type Upgrader struct {
 	Engine *nbhttp.Engine
 }
 
+// CompressionEnabled .
 func (u *Upgrader) CompressionEnabled() bool {
 	return u.compress
 }
 
+// NewUpgrader .
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{}
 	u.pingMessageHandler = func(c *Conn, data string) {
@@ -92,28 +94,33 @@ func NewUpgrader() *Upgrader {
 	return u
 }
 
+// SetCloseHandler .
 func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
 	if h != nil {
 		u.closeMessageHandler = h
 	}
 }
 
+// SetPingHandler .
 func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
 	if h != nil {
 		u.pingMessageHandler = h
 	}
 }
 
+// SetPongHandler .
 func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
 	if h != nil {
 		u.pongMessageHandler = h
 	}
 }
 
+// OnOpen .
 func (u *Upgrader) OnOpen(h func(*Conn)) {
 	u.openHandler = h
 }
 
+// OnMessage .
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
@@ -125,6 +132,7 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	}
 }
 
+// OnDataFrame .
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
@@ -136,18 +144,22 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	}
 }
 
+// OnClose .
 func (u *Upgrader) OnClose(h func(*Conn, error)) {
 	u.onClose = h
 }
 
+// EnableCompression .
 func (u *Upgrader) EnableCompression(enable bool) {
 	u.enableCompression = enable
 }
 
+// EnableWriteCompression .
 func (u *Upgrader) EnableWriteCompression(enable bool) {
 	u.enableWriteCompression = enable
 }
 
+// SetCompressionLevel .
 func (u *Upgrader) SetCompressionLevel(level int) error {
 	u.compressionLevel = level
 	return nil

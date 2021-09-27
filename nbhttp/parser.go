@@ -21,8 +21,10 @@ const (
 	trailerHeader          = "Trailer"
 	contentLengthHeader    = "Content-Length"
 
+	// MaxUint .
 	MaxUint = ^uint(0)
-	MaxInt  = int64(int(MaxUint >> 1))
+	// MaxInt .
+	MaxInt = int64(int(MaxUint >> 1))
 )
 
 // Parser .
@@ -75,10 +77,12 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
+// OnClose .
 func (p *Parser) OnClose(h func(p *Parser, err error)) {
 	p.onClose = h
 }
 
+// Close .
 func (p *Parser) Close(err error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
