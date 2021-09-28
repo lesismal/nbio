@@ -7,28 +7,25 @@ import (
 	"net"
 	"net/http"
 	_ "net/http/pprof"
-	"runtime"
 	"sync/atomic"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
-	"github.com/lesismal/nbio/taskpool"
 )
 
 var (
 	success uint64 = 0
 	failed  uint64 = 0
+
+	sleepTime = flag.Int("s", 1, "sleep time for each loop in a goroutine")
 )
 
 func main() {
 	flag.Parse()
 
-	clientExecutePool := taskpool.NewMixedPool(1024, 1, 1024)
 	engine := nbhttp.NewEngineTLS(nbhttp.Config{
-		NPoller:       runtime.NumCPU(),
 		SupportClient: true,
-	}, nil, nil, &tls.Config{}, clientExecutePool.Go)
+	})
 
 	err := engine.Start()
 	if err != nil {
@@ -43,7 +40,7 @@ func main() {
 		MaxConnsPerHost: 5,
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 100; i++ {
 		idx := i
 		go func() {
 			count := 0
@@ -70,10 +67,15 @@ func main() {
 							defer res.Body.Close()
 						}
 						count++
-						log.Printf("request success %v: %v, %v%v, time used: %v us\n", idx, count, req.URL.Host, req.URL.Path, time.Since(begin).Microseconds())
-						time.AfterFunc(time.Second, func() {
+
+						if *sleepTime > 0 {
+							log.Printf("request success %v: %v, %v%v, time used: %v us\n", idx, count, req.URL.Host, req.URL.Path, time.Since(begin).Microseconds())
+							time.AfterFunc(time.Second*time.Duration(*sleepTime), func() {
+								doRequest()
+							})
+						} else {
 							doRequest()
-						})
+						}
 					})
 				}
 				doRequest()
