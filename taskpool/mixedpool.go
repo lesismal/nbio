@@ -17,9 +17,10 @@ type MixedPool struct {
 	*FixedNoOrderPool
 	cuncurrent int32
 	nativeSize int32
+	call       func(f func())
 }
 
-func (mp *MixedPool) call(f func()) {
+func (mp *MixedPool) callWithRecover(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			const size = 64 << 10
@@ -29,6 +30,11 @@ func (mp *MixedPool) call(f func()) {
 		}
 		atomic.AddInt32(&mp.cuncurrent, -1)
 	}()
+	f()
+}
+
+func (mp *MixedPool) callWitoutRecover(f func()) {
+	defer atomic.AddInt32(&mp.cuncurrent, -1)
 	f()
 }
 
@@ -63,11 +69,16 @@ func (mp *MixedPool) Stop() {
 }
 
 // NewMixedPool .
-func NewMixedPool(nativeSize int, fixedSize int, bufferSize int) *MixedPool {
+func NewMixedPool(nativeSize int, fixedSize int, bufferSize int, v ...interface{}) *MixedPool {
 	mp := &MixedPool{
 		FixedNoOrderPool: NewFixedNoOrderPool(fixedSize, bufferSize),
 		nativeSize:       int32(nativeSize),
 	}
-
+	mp.call = mp.callWithRecover
+	if len(v) > 0 {
+		if withoutRecover, ok := v[0].(bool); ok && withoutRecover {
+			mp.call = mp.callWitoutRecover
+		}
+	}
 	return mp
 }

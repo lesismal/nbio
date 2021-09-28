@@ -124,6 +124,8 @@ type Config struct {
 
 	Context context.Context
 	Cancel  func()
+
+	SupportClient bool
 }
 
 // Engine .
@@ -399,11 +401,25 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024)
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024, true)
 		serverExecutor = messageHandlerExecutePool.Go
 	}
 
 	var clientExecutor = conf.ClientExecutor
+	var clientExecutePool *taskpool.MixedPool
+	var goExecutor = func(f func()) {
+		go func() { // avoid deadlock
+			defer func() {
+				if err := recover(); err != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				}
+			}()
+			f()
+		}()
+	}
 	if clientExecutor == nil {
 		if len(v) > 2 {
 			if h, ok := v[2].(func(f func())); ok {
@@ -412,18 +428,11 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = func(f func()) {
-			go func() { // avoid deadlock
-				defer func() {
-					if err := recover(); err != nil {
-						const size = 64 << 10
-						buf := make([]byte, size)
-						buf = buf[:runtime.Stack(buf, false)]
-						logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-					}
-				}()
-				f()
-			}()
+		if conf.SupportClient {
+			clientExecutePool = taskpool.NewMixedPool(runtime.NumCPU()*1024-1, 1, 1024*1024)
+			clientExecutor = clientExecutePool.Go
+		} else {
+			clientExecutor = goExecutor
 		}
 	}
 
@@ -463,6 +472,9 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
 		Cancel:       cancel,
+	}
+	if conf.SupportClient {
+		engine.InitTLSBuffers()
 	}
 
 	g.OnOpen(func(c *nbio.Conn) {
@@ -513,6 +525,14 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		g.Execute = func(f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
+		}
+		g.Execute = func(f func()) {}
+		if messageHandlerExecutePool != nil {
+			messageHandlerExecutePool.Stop()
+		}
+		engine.ExecuteClient = goExecutor
+		if clientExecutePool != nil {
+			clientExecutePool.Stop()
 		}
 	})
 	return engine
@@ -571,7 +591,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024)
+		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024, true)
 		serverExecutor = messageHandlerExecutePool.Go
 	}
 
@@ -585,26 +605,33 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 	}
 
 	var clientExecutor = conf.ClientExecutor
+	var clientExecutePool *taskpool.MixedPool
+	var goExecutor = func(f func()) {
+		go func() { // avoid deadlock
+			defer func() {
+				if err := recover(); err != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				}
+			}()
+			f()
+		}()
+	}
 	if clientExecutor == nil {
-		if len(v) > 3 {
-			if h, ok := v[3].(func(f func())); ok {
+		if len(v) > 2 {
+			if h, ok := v[2].(func(f func())); ok {
 				clientExecutor = h
 			}
 		}
 	}
 	if clientExecutor == nil {
-		clientExecutor = func(f func()) {
-			go func() { // avoid deadlock
-				defer func() {
-					if err := recover(); err != nil {
-						const size = 64 << 10
-						buf := make([]byte, size)
-						buf = buf[:runtime.Stack(buf, false)]
-						logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-					}
-				}()
-				f()
-			}()
+		if conf.SupportClient {
+			clientExecutePool = taskpool.NewMixedPool(runtime.NumCPU()*1024-1, 1, 1024*1024)
+			clientExecutor = clientExecutePool.Go
+		} else {
+			clientExecutor = goExecutor
 		}
 	}
 
@@ -714,6 +741,10 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		g.Execute = func(f func()) {}
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
+		}
+		engine.ExecuteClient = goExecutor
+		if clientExecutePool != nil {
+			clientExecutePool.Stop()
 		}
 	})
 	return engine
