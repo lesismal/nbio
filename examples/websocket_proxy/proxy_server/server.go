@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -79,7 +78,6 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	flag.Parse()
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/ws", onWebsocket)
 
