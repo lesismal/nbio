@@ -26,9 +26,9 @@ func main() {
 
 	clientExecutePool := taskpool.NewMixedPool(1024, 1, 1024)
 	engine := nbhttp.NewEngineTLS(nbhttp.Config{
-		NPoller: runtime.NumCPU(),
+		NPoller:       runtime.NumCPU(),
+		SupportClient: true,
 	}, nil, nil, &tls.Config{}, clientExecutePool.Go)
-	engine.InitTLSBuffers()
 
 	err := engine.Start()
 	if err != nil {
@@ -37,34 +37,28 @@ func main() {
 	}
 	defer engine.Stop()
 
-	chWaitHTTPS := make(chan struct{})
-	for i := 0; i < 2; i++ {
+	cli := &nbhttp.Client{
+		Engine:          engine,
+		Timeout:         time.Second * 3,
+		MaxConnsPerHost: 5,
+	}
+
+	for i := 0; i < 10; i++ {
 		idx := i
 		go func() {
 			count := 0
-			cli := &nbhttp.Client{
-				Engine:  engine,
-				Timeout: time.Second * 3,
-			}
+
 			func() {
-				var doRequest func(int)
-				doRequest = func(cnt int) {
+				var doRequest func()
+				doRequest = func() {
 					var err error
 					var req *http.Request
-					if idx%2 == 0 {
-						<-chWaitHTTPS
-						req, err = http.NewRequest("GET", "http://localhost:8888/echo", nil)
-					} else {
-						defer func() {
-							old := chWaitHTTPS
-							chWaitHTTPS = make(chan struct{})
-							close(old)
-						}()
-						req, err = http.NewRequest("GET", "https://github.com/lesismal", nil)
-					}
+					req, err = http.NewRequest("GET", "http://localhost:8888/echo", nil)
 					if err != nil {
 						log.Fatal(err)
 					}
+
+					begin := time.Now()
 					cli.Do(req, func(res *http.Response, conn net.Conn, err error) {
 						if err != nil {
 							atomic.AddUint64(&failed, 1)
@@ -74,20 +68,15 @@ func main() {
 						atomic.AddUint64(&success, 1)
 						if err == nil && res.Body != nil {
 							defer res.Body.Close()
-							// body, err := io.ReadAll(res.Body)
-							// if err == nil {
-							// 	fmt.Println(string(body))
-							// }
 						}
-						fmt.Printf("request success %v: %v%v\n", count, req.URL.Host, req.URL.Path)
-
+						count++
+						log.Printf("request success %v: %v, %v%v, time used: %v us\n", idx, count, req.URL.Host, req.URL.Path, time.Since(begin).Microseconds())
 						time.AfterFunc(time.Second, func() {
-							count++
-							doRequest(count)
+							doRequest()
 						})
 					})
 				}
-				doRequest(count)
+				doRequest()
 			}()
 		}()
 	}
