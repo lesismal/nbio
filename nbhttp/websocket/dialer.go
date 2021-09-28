@@ -239,6 +239,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		}
 
 		wsConn = newConn(upgrader, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled)
+		wsConn.isClient = true
 		wsConn.Engine = d.Engine
 		wsConn.OnClose(upgrader.onClose)
 
