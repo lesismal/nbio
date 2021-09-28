@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"math/rand"
 	"net"
 	"sync"
 
@@ -38,11 +39,17 @@ const (
 	PongMessage MessageType = 10
 )
 
+const (
+	maskBit = 1 << 7
+)
+
 // Conn .
 type Conn struct {
 	net.Conn
 
 	mux sync.Mutex
+
+	isClient bool
 
 	onCloseCalled            bool
 	remoteCompressionEnabled bool
@@ -204,27 +211,46 @@ func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []
 func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []byte, compress bool) error {
 	var (
 		buf     []byte
-		offset  = 2
+		byte1   byte
+		maskLen int
+		headLen int
 		bodyLen = len(data)
 	)
-	if bodyLen < 126 {
-		buf = mempool.Malloc(len(data) + 2)
-		buf[0] = 0
-		buf[1] = byte(bodyLen)
-	} else if bodyLen <= 65535 {
-		buf = mempool.Malloc(len(data) + 4)
-		binary.LittleEndian.PutUint16(buf, 0)
-		buf[1] = 126
-		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
-		offset = 4
-	} else {
-		buf = mempool.Malloc(len(data) + 10)
-		binary.LittleEndian.PutUint16(buf, 0)
-		buf[1] = 127
-		binary.BigEndian.PutUint64(buf[2:10], uint64(bodyLen))
-		offset = 10
+
+	if c.isClient {
+		byte1 |= maskBit
+		maskLen = 4
 	}
-	copy(buf[offset:], data)
+
+	if bodyLen < 126 {
+		headLen = 2 + maskLen
+		buf = mempool.Malloc(len(data) + headLen)
+		buf[0] = 0
+		buf[1] = (byte1 | byte(bodyLen))
+	} else if bodyLen <= 65535 {
+		headLen = 4 + maskLen
+		buf = mempool.Malloc(len(data) + headLen)
+		buf[0] = 0
+		buf[1] = (byte1 | 126)
+		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
+	} else {
+		headLen = 10 + maskLen
+		buf = mempool.Malloc(len(data) + headLen)
+		buf[0] = 0
+		buf[1] = (byte1 | 127)
+		binary.BigEndian.PutUint64(buf[2:10], uint64(bodyLen))
+	}
+
+	if c.isClient {
+		u32 := rand.Uint32()
+		maskKey := []byte{byte(u32), byte(u32 >> 8), byte(u32 >> 16), byte(u32 >> 24)}
+		copy(buf[headLen-4:headLen], maskKey)
+		for i := 0; i < len(data); i++ {
+			buf[headLen+i] = (data[i] ^ maskKey[i%4])
+		}
+	} else {
+		copy(buf[headLen:], data)
+	}
 
 	// opcode
 	if sendOpcode {

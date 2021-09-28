@@ -523,9 +523,9 @@ func (u *Upgrader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, 
 			if l >= total {
 				body = u.buffer[headLen:total]
 				if masked {
-					mask := u.buffer[headLen-4 : headLen]
+					maskKey := u.buffer[headLen-4 : headLen]
 					for i := 0; i < len(body); i++ {
-						body[i] ^= mask[i%4]
+						body[i] ^= maskKey[i%4]
 					}
 				}
 
