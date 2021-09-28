@@ -526,10 +526,6 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		if messageHandlerExecutePool != nil {
 			messageHandlerExecutePool.Stop()
 		}
-		g.Execute = func(f func()) {}
-		if messageHandlerExecutePool != nil {
-			messageHandlerExecutePool.Stop()
-		}
 		engine.ExecuteClient = goExecutor
 		if clientExecutePool != nil {
 			clientExecutePool.Stop()
