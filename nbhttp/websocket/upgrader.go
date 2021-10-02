@@ -366,10 +366,14 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			}
 			if bl > 0 && u.messageHandler != nil {
 				if u.message == nil {
-					u.message = mempool.Malloc(max(u.Engine.Config.MinimumWebsocketMessageBufferSize, len(body)))
+					u.message = mempool.Malloc(max(u.Engine.Config.MinimumWebsocketMessageBufferSize, bl))
+					// reduce its length 
+					u.message = u.message[:bl]
 					copy(u.message, body)
 				} else {
-					u.message = append(u.message, body...)
+					curLen := len(u.message)
+					mempool.Realloc(u.message, curLen + bl)
+					copy(u.message[:curLen], body)
 				}
 			}
 			if fin {
