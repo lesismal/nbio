@@ -31,3 +31,18 @@ func TestMemPool(t *testing.T) {
 	}
 	pool.Free(buf)
 }
+
+func TestApend(t *testing.T) {
+	pool := New(5)
+	buf := pool.Malloc(11)
+	buf = buf[:5]
+	copy(buf, []byte("hello"))
+	buf = pool.Realloc(buf, 11)
+	if len(buf) != 11 {
+		t.Fatalf("re-alloc didn't increase length to 11, instead %d", len(buf))
+	}
+	copy(buf[5:], []byte(" world"))
+	if string(buf) != "hello world" {
+		t.Fatalf("re-alloc append did now work '%s' != 'hello world'", string(buf))
+	}
+}
