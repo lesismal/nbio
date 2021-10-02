@@ -7,30 +7,60 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"time"
 
+	"github.com/pkg/profile"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-var onDataFrame = flag.Bool("UseOnDataFrame", false, "Server will use OnDataFrame api instead of OnMessage")
+var (
+	onDataFrame = flag.Bool("UseOnDataFrame", false, "Server will use OnDataFrame api instead of OnMessage")
+	disableEcho = flag.Bool("disable-echo", false, "disable echo")
+	verbose     = flag.Bool("verbose", false, "verbose mode")
+	ack 		= flag.Bool("ack", true, "send back an acknowledgement")
+
+	connections   uint64
+	msgReceived   uint64
+	bytesReceived uint64
+)
 
 func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
+	u.OnOpen(func(c *websocket.Conn) {
+		atomic.AddUint64(&connections, 1)
+	})
 	if *onDataFrame {
 		u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
 			// echo
-			c.WriteFrame(messageType, true, fin, data)
+			if !*disableEcho {
+				c.WriteFrame(messageType, true, fin, data)
+			}
+			atomic.AddUint64(&bytesReceived, uint64(len(data)))
+			if fin {
+				atomic.AddUint64(&msgReceived, 1)
+			}
 		})
 	} else {
 		u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 			// echo
-			c.WriteMessage(messageType, data)
+			if !*disableEcho {
+				c.WriteMessage(messageType, data)
+			}
+			atomic.AddUint64(&bytesReceived, uint64(len(data)))
+			atomic.AddUint64(&msgReceived, 1)
+			if *ack {
+				c.WriteMessage(messageType, []byte("a"))
+			}
 		})
 	}
 
 	u.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+		if *verbose {
+			fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+		}
+		atomic.AddUint64(&connections, ^uint64(0))
 	})
 	return u
 }
@@ -44,7 +74,9 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	}
 	wsConn := conn.(*websocket.Conn)
 	wsConn.SetReadDeadline(time.Time{})
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	if *verbose {
+		fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	}
 }
 
 func main() {
@@ -57,11 +89,24 @@ func main() {
 		Addrs:   []string{"localhost:8888"},
 	}, mux, nil)
 
+	defer profile.Start(profile.MemProfile).Stop()
+
 	err := svr.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
 	}
+	go func() {
+		ticker := time.NewTicker(time.Second * 5)
+		for {
+			select {
+			case <-ticker.C:
+				fmt.Printf("connection %d data received %d\n", atomic.LoadUint64(&connections), atomic.LoadUint64(&bytesReceived))
+			}
+
+		}
+
+	}()
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)

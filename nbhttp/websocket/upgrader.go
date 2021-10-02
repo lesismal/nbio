@@ -315,6 +315,14 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 	return nil
 }
 
+func readAppend(a, b []byte) []byte {
+	return append(a, b...)	
+}
+
+func messageAppend(a, b []byte) []byte {
+	return append(a, b...)	
+}
+
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
@@ -326,7 +334,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	if bufLen == 0 {
 		u.buffer = data
 	} else {
-		u.buffer = append(u.buffer, data...)
+		u.buffer = readAppend(u.buffer, data)
 		oldBuffer = u.buffer
 	}
 
@@ -362,7 +370,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					u.message = mempool.Malloc(len(body))
 					copy(u.message, body)
 				} else {
-					u.message = append(u.message, body...)
+					u.message = messageAppend(u.message, body)
 				}
 			}
 			if fin {
@@ -447,6 +455,7 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 
 	p.Execute(func() {
 		u.handleWsMessage(u.conn, opcode, body)
+		mempool.Free(body)
 	})
 
 }
