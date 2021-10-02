@@ -454,6 +454,9 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	p.Execute(func() {
 		u.handleWsMessage(u.conn, opcode, body)
+		if len(body) > 0 {
+				mempool.Free(body)
+		}
 	})
 }
 

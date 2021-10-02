@@ -108,7 +108,7 @@ type Config struct {
 	// EnableSendfile .
 	EnableSendfile bool
 
-	// ReleaseWebsocketPayload .
+	// ReleaseWebsocketPayload automatically release data buffer after function each call to websocket OnMessage and OnDataFrame
 	ReleaseWebsocketPayload bool
 
 	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
@@ -121,6 +121,7 @@ type Config struct {
 	ClientExecutor func(f func())
 
 	TLSConfig *tls.Config
+	TLSAllocator tls.Allocator
 
 	Context context.Context
 	Cancel  func()
@@ -554,6 +555,9 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
 	}
+	if conf.TLSAllocator == nil {
+		conf.TLSAllocator = mempool.DefaultMemPool
+	}
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
 	}
@@ -698,7 +702,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		engine.conns[c] = struct{}{}
 		engine.mux.Unlock()
 		engine._onOpen(c)
-		tlsConn := tls.NewConn(c, engine.tlsConfig, isClient, true, mempool.DefaultMemPool)
+		tlsConn := tls.NewConn(c, engine.tlsConfig, isClient, true, conf.TLSAllocator)
 		processor := NewServerProcessor(tlsConn, handler, conf.KeepaliveTime, conf.EnableSendfile)
 		parser := NewParser(processor, false, conf.ReadLimit, c.Execute)
 		parser.Conn = tlsConn
