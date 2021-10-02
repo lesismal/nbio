@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	disableEcho = flag.Bool("disable-echo", false, "diable echo incoming message")
+	disableEcho = flag.Bool("disable-echo", true, "diable echo incoming message")
 	verbose     = flag.Bool("verbose", false, "verbose mode")
 	connections = flag.Int("connections", 1000, "number of connecions")
 	msgSize     = flag.Int("msg-size", 1*1024*1024, "message size")
@@ -30,6 +30,9 @@ func newUpgrader(connectedChannel *chan *websocket.Conn) *websocket.Upgrader {
 				c.WriteMessage(messageType, data)
 			})
 			log.Println("onEcho:", string(data))
+		}
+		if *verbose {
+			log.Println("received ack:", string(data))
 		}
 		*connectedChannel <- c
 	})
@@ -67,18 +70,30 @@ func main() {
 		connectionChannels <- c
 	}
 	output := make([]byte, *msgSize, *msgSize)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	ctx, cancel := context.WithCancel(context.Background())
 	for i := 0; i < 10; i++ {
 		go func() {
+			defer func() {
+				if *verbose {
+					log.Println("sender routine exited")
+				}
+			}()
 			for {
-			select {
-			case c := <-connectionChannels:
-				time.Sleep(1000)
-				c.WriteMessage(websocket.BinaryMessage, output)
-			case <-ctx.Done():
-				return
+				select {
+				case c := <-connectionChannels:
+					time.Sleep(1000)
+					if *verbose {
+						log.Println("sending message")
+					}
+					c.WriteMessage(websocket.BinaryMessage, output)
+					if *verbose {
+						log.Println("done sending message")
+					}
+				case <-ctx.Done():
+					log.Println("ctx done")
+					return
+				}
 			}
-		}
 		}()
 	}
 	interrupt := make(chan os.Signal, 1)
