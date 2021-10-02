@@ -27,6 +27,8 @@ const (
 
 	// DefaultMinConnCacheSize .
 	DefaultMinConnCacheSize = 1024 * 2
+
+	DefaultMinimumWebsocketMessageBufferSize  = 1024 * 1
 )
 
 var (

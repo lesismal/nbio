@@ -315,6 +315,13 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 	return nil
 }
 
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
@@ -359,7 +366,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			}
 			if bl > 0 && u.messageHandler != nil {
 				if u.message == nil {
-					u.message = mempool.Malloc(len(body))
+					u.message = mempool.Malloc(max(u.Engine.Config.MinimumWebsocketMessageBufferSize, len(body)))
 					copy(u.message, body)
 				} else {
 					u.message = append(u.message, body...)
@@ -455,7 +462,7 @@ func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, b
 	p.Execute(func() {
 		u.handleWsMessage(u.conn, opcode, body)
 		if len(body) > 0 {
-				mempool.Free(body)
+			mempool.Free(body)
 		}
 	})
 }

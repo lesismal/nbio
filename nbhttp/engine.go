@@ -84,7 +84,7 @@ type Config struct {
 
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
 	// if the connection's Send-Q is full and the data cached by nbio is
-	// more than MaxWriteBufferSize, the connection would be closed by nbio.
+	// more than MaxWriteBufferSize, the connection would be closed by nbio. Default 1k
 	MaxWriteBufferSize int
 
 	// MaxWebsocketFramePayloadSize represents max payload size of websocket frame.
@@ -110,6 +110,12 @@ type Config struct {
 
 	// ReleaseWebsocketPayload automatically release data buffer after function each call to websocket OnMessage and OnDataFrame
 	ReleaseWebsocketPayload bool
+
+	// MinimumWebsocketMessageBufferSize when allocating a buffer for assembling websocket message, this is the initial size of 
+	// the buffer that will be allocated when assembling websocket frames. If your clients send to send a fixed size websocket 
+	// message, it is best to set this to that size so that frame assembly doesn't need reallocation/copy the message buffer for 
+	// every frame that comes in 
+	MinimumWebsocketMessageBufferSize int
 
 	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
 	MaxReadTimesPerEventLoop int
@@ -370,6 +376,9 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = nbio.DefaultReadBufferSize
+	}
+	if conf.MinimumWebsocketMessageBufferSize<= 0 {
+		conf.MinimumWebsocketMessageBufferSize = nbio.DefaultMinimumWebsocketMessageBufferSize
 	}
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
