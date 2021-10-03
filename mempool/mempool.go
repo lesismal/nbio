@@ -72,7 +72,9 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 		return buf[:size]
 	}
 	if cap(buf) < mp.minSize {
-		return mp.Malloc(size)
+		newBuf := mp.Malloc(size)
+		copy(newBuf[:len(buf)], buf)
+		return newBuf
 	}
 	pbuf := &buf
 	need := size - cap(buf)
@@ -84,6 +86,7 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 		newBuf := make([]byte, size)
 		pbuf = &newBuf
 	}
+	copy((*pbuf)[:len(buf)], buf)
 
 	if mp.Debug {
 		mp.saveAllocStack(*pbuf)
