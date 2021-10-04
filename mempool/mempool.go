@@ -12,6 +12,12 @@ import (
 
 const maxAppendSize = 1024 * 1024 * 4
 
+type Allocator interface {
+	Malloc(size int) []byte
+	Realloc(buf []byte, size int) []byte
+	Free(buf []byte)
+}
+
 // DefaultMemPool .
 var DefaultMemPool = New(64)
 
@@ -27,7 +33,7 @@ type MemPool struct {
 }
 
 // New .
-func New(minSize int) *MemPool {
+func New(minSize int) Allocator {
 	if minSize <= 0 {
 		minSize = 64
 	}
