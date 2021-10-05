@@ -33,9 +33,9 @@ func (p *Pool) Get() ([]byte, error) {
 	default:
 	}
 	t := time.NewTimer(p.getTimeout)
-
 	select {
 	case rtn := <-p.buffers:
+		t.Stop()
 		return rtn[:0], nil
 	case <-t.C:
 		return nil, os.ErrDeadlineExceeded
