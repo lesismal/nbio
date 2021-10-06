@@ -57,7 +57,6 @@ func main() {
 		InsecureSkipVerify: true,
 	}
 
-	disconnectClients = make(chan string, *clients)
 	connectedClients = make(chan *websocket.Conn, *clients)
 	for i := 0; i < *clients; i++ {
 		u := url.URL{Scheme: "wss", Host: "localhost:8888", Path: "/wss"}
