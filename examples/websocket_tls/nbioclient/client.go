@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"net/url"
@@ -15,24 +16,34 @@ import (
 	"github.com/lesismal/llib/std/crypto/tls"
 )
 
+var (
+	clients           = flag.Int("clients", 1, "number of clients")
+	floodLargeMessage = flag.Bool("flood", false, "flood server with large messages")
+	noEcho            = flag.Bool("no-echo", false, "disables echo server message")
+	connectedClients  chan *websocket.Conn
+)
+
 func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
 	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
 		// echo
-		time.AfterFunc(time.Second, func() {
-			c.WriteMessage(messageType, data)
-		})
-		log.Println("onEcho:", string(data))
+		if !*noEcho {
+			time.AfterFunc(time.Second, func() {
+				c.WriteMessage(messageType, data)
+			})
+			log.Println("onEcho:", string(data))
+		}
+		connectedClients <- c
 	})
 
 	u.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
 	})
 
 	return u
 }
 
 func main() {
+	flag.Parse()
 	engine := nbhttp.NewEngineTLS(nbhttp.Config{
 		SupportClient: true,
 	})
@@ -45,7 +56,9 @@ func main() {
 	tlsConfig := &tls.Config{
 		InsecureSkipVerify: true,
 	}
-	for i := 0; i < 1; i++ {
+
+	connectedClients = make(chan *websocket.Conn, *clients)
+	for i := 0; i < *clients; i++ {
 		u := url.URL{Scheme: "wss", Host: "localhost:8888", Path: "/wss"}
 		dialer := &websocket.Dialer{
 			Engine:          engine,
@@ -57,7 +70,22 @@ func main() {
 		if err != nil {
 			panic(fmt.Errorf("dial: %v", err))
 		}
-		c.WriteMessage(websocket.TextMessage, []byte("hello"))
+		connectedClients <- c
+	}
+
+	if *floodLargeMessage {
+		payload := make([]byte, 1024*1024)
+		for i := 0; i < 100; i++ {
+			go func() {
+				for {
+					select {
+					case c := <-connectedClients:
+						c.WriteMessage(websocket.BinaryMessage, payload)
+					}
+				}
+			}()
+
+		}
 	}
 
 	interrupt := make(chan os.Signal, 1)
