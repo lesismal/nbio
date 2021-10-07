@@ -23,11 +23,11 @@ func newUpgrader() *websocket.Upgrader {
 	onMessageFunc := func(c *websocket.Conn, data []byte) {
 		c.WriteMessage(websocket.BinaryMessage, data)
 	}
-	u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+	u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, frameData []byte) {
 		curBuf := c.Session()
 		// frame == message
 		if fin && curBuf == nil {
-			onMessageFunc(c, data)
+			onMessageFunc(c, frameData)
 			return
 		}
 		if curBuf == nil {
@@ -38,18 +38,18 @@ func newUpgrader() *websocket.Upgrader {
 			}
 			curBuf = b
 		}
-		b := curBuf.([]byte)
-		if cap(b) < len(b)+len(data) {
+		messageDataSoFar := curBuf.([]byte)
+		if cap(messageDataSoFar) < len(messageDataSoFar)+len(frameData) {
 			c.WriteMessage(websocket.CloseMessage, []byte("websocket message too large"))
 			return
 		}
-		b = append(b, data...)
+		messageDataSoFar = append(messageDataSoFar, frameData...)
 		if fin {
-			onMessageFunc(c, data)
-			bufferPool.Put(b)
+			onMessageFunc(c, messageDataSoFar)
+			bufferPool.Put(messageDataSoFar)
 			c.SetSession(nil)
 		} else {
-			c.SetSession(b)
+			c.SetSession(messageDataSoFar)
 		}
 	})
 

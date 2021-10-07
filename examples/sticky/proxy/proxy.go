@@ -8,9 +8,9 @@ import (
 )
 
 func stickyTunnel(clientConn *net.TCPConn, dst string, interval time.Duration, f func(max int) int) {
-	serverConn, dailErr := net.Dial("tcp", dst)
+	serverConn, dialErr := net.Dial("tcp", dst)
 	log.Printf("+ stickyTunnel: [%v -> %v]\n", clientConn.LocalAddr().String(), dst)
-	if dailErr == nil {
+	if dialErr == nil {
 		c2sCor := func() {
 			defer func() {
 				recover()
