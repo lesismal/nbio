@@ -120,7 +120,7 @@ type Config struct {
 
 	ClientExecutor func(f func())
 
-	TLSConfig *tls.Config
+	TLSConfig    *tls.Config
 	TLSAllocator tls.Allocator
 
 	Context context.Context
@@ -327,6 +327,8 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 		return
 	}
 	if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
+		defer tlsConn.ResetOrFreeBuffer()
+
 		buffer := e.getTLSBuffer(c)
 		for {
 			_, nread, err := tlsConn.AppendAndRead(data, buffer)
