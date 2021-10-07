@@ -65,9 +65,9 @@ func main() {
 }
 
 func fuzzTunnel(clientConn *net.TCPConn, serverAddr string) {
-	serverConn, dailErr := net.Dial("tcp", serverAddr)
+	serverConn, DialErr := net.Dial("tcp", serverAddr)
 	log.Printf("+ fuzzTunnel: [%v -> %v]\n", clientConn.LocalAddr().String(), serverAddr)
-	if dailErr == nil {
+	if DialErr == nil {
 		c2sCor := func() {
 			defer func() {
 				recover()

@@ -79,7 +79,7 @@ type Config struct {
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
 	ReadLimit int
 
-	// ReadBufferSize represents buffer size for reading, it's set to 2k by default.
+	// ReadBufferSize represents buffer size for reading, it's set to 32k by default.
 	ReadBufferSize int
 
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
