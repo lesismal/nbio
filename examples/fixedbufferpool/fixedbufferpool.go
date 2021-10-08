@@ -32,17 +32,19 @@ func NewFixedBufferPool(buffers, messageSize int, getTimeout time.Duration) *Poo
 }
 
 func (p *Pool) Put(in []byte) {
-	if len(in) == p.messageSize {
-		select {
-		case p.buffers <- struct{}{}:
-			p.pool.Put(&in)
-		default:
-		}
+	if cap(in) != p.messageSize {
+		panic("buffer added to pool wasn't original from the pool")
+	}
+	select {
+	case p.buffers <- struct{}{}:
+		p.pool.Put(&in)
+	default:
+		panic("more buffers added to the pool than were originally created")
 	}
 }
 
 func (p *Pool) Get() ([]byte, error) {
-	// don't wast cycles building a timer if there is a buffer available
+	// don't waste cycles building a timer if there is a buffer available
 	select {
 	case <-p.buffers:
 		return (*(p.pool.Get().(*[]byte)))[0:0], nil
