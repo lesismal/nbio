@@ -125,7 +125,7 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			if c.Engine.ReleaseWebsocketPayload {
-				defer mempool.Free(data)
+				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, data)
 		}
@@ -137,7 +137,7 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			if c.Engine.ReleaseWebsocketPayload {
-				defer mempool.Free(data)
+				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, fin, data)
 		}
@@ -348,7 +348,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if u.dataFrameHandler != nil {
 				var frame []byte
 				if bl > 0 {
-					frame = mempool.Malloc(bl)
+					frame = u.Engine.BodyAllocator.Malloc(bl)
 					copy(frame, body)
 				}
 				if u.opcode == TextMessage && len(frame) > 0 && !u.Engine.CheckUtf8(frame) {
@@ -359,7 +359,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			}
 			if bl > 0 && u.messageHandler != nil {
 				if u.message == nil {
-					u.message = mempool.Malloc(len(body))
+					u.message = u.Engine.BodyAllocator.Malloc(len(body))
 					copy(u.message, body)
 				} else {
 					u.message = append(u.message, body...)
@@ -370,8 +370,8 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					if u.compress {
 						var b []byte
 						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-						b, err = readAll(rc, len(u.message)*2)
-						mempool.Free(u.message)
+						b, err = u.readAll(rc, len(u.message)*2)
+						u.Engine.BodyAllocator.Free(u.message)
 						u.message = b
 						rc.Close()
 						if err != nil {
@@ -390,7 +390,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		} else {
 			var frame []byte
 			if len(body) > 0 {
-				frame = mempool.Malloc(len(body))
+				frame = u.Engine.BodyAllocator.Malloc(len(body))
 				copy(frame, body)
 			}
 			u.handleProtocolMessage(p, opcode, frame)
@@ -454,8 +454,8 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	p.Execute(func() {
 		u.handleWsMessage(u.conn, opcode, body)
-		if len(body) > 0 {
-				mempool.Free(body)
+		if len(body) > 0 && u.Engine.ReleaseWebsocketPayload {
+			u.Engine.BodyAllocator.Free(body)
 		}
 	})
 }
@@ -841,9 +841,9 @@ func nextTokenOrQuoted(s string) (value string, rest string) {
 	return "", ""
 }
 
-func readAll(r io.Reader, size int) ([]byte, error) {
+func (u *Upgrader) readAll(r io.Reader, size int) ([]byte, error) {
 	const maxAppendSize = 1024 * 1024 * 4
-	buf := mempool.Malloc(size)[0:0]
+	buf := u.Engine.BodyAllocator.Malloc(size)[0:0]
 	for {
 		n, err := r.Read(buf[len(buf):cap(buf)])
 		if n > 0 {
@@ -861,9 +861,7 @@ func readAll(r io.Reader, size int) ([]byte, error) {
 			if al > maxAppendSize {
 				al = maxAppendSize
 			}
-			tail := mempool.Malloc(al)
-			buf = append(buf, tail...)[:l]
-			mempool.Free(tail)
+			buf = append(buf, make([]byte, al)...)[:l]
 		}
 	}
 }

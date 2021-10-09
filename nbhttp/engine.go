@@ -123,6 +123,8 @@ type Config struct {
 	TLSConfig    *tls.Config
 	TLSAllocator tls.Allocator
 
+	BodyAllocator mempool.Allocator
+
 	Context context.Context
 	Cancel  func()
 
@@ -137,6 +139,7 @@ type Engine struct {
 	MaxLoad                      int
 	MaxWebsocketFramePayloadSize int
 	ReleaseWebsocketPayload      bool
+	BodyAllocator                mempool.Allocator
 	CheckUtf8                    func(data []byte) bool
 
 	_onOpen  func(c *nbio.Conn)
@@ -376,6 +379,9 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
 	}
+	if conf.BodyAllocator == nil {
+		conf.BodyAllocator = mempool.DefaultMemPool
+	}
 
 	var handler = conf.Handler
 	if handler == nil {
@@ -475,6 +481,8 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
 		Cancel:       cancel,
+
+		BodyAllocator: conf.BodyAllocator,
 	}
 	if conf.SupportClient {
 		engine.InitTLSBuffers()
@@ -559,6 +567,9 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 	}
 	if conf.TLSAllocator == nil {
 		conf.TLSAllocator = mempool.DefaultMemPool
+	}
+	if conf.BodyAllocator == nil {
+		conf.BodyAllocator = mempool.DefaultMemPool
 	}
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
@@ -685,6 +696,8 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
 		Cancel:       cancel,
+
+		BodyAllocator: conf.BodyAllocator,
 	}
 	engine.InitTLSBuffers()
 
