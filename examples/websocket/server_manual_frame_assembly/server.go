@@ -11,10 +11,11 @@ import (
 
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
+	"github.com/lesismal/nbio/examples/fixedbufferpool"
 )
 
 var (
-	bufferPool = NewFixedBufferPool(2000, 1*1024*1024, time.Second*10)
+	bufferPool = fixedbufferpool.NewFixedBufferPool(2000, 1*1024*1024, time.Second*10)
 )
 
 func newUpgrader() *websocket.Upgrader {
