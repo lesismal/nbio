@@ -60,6 +60,6 @@ var (
 	// ErrMalformedURL .
 	ErrMalformedURL = errors.New("malformed ws or wss URL")
 
-	// ErrMessageTooLarge
+	// ErrMessageTooLarge.
 	ErrMessageTooLarge = errors.New("message exceeds the configured limit")
 )
