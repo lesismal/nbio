@@ -317,21 +317,21 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 	return nil
 }
 
-// return true if length is ok.
+// return false if length is ok.
 func (u *Upgrader) isMessageTooLarge(len int, buffer []byte) bool {
 	switch u.MessageLengthLimit {
 	case 0:
-		return true
+		return false
 	case -1:
 		if len > cap(buffer) {
-			return false
+			return true
 		}
 	default:
 		if len > int(u.MessageLengthLimit) {
-			return false
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 // Read .
