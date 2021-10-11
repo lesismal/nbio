@@ -31,8 +31,10 @@ type Hijacker interface {
 type Upgrader struct {
 	conn *Conn
 
-	ReadLimit        int64
-	HandshakeTimeout time.Duration
+	ReadLimit int64
+	// MessageLengthLimit is the maximum length of websocket message, 0 for unlimited and -1 to use cap(Engine.BodyAllocator.Malloc(...)).
+	MessageLengthLimit int64
+	HandshakeTimeout   time.Duration
 
 	enableCompression bool
 	Subprotocols      []string
@@ -315,6 +317,23 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 	return nil
 }
 
+// return true if length is ok
+func (u *Upgrader) isMessageTooLarge(len int, buffer []byte) bool {
+	switch u.MessageLengthLimit {
+	case 0:
+		return true
+	case -1:
+		if len > cap(buffer) {
+			return false
+		}
+	default:
+		if len > int(u.MessageLengthLimit) {
+			return false
+		}
+	}
+	return true
+}
+
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
@@ -349,6 +368,11 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				var frame []byte
 				if bl > 0 {
 					frame = u.Engine.BodyAllocator.Malloc(bl)
+					if u.isMessageTooLarge(bl, frame) {
+						u.Engine.BodyAllocator.Free(frame)
+						err = ErrMessageTooLarge
+						break
+					}
 					copy(frame, body)
 				}
 				if u.opcode == TextMessage && len(frame) > 0 && !u.Engine.CheckUtf8(frame) {
@@ -360,8 +384,16 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if bl > 0 && u.messageHandler != nil {
 				if u.message == nil {
 					u.message = u.Engine.BodyAllocator.Malloc(len(body))
+					if u.isMessageTooLarge(len(body), u.message) {
+						err = ErrMessageTooLarge
+						break
+					}
 					copy(u.message, body)
 				} else {
+					if u.isMessageTooLarge(len(u.message)+len(body), u.message) {
+						err = ErrMessageTooLarge
+						break
+					}
 					u.message = append(u.message, body...)
 				}
 			}
@@ -391,6 +423,11 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			var frame []byte
 			if len(body) > 0 {
 				frame = u.Engine.BodyAllocator.Malloc(len(body))
+				if u.isMessageTooLarge(len(body), u.message) {
+					err = ErrMessageTooLarge
+					u.Engine.BodyAllocator.Free(frame)
+					break
+				}
 				copy(frame, body)
 			}
 			u.handleProtocolMessage(p, opcode, frame)
