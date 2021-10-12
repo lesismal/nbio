@@ -382,8 +382,26 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 		c.Close()
 		return
 	}
-	engine.ServerOnOpen(nbc)
+	if nbc.Session() != nil {
+		return
+	}
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		c.Close()
+		return
+	}
+	engine.conns[nbc] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(nbc)
+	processor := NewServerProcessor(c, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	nbc.SetSession(parser)
+	nbc.OnData(engine.DataHandler)
 	engine.AddConn(nbc)
+	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
 func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
@@ -419,8 +437,31 @@ func (engine *Engine) AddConnTLS(tlsConn *tls.Conn) {
 		tlsConn.Close()
 		return
 	}
-	engine.ServerOnOpenTLS(nbc)
+	if nbc.Session() != nil {
+		return
+	}
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		nbc.Close()
+		return
+	}
+	engine.conns[nbc] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(nbc)
+
+	isClient := false
+	tlsConn = tls.NewConn(nbc, engine.TLSConfig(), isClient, true, engine.TLSAllocator)
+	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	parser.Conn = tlsConn
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	nbc.SetSession(parser)
+
+	nbc.OnData(engine.TLSDataHandler)
 	engine.AddConn(nbc)
+	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
 // NewEngine .
