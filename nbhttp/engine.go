@@ -7,6 +7,7 @@ package nbhttp
 import (
 	"context"
 	"math/rand"
+	"net"
 	"net/http"
 	"runtime"
 	"sync"
@@ -149,7 +150,6 @@ type Engine struct {
 	mux   sync.Mutex
 	conns map[*nbio.Conn]struct{}
 
-	tlsConfig    *tls.Config
 	tlsBuffers   [][]byte
 	getTLSBuffer func(c *nbio.Conn) []byte
 
@@ -275,12 +275,12 @@ func (e *Engine) InitTLSBuffers() {
 
 // TLSConfig .
 func (e *Engine) TLSConfig() *tls.Config {
-	return e.tlsConfig
+	return e.Config.TLSConfig
 }
 
 // SetTLSConfig .
 func (e *Engine) SetTLSConfig(tlsConfig *tls.Config) {
-	e.tlsConfig = tlsConfig
+	e.Config.TLSConfig = tlsConfig
 }
 
 // TLSBuffer .
@@ -298,13 +298,11 @@ func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-
 	parser := c.Session().(*Parser)
 	if parser == nil {
 		logging.Error("nil parser")
 		return
 	}
-
 	err := parser.Read(data)
 	if err != nil {
 		logging.Debug("parser.Read failed: %v", err)
@@ -356,6 +354,75 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
+func (engine *Engine) ServerOnOpen(c *nbio.Conn) {
+	if c.Session() != nil {
+		return
+	}
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		c.Close()
+		return
+	}
+	engine.conns[c] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(c)
+	processor := NewServerProcessor(c, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, c.Execute)
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	c.SetSession(parser)
+	c.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+	c.OnData(engine.DataHandler)
+}
+
+func (engine *Engine) AddConnNonTLS(c net.Conn) {
+	nbc, err := nbio.NBConn(c)
+	if err != nil {
+		c.Close()
+		return
+	}
+	engine.ServerOnOpen(nbc)
+	engine.AddConn(nbc)
+}
+
+func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
+	if c.Session() != nil {
+		return
+	}
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		c.Close()
+		return
+	}
+	engine.conns[c] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(c)
+
+	isClient := false
+	tlsConn := tls.NewConn(c, engine.TLSConfig(), isClient, true, engine.TLSAllocator)
+	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, c.Execute)
+	parser.Conn = tlsConn
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	c.SetSession(parser)
+	c.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+
+	c.OnData(engine.TLSDataHandler)
+}
+
+func (engine *Engine) AddConnTLS(tlsConn *tls.Conn) {
+	nbc, err := nbio.NBConn(tlsConn.Conn())
+	if err != nil {
+		tlsConn.Close()
+		return
+	}
+	engine.ServerOnOpenTLS(nbc)
+	engine.AddConn(nbc)
+}
+
 // NewEngine .
 func NewEngine(conf Config, v ...interface{}) *Engine {
 	if conf.MaxLoad <= 0 {
@@ -394,6 +461,7 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 	if handler == nil {
 		handler = http.NewServeMux()
 	}
+	conf.Handler = handler
 
 	var serverExecutor = conf.ServerExecutor
 	if serverExecutor == nil {
@@ -567,6 +635,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 	if handler == nil {
 		handler = http.NewServeMux()
 	}
+	conf.Handler = handler
 
 	var serverExecutor = conf.ServerExecutor
 	if serverExecutor == nil {
@@ -595,6 +664,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 			}
 		}
 	}
+	conf.TLSConfig = tlsConfig
 
 	var clientExecutor = conf.ClientExecutor
 	var clientExecutePool *taskpool.MixedPool
@@ -670,7 +740,6 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		CheckUtf8:                    utf8.Valid,
 		conns:                        map[*nbio.Conn]struct{}{},
 		ExecuteClient:                clientExecutor,
-		tlsConfig:                    tlsConfig,
 
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
@@ -688,7 +757,9 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 				logging.Error("nil parser")
 				return
 			}
-			parser.Conn.Close()
+			if _, ok := parser.Conn.(*tls.Conn); ok {
+				parser.Conn.Close()
+			}
 			parser.Close(err)
 			engine._onClose(c, err)
 			engine.mux.Lock()
@@ -716,90 +787,4 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		}
 	})
 	return engine
-}
-
-func (engine *Engine) ServerOnOpen(c *nbio.Conn) {
-	if c.Session() != nil {
-		return
-	}
-
-	engine.mux.Lock()
-	if len(engine.conns) >= engine.MaxLoad {
-		engine.mux.Unlock()
-		c.Close()
-		return
-	}
-	engine.conns[c] = struct{}{}
-	engine.mux.Unlock()
-	engine._onOpen(c)
-	processor := NewServerProcessor(c, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
-	parser := NewParser(processor, false, engine.ReadLimit, c.Execute)
-	parser.Engine = engine
-	processor.(*ServerProcessor).parser = parser
-	c.SetSession(parser)
-	c.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
-	c.OnData(engine.DataHandler)
-}
-
-func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
-	if c.Session() != nil {
-		return
-	}
-
-	engine.mux.Lock()
-	if len(engine.conns) >= engine.MaxLoad {
-		engine.mux.Unlock()
-		c.Close()
-		return
-	}
-	engine.conns[c] = struct{}{}
-	engine.mux.Unlock()
-	engine._onOpen(c)
-
-	isClient := false
-	tlsConn := tls.NewConn(c, engine.tlsConfig, isClient, true, engine.TLSAllocator)
-	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
-	parser := NewParser(processor, false, engine.ReadLimit, c.Execute)
-	parser.Conn = tlsConn
-	parser.Engine = engine
-	processor.(*ServerProcessor).parser = parser
-	c.SetSession(parser)
-	c.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
-
-	c.OnData(engine.TLSDataHandler)
-}
-
-func (engine *Engine) AddConnTLS(tlsConn *tls.Conn) {
-	nbc, err := nbio.NBConn(tlsConn.Conn())
-	if err != nil {
-		tlsConn.Close()
-		return
-	}
-	if nbc.Session() != nil {
-		return
-	}
-
-	engine.mux.Lock()
-	if len(engine.conns) >= engine.MaxLoad {
-		engine.mux.Unlock()
-		tlsConn.Close()
-		return
-	}
-	engine.conns[nbc] = struct{}{}
-	engine.mux.Unlock()
-
-	isClient := false
-	tlsConn.ResetConn(nbc, isClient)
-
-	engine._onOpen(nbc)
-
-	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
-	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
-	parser.Conn = tlsConn
-	parser.Engine = engine
-	processor.(*ServerProcessor).parser = parser
-	nbc.SetSession(parser)
-	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
-
-	nbc.OnData(engine.TLSDataHandler)
 }
