@@ -488,28 +488,7 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 		engine.InitTLSBuffers()
 	}
 
-	g.OnOpen(func(c *nbio.Conn) {
-		if c.Session() != nil {
-			return
-		}
-
-		engine.mux.Lock()
-		if len(engine.conns) >= engine.MaxLoad {
-			engine.mux.Unlock()
-			c.Close()
-			return
-		}
-		engine.conns[c] = struct{}{}
-		engine.mux.Unlock()
-		engine._onOpen(c)
-		processor := NewServerProcessor(c, handler, conf.KeepaliveTime, conf.EnableSendfile)
-		parser := NewParser(processor, false, conf.ReadLimit, c.Execute)
-		parser.Engine = engine
-		processor.(*ServerProcessor).parser = parser
-		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
-		c.OnData(engine.DataHandler)
-	})
+	g.OnOpen(engine.ServerOnOpen)
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
 			parser := c.Session().(*Parser)
@@ -701,33 +680,7 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 	}
 	engine.InitTLSBuffers()
 
-	isClient := false
-
-	g.OnOpen(func(c *nbio.Conn) {
-		if c.Session() != nil {
-			return
-		}
-
-		engine.mux.Lock()
-		if len(engine.conns) >= engine.MaxLoad {
-			engine.mux.Unlock()
-			c.Close()
-			return
-		}
-		engine.conns[c] = struct{}{}
-		engine.mux.Unlock()
-		engine._onOpen(c)
-		tlsConn := tls.NewConn(c, engine.tlsConfig, isClient, true, conf.TLSAllocator)
-		processor := NewServerProcessor(tlsConn, handler, conf.KeepaliveTime, conf.EnableSendfile)
-		parser := NewParser(processor, false, conf.ReadLimit, c.Execute)
-		parser.Conn = tlsConn
-		parser.Engine = engine
-		processor.(*ServerProcessor).parser = parser
-		c.SetSession(parser)
-		c.SetReadDeadline(time.Now().Add(conf.KeepaliveTime))
-
-		c.OnData(engine.TLSDataHandler)
-	})
+	g.OnOpen(engine.ServerOnOpenTLS)
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
 			parser := c.Session().(*Parser)
@@ -763,4 +716,90 @@ func NewEngineTLS(conf Config, v ...interface{}) *Engine {
 		}
 	})
 	return engine
+}
+
+func (engine *Engine) ServerOnOpen(c *nbio.Conn) {
+	if c.Session() != nil {
+		return
+	}
+
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		c.Close()
+		return
+	}
+	engine.conns[c] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(c)
+	processor := NewServerProcessor(c, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, c.Execute)
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	c.SetSession(parser)
+	c.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+	c.OnData(engine.DataHandler)
+}
+
+func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
+	if c.Session() != nil {
+		return
+	}
+
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		c.Close()
+		return
+	}
+	engine.conns[c] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(c)
+
+	isClient := false
+	tlsConn := tls.NewConn(c, engine.tlsConfig, isClient, true, engine.TLSAllocator)
+	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, c.Execute)
+	parser.Conn = tlsConn
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	c.SetSession(parser)
+	c.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+
+	c.OnData(engine.TLSDataHandler)
+}
+
+func (engine *Engine) AddConnTLS(tlsConn *tls.Conn) {
+	nbc, err := nbio.NBConn(tlsConn.Conn())
+	if err != nil {
+		tlsConn.Close()
+		return
+	}
+	if nbc.Session() != nil {
+		return
+	}
+
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		tlsConn.Close()
+		return
+	}
+	engine.conns[nbc] = struct{}{}
+	engine.mux.Unlock()
+
+	isClient := false
+	tlsConn.ResetConn(nbc, isClient)
+
+	engine._onOpen(nbc)
+
+	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	parser.Conn = tlsConn
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	nbc.SetSession(parser)
+	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+
+	nbc.OnData(engine.TLSDataHandler)
 }
