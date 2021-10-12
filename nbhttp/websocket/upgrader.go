@@ -31,8 +31,10 @@ type Hijacker interface {
 type Upgrader struct {
 	conn *Conn
 
-	ReadLimit        int64
-	HandshakeTimeout time.Duration
+	ReadLimit int64
+	// MessageLengthLimit is the maximum length of websocket message. 0 for unlimited.
+	MessageLengthLimit int64
+	HandshakeTimeout   time.Duration
 
 	enableCompression bool
 	Subprotocols      []string
@@ -315,6 +317,15 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 	return nil
 }
 
+// return false if length is ok.
+func (u *Upgrader) isMessageTooLarge(len int) bool {
+	if u.MessageLengthLimit == 0 {
+		// 0 means unlimitted size
+		return false
+	}
+	return len > int(u.MessageLengthLimit)
+}
+
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
@@ -348,6 +359,10 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if u.dataFrameHandler != nil {
 				var frame []byte
 				if bl > 0 {
+					if u.isMessageTooLarge(bl) {
+						err = ErrMessageTooLarge
+						break
+					}
 					frame = u.Engine.BodyAllocator.Malloc(bl)
 					copy(frame, body)
 				}
@@ -360,8 +375,16 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 			if bl > 0 && u.messageHandler != nil {
 				if u.message == nil {
 					u.message = u.Engine.BodyAllocator.Malloc(len(body))
+					if u.isMessageTooLarge(len(body)) {
+						err = ErrMessageTooLarge
+						break
+					}
 					copy(u.message, body)
 				} else {
+					if u.isMessageTooLarge(len(u.message) + len(body)) {
+						err = ErrMessageTooLarge
+						break
+					}
 					u.message = append(u.message, body...)
 				}
 			}
@@ -390,6 +413,10 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 		} else {
 			var frame []byte
 			if len(body) > 0 {
+				if u.isMessageTooLarge(len(body)) {
+					err = ErrMessageTooLarge
+					break
+				}
 				frame = u.Engine.BodyAllocator.Malloc(len(body))
 				copy(frame, body)
 			}
