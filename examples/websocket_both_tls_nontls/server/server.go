@@ -92,7 +92,7 @@ func startServerTLS(addr string) {
 	}
 
 	logging.Info("Serve     TLS On: [%v]", addr)
-	tlsListener = tls.NewListener(ln, tlsConfig)
+	tlsListener = tls.NewListener(ln, tlsConfig, engine.TLSAllocator)
 	go func() {
 		defer ln.Close()
 		for {
@@ -131,7 +131,6 @@ func main() {
 		Handler:   mux,
 		TLSConfig: tlsConfig,
 	})
-	engine.InitTLSBuffers()
 
 	err = engine.Start()
 	if err != nil {

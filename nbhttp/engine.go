@@ -450,8 +450,8 @@ func (engine *Engine) AddConnTLS(tlsConn *tls.Conn) {
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 
-	isClient := false
-	tlsConn = tls.NewConn(nbc, engine.TLSConfig(), isClient, true, engine.TLSAllocator)
+	isNonBlock := true
+	tlsConn.ResetConn(nbc, isNonBlock)
 	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
 	parser.Conn = tlsConn
