@@ -354,6 +354,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
+// ServerOnOpen .
 func (engine *Engine) ServerOnOpen(c *nbio.Conn) {
 	if c.Session() != nil {
 		return
@@ -376,6 +377,7 @@ func (engine *Engine) ServerOnOpen(c *nbio.Conn) {
 	c.OnData(engine.DataHandler)
 }
 
+// AddConnNonTLS .
 func (engine *Engine) AddConnNonTLS(c net.Conn) {
 	nbc, err := nbio.NBConn(c)
 	if err != nil {
@@ -404,6 +406,7 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
+// ServerOnOpenTLS .
 func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
 	if c.Session() != nil {
 		return
@@ -431,6 +434,7 @@ func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
 	c.OnData(engine.TLSDataHandler)
 }
 
+// AddConnTLS .
 func (engine *Engine) AddConnTLS(tlsConn *tls.Conn) {
 	nbc, err := nbio.NBConn(tlsConn.Conn())
 	if err != nil {
