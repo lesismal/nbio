@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -12,8 +11,6 @@ import (
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
-	"github.com/lesismal/nbio"
-	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
@@ -51,68 +48,6 @@ func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("OnOpen:", wsConn.LocalAddr().String(), r.URL.Path)
 }
 
-func startServerNonTLS(addr string) {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		panic(err)
-	}
-	tcpListener = ln
-
-	logging.Info("Serve NON-TLS On: [%v]", addr)
-	go func() {
-		defer tcpListener.Close()
-		for {
-			conn, err := tcpListener.Accept()
-			if err == nil {
-				nbc, err := nbio.NBConn(conn)
-				if err != nil {
-					conn.Close()
-					continue
-				}
-				engine.AddConnNonTLS(nbc)
-			} else {
-				var ne net.Error
-				if ok := errors.As(err, &ne); ok && ne.Temporary() {
-					logging.Error("Accept failed: temporary error, retrying...")
-					time.Sleep(time.Second / 20)
-				} else {
-					logging.Error("Accept failed: %v, exit...", err)
-					break
-				}
-			}
-		}
-	}()
-}
-
-func startServerTLS(addr string) {
-
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		panic(err)
-	}
-
-	logging.Info("Serve     TLS On: [%v]", addr)
-	tlsListener = tls.NewListener(ln, tlsConfig, engine.TLSAllocator)
-	go func() {
-		defer ln.Close()
-		for {
-			conn, err := tlsListener.Accept()
-			if err == nil {
-				engine.AddConnTLS(conn.(*tls.Conn))
-			} else {
-				var ne net.Error
-				if ok := errors.As(err, &ne); ok && ne.Temporary() {
-					logging.Error("Accept failed: temporary error, retrying...")
-					time.Sleep(time.Second / 20)
-				} else {
-					logging.Error("Accept failed: %v, exit...", err)
-					break
-				}
-			}
-		}
-	}()
-}
-
 func main() {
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
@@ -128,6 +63,14 @@ func main() {
 	mux.HandleFunc("/wss", onWebsocket)
 
 	engine = nbhttp.NewEngineTLS(nbhttp.Config{
+		AddrsTLS: []nbhttp.ConfTLSAddr{
+			{
+				Addr:      "localhost:8443",
+				TLSConfig: nil,
+			},
+		},
+		AddrsNonTLS: []string{"localhost:8080"},
+
 		Handler:   mux,
 		TLSConfig: tlsConfig,
 	})
@@ -137,9 +80,6 @@ func main() {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		return
 	}
-
-	startServerNonTLS("localhost:8080")
-	startServerTLS("localhost:8443")
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
