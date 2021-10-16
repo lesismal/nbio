@@ -54,7 +54,7 @@ var (
 
 // ConfTLSAddr .
 type ConfTLSAddr struct {
-	Addr      string
+	Addrs      []string
 	TLSConfig *tls.Config
 }
 
@@ -68,13 +68,9 @@ type Config struct {
 	// because it's too easy to write udp server/client.
 	Network string
 
-	// Addrs is the listening addr list for a nbio server.
+	// Addrs is the non-tls listening addr list for a nbio server.
 	// if it is empty, no listener created, then the Gopher is used for client by default.
 	Addrs []string
-
-	// AddrsNonTLS is the non-tls listening addr list for an Engine.
-	// Engine will create listeners by AddrsNonTLS if it's not empty.
-	AddrsNonTLS []string
 
 	// AddrsTLS is the tls listening addr list for an Engine.
 	// Engine will create listeners by AddrsTLS if it's not empty.
@@ -136,7 +132,6 @@ type Config struct {
 
 	ClientExecutor func(f func())
 
-	TLSConfig    *tls.Config
 	TLSAllocator tls.Allocator
 
 	BodyAllocator mempool.Allocator
@@ -215,8 +210,9 @@ func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 
 func (e *Engine) startListeners() error {
 	for _, conf := range e.AddrsTLS {
-		if conf.Addr != "" {
-			ln, err := net.Listen("tcp", conf.Addr)
+		for _, addr := range conf.Addrs {
+		if addr != "" {
+			ln, err := net.Listen("tcp", addr)
 			if err != nil {
 				for _, l := range e.listeners {
 					l.Close()
@@ -225,14 +221,8 @@ func (e *Engine) startListeners() error {
 			}
 			e.listeners = append(e.listeners, ln)
 
-			logging.Info("Serve     TLS On: [%v]", conf.Addr)
+			logging.Info("Serve     TLS On: [%v]", addr)
 			e.WaitGroup.Add(1)
-			if conf.TLSConfig == nil {
-				conf.TLSConfig = e.TLSConfig()
-				if conf.TLSConfig == nil {
-					conf.TLSConfig = &tls.Config{}
-				}
-			}
 			go func() {
 				defer func() {
 					ln.Close()
@@ -241,7 +231,7 @@ func (e *Engine) startListeners() error {
 				for {
 					conn, err := ln.Accept()
 					if err == nil {
-						e.AddConnTLS(conn)
+						e.AddConnTLS(conn, conf.TLSConfig)
 					} else {
 						var ne net.Error
 						if ok := errors.As(err, &ne); ok && ne.Temporary() {
@@ -256,8 +246,9 @@ func (e *Engine) startListeners() error {
 			}()
 		}
 	}
+	}
 
-	for _, addr := range e.AddrsNonTLS {
+	for _, addr := range e.Addrs {
 		if addr != "" {
 			ln, err := net.Listen("tcp", addr)
 			if err != nil {
@@ -398,16 +389,6 @@ func (e *Engine) InitTLSBuffers() {
 	}
 }
 
-// TLSConfig .
-func (e *Engine) TLSConfig() *tls.Config {
-	return e.Config.TLSConfig
-}
-
-// SetTLSConfig .
-func (e *Engine) SetTLSConfig(tlsConfig *tls.Config) {
-	e.Config.TLSConfig = tlsConfig
-}
-
 // TLSBuffer .
 func (e *Engine) TLSBuffer(c *nbio.Conn) []byte {
 	return e.getTLSBuffer(c)
@@ -531,6 +512,8 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
+
+/*
 // ServerOnOpenTLS .
 func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
 	if c.Session() != nil {
@@ -558,9 +541,10 @@ func (engine *Engine) ServerOnOpenTLS(c *nbio.Conn) {
 
 	c.OnData(engine.TLSDataHandler)
 }
+*/
 
 // AddConnTLS .
-func (engine *Engine) AddConnTLS(conn net.Conn) {
+func (engine *Engine) AddConnTLS(conn net.Conn, tlsConfig *tls.Config ) {
 	nbc, err := nbio.NBConn(conn)
 	if err != nil {
 		conn.Close()
@@ -581,7 +565,7 @@ func (engine *Engine) AddConnTLS(conn net.Conn) {
 
 	isClient := false
 	isNonBlock := true
-	tlsConn := tls.NewConn(nbc, engine.TLSConfig(), isClient, isNonBlock, engine.TLSAllocator)
+	tlsConn := tls.NewConn(nbc, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, engine.EnableSendfile)
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
 	parser.Conn = tlsConn
@@ -688,11 +672,15 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 	if baseCtx == nil {
 		baseCtx, cancel = context.WithCancel(context.Background())
 	}
+	addrs := conf.Addrs
+	for _, value := range conf.AddrsTLS {
+		addrs = append(addrs, value.Addrs...)
+	}
 
 	gopherConf := nbio.Config{
 		Name:                     conf.Name,
 		Network:                  conf.Network,
-		Addrs:                    conf.Addrs,
+		Addrs:                    addrs,
 		NPoller:                  conf.NPoller,
 		NListener:                conf.NListener,
 		ReadBufferSize:           conf.ReadBufferSize,
@@ -723,7 +711,7 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 
 		BodyAllocator: conf.BodyAllocator,
 	}
-	if conf.SupportClient {
+	if conf.SupportClient || len(conf.AddrsTLS) > 0{
 		engine.InitTLSBuffers()
 	}
 
@@ -763,199 +751,3 @@ func NewEngine(conf Config, v ...interface{}) *Engine {
 	return engine
 }
 
-// NewEngineTLS .
-func NewEngineTLS(conf Config, v ...interface{}) *Engine {
-	if conf.MaxLoad <= 0 {
-		conf.MaxLoad = DefaultMaxLoad
-	}
-	if conf.NPoller <= 0 {
-		conf.NPoller = runtime.NumCPU()
-	}
-	if conf.NParser <= 0 {
-		conf.NParser = conf.NPoller
-	}
-	if conf.ReadLimit <= 0 {
-		conf.ReadLimit = DefaultHTTPReadLimit
-	}
-	if conf.KeepaliveTime <= 0 {
-		conf.KeepaliveTime = DefaultKeepaliveTime
-	}
-	if conf.ReadBufferSize <= 0 {
-		conf.ReadBufferSize = nbio.DefaultReadBufferSize
-	}
-	if conf.TLSAllocator == nil {
-		conf.TLSAllocator = mempool.DefaultMemPool
-	}
-	if conf.BodyAllocator == nil {
-		conf.BodyAllocator = mempool.DefaultMemPool
-	}
-	if conf.MaxWebsocketFramePayloadSize <= 0 {
-		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
-	}
-	conf.EnableSendfile = false
-
-	//handler http.Handler, messageHandlerExecutor func(f func()), v ...interface{}
-	var handler = conf.Handler
-	if handler == nil {
-		if len(v) > 0 {
-			if h, ok := v[0].(http.Handler); ok {
-				handler = h
-			}
-		}
-	}
-	if handler == nil {
-		handler = http.NewServeMux()
-	}
-	conf.Handler = handler
-
-	var serverExecutor = conf.ServerExecutor
-	if serverExecutor == nil {
-		if len(v) > 1 {
-			if h, ok := v[1].(func(f func())); ok {
-				serverExecutor = h
-			}
-		}
-	}
-
-	var messageHandlerExecutePool *taskpool.MixedPool
-	if serverExecutor == nil {
-		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
-		}
-		nativeSize := conf.MessageHandlerPoolSize - 1
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024, true)
-		serverExecutor = messageHandlerExecutePool.Go
-	}
-
-	var tlsConfig = conf.TLSConfig
-	if tlsConfig == nil {
-		if len(v) > 2 {
-			if c, ok := v[2].(*tls.Config); ok {
-				tlsConfig = c
-			}
-		}
-	}
-	conf.TLSConfig = tlsConfig
-
-	var clientExecutor = conf.ClientExecutor
-	var clientExecutePool *taskpool.MixedPool
-	var goExecutor = func(f func()) {
-		go func() { // avoid deadlock
-			defer func() {
-				if err := recover(); err != nil {
-					const size = 64 << 10
-					buf := make([]byte, size)
-					buf = buf[:runtime.Stack(buf, false)]
-					logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-				}
-			}()
-			f()
-		}()
-	}
-	if clientExecutor == nil {
-		if len(v) > 2 {
-			if h, ok := v[2].(func(f func())); ok {
-				clientExecutor = h
-			}
-		}
-	}
-	if clientExecutor == nil {
-		if conf.SupportClient {
-			clientExecutePool = taskpool.NewMixedPool(runtime.NumCPU()*1024-1, 1, 1024*1024)
-			clientExecutor = clientExecutePool.Go
-		} else {
-			clientExecutor = goExecutor
-		}
-	}
-
-	baseCtx, cancel := conf.Context, conf.Cancel
-	if baseCtx == nil {
-		baseCtx, cancel = context.WithCancel(context.Background())
-	}
-
-	// setup prefer protos: http2.0, other protos to be added
-	// preferenceProtos := map[string]struct{}{
-	// 	// "h2": {},
-	// }
-	// for _, v := range tlsConfig.NextProtos {
-	// 	delete(preferenceProtos, v)
-	// }
-	// for proto := range preferenceProtos {
-	// 	tlsConfig.NextProtos = append(tlsConfig.NextProtos, proto)
-	// }
-
-	gopherConf := nbio.Config{
-		Name:                     conf.Name,
-		Network:                  conf.Network,
-		Addrs:                    conf.Addrs,
-		NPoller:                  conf.NPoller,
-		NListener:                conf.NListener,
-		ReadBufferSize:           conf.ReadBufferSize,
-		MaxWriteBufferSize:       conf.MaxWriteBufferSize,
-		MaxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
-		LockPoller:               conf.LockPoller,
-		LockListener:             conf.LockListener,
-	}
-	g := nbio.NewGopher(gopherConf)
-	g.Execute = serverExecutor
-
-	engine := &Engine{
-		Gopher:                       g,
-		Config:                       &conf,
-		_onOpen:                      func(c *nbio.Conn) {},
-		_onClose:                     func(c *nbio.Conn, err error) {},
-		_onStop:                      func() {},
-		MaxLoad:                      conf.MaxLoad,
-		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
-		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
-		CheckUtf8:                    utf8.Valid,
-		conns:                        map[*nbio.Conn]struct{}{},
-		ExecuteClient:                clientExecutor,
-
-		emptyRequest: (&http.Request{}).WithContext(baseCtx),
-		BaseCtx:      baseCtx,
-		Cancel:       cancel,
-
-		BodyAllocator: conf.BodyAllocator,
-	}
-	engine.InitTLSBuffers()
-
-	g.OnOpen(engine.ServerOnOpenTLS)
-	g.OnClose(func(c *nbio.Conn, err error) {
-		c.MustExecute(func() {
-			parser := c.Session().(*Parser)
-			if parser == nil {
-				logging.Error("nil parser")
-				return
-			}
-			if _, ok := parser.Conn.(*tls.Conn); ok {
-				parser.Conn.Close()
-			}
-			parser.Close(err)
-			engine._onClose(c, err)
-			engine.mux.Lock()
-			delete(engine.conns, c)
-			engine.mux.Unlock()
-		})
-	})
-	g.OnData(func(c *nbio.Conn, data []byte) {
-		if c.DataHandler != nil {
-			c.DataHandler(c, data)
-		}
-	})
-	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-		mempool.Free(buffer)
-	})
-	g.OnStop(func() {
-		engine._onStop()
-		g.Execute = func(f func()) {}
-		if messageHandlerExecutePool != nil {
-			messageHandlerExecutePool.Stop()
-		}
-		engine.ExecuteClient = goExecutor
-		if clientExecutePool != nil {
-			clientExecutePool.Stop()
-		}
-	})
-	return engine
-}

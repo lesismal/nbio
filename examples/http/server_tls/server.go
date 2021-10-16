@@ -43,10 +43,10 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/echo", onEcho)
 
-	svr := nbhttp.NewServerTLS(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{"localhost:8888"},
-	}, mux, nil, tlsConfig)
+	svr := nbhttp.NewServer(nbhttp.Config{
+		Network:  "tcp",
+		AddrsTLS: []nbhttp.ConfTLSAddr{{Addrs: []string{"localhost:8888"}, TLSConfig: tlsConfig}},
+	}, mux, nil)
 
 	err = svr.Start()
 	if err != nil {

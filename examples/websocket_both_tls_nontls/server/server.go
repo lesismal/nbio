@@ -62,17 +62,16 @@ func main() {
 	mux.HandleFunc("/ws", onWebsocket)
 	mux.HandleFunc("/wss", onWebsocket)
 
-	engine = nbhttp.NewEngineTLS(nbhttp.Config{
+	engine = nbhttp.NewEngine(nbhttp.Config{
 		AddrsTLS: []nbhttp.ConfTLSAddr{
 			{
-				Addr:      "localhost:8443",
-				TLSConfig: nil,
+				Addrs:     []string{"localhost:8443"},
+				TLSConfig: tlsConfig,
 			},
 		},
-		AddrsNonTLS: []string{"localhost:8080"},
+		Addrs: []string{"localhost:8080"},
 
-		Handler:   mux,
-		TLSConfig: tlsConfig,
+		Handler: mux,
 	})
 
 	err = engine.Start()

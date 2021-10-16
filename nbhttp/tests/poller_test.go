@@ -59,10 +59,10 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
-	svr = nbhttp.NewServerTLS(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{":8889"},
-	}, mux, nil, tlsConfig)
+	svr = nbhttp.NewServer(nbhttp.Config{
+		Network:  "tcp",
+		AddrsTLS: []nbhttp.ConfTLSAddr{{Addrs: []string{":8889"}, TLSConfig: tlsConfig}},
+	}, mux, nil)
 
 	err = svr.Start()
 	if err != nil {

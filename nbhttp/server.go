@@ -6,8 +6,6 @@ package nbhttp
 
 import (
 	"net/http"
-
-	"github.com/lesismal/llib/std/crypto/tls"
 )
 
 // Server .
@@ -19,12 +17,5 @@ type Server struct {
 func NewServer(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), v ...interface{}) *Server {
 	args := append([]interface{}{handler, messageHandlerExecutor}, v...)
 	engine := NewEngine(conf, args...)
-	return &Server{Engine: engine}
-}
-
-// NewServerTLS .
-func NewServerTLS(conf Config, handler http.Handler, messageHandlerExecutor func(f func()), tlsConfig *tls.Config, v ...interface{}) *Server {
-	args := append([]interface{}{handler, messageHandlerExecutor, tlsConfig}, v...)
-	engine := NewEngineTLS(conf, args...)
 	return &Server{Engine: engine}
 }

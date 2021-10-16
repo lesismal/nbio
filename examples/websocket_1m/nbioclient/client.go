@@ -69,7 +69,7 @@ func newUpgrader() *websocket.Upgrader {
 func main() {
 	flag.Parse()
 
-	engine := nbhttp.NewEngineTLS(nbhttp.Config{
+	engine := nbhttp.NewEngine(nbhttp.Config{
 		SupportClient: true,
 	})
 	err := engine.Start()

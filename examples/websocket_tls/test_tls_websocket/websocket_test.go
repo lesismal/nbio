@@ -121,10 +121,10 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 		onWebsocket(cancelFunc, readCount, w, r)
 	})
 
-	svr = nbhttp.NewServerTLS(nbhttp.Config{
+	svr = nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
-		Addrs:   []string{*addr},
-	}, mux, nil, tlsConfig)
+		AddrsTLS:[]nbhttp.ConfTLSAddr{{Addrs:[]string{*addr},TLSConfig:tlsConfig}},
+	}, mux, nil)
 
 	err = svr.Start()
 	if err != nil {

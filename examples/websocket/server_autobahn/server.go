@@ -76,11 +76,11 @@ func main() {
 	log.Printf("calling new server tls\n")
 
 	messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
-	svrTLS := nbhttp.NewServerTLS(nbhttp.Config{
+	svrTLS := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
-		Addrs:          []string{"localhost:9999"},
+		AddrsTLS:[]nbhttp.ConfTLSAddr{{Addrs:[]string{"localhost:9999"},TLSConfig:tlsConfig}},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, messageHandlerExecutePool.Go, tlsConfig)
+	}, mux, messageHandlerExecutePool.Go)
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9998"},
