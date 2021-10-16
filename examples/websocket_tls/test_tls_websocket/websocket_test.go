@@ -122,9 +122,11 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 	})
 
 	svr = nbhttp.NewServer(nbhttp.Config{
-		Network: "tcp",
-		AddrsTLS:[]nbhttp.ConfTLSAddr{{Addrs:[]string{*addr},TLSConfig:tlsConfig}},
-	}, mux, nil)
+		Network:   "tcp",
+		AddrsTLS:  []string{*addr},
+		TLSConfig: tlsConfig,
+		Handler:   mux,
+	})
 
 	err = svr.Start()
 	if err != nil {

@@ -84,9 +84,8 @@ func main() {
 	proxyServer = nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{proxyServerAddr},
-
-		SupportClient: true,
-	}, mux, nil)
+		Handler: mux,
+	})
 
 	err := proxyServer.Start()
 	if err != nil {

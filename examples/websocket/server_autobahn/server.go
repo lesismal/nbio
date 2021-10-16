@@ -78,14 +78,19 @@ func main() {
 	messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
 	svrTLS := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
-		AddrsTLS:[]nbhttp.ConfTLSAddr{{Addrs:[]string{"localhost:9999"},TLSConfig:tlsConfig}},
+		AddrsTLS:       []string{"localhost:9999"},
+		TLSConfig:      tlsConfig,
 		ReadBufferSize: 1024 * 1024,
-	}, mux, messageHandlerExecutePool.Go)
+		Handler:        mux,
+		ServerExecutor: messageHandlerExecutePool.Go,
+	})
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network:        "tcp",
 		Addrs:          []string{"localhost:9998"},
 		ReadBufferSize: 1024 * 1024,
-	}, mux, messageHandlerExecutePool.Go)
+		Handler:        mux,
+		ServerExecutor: messageHandlerExecutePool.Go,
+	})
 
 	log.Printf("calling start non-tls\n")
 	err = svr.Start()

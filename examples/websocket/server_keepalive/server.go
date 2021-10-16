@@ -88,7 +88,8 @@ func main() {
 	server = nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
-	}, mux, nil)
+		Handler: mux,
+	})
 
 	err := server.Start()
 	if err != nil {

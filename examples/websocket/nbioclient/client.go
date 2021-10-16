@@ -31,9 +31,7 @@ func newUpgrader() *websocket.Upgrader {
 }
 
 func main() {
-	engine := nbhttp.NewEngine(nbhttp.Config{
-		SupportClient: true,
-	})
+	engine := nbhttp.NewEngine(nbhttp.Config{})
 	err := engine.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)

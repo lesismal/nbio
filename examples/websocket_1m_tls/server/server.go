@@ -63,10 +63,12 @@ func main() {
 
 	svr = nbhttp.NewServer(nbhttp.Config{
 		Network:                 "tcp",
-		AddrsTLS:                []nbhttp.ConfTLSAddr{{addrs, tlsConfig}},
+		AddrsTLS:                addrs,
+		TLSConfig:               tlsConfig,
 		MaxLoad:                 1000000,
 		ReleaseWebsocketPayload: true,
-	}, mux, nil)
+		Handler:                 mux,
+	})
 
 	err = svr.Start()
 	if err != nil {

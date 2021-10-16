@@ -23,9 +23,7 @@ var (
 func main() {
 	flag.Parse()
 
-	engine := nbhttp.NewEngine(nbhttp.Config{
-		SupportClient: true,
-	})
+	engine := nbhttp.NewEngine(nbhttp.Config{})
 
 	err := engine.Start()
 	if err != nil {
