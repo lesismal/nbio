@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,15 +12,6 @@ import (
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
-)
-
-var (
-	tlsConfig *tls.Config
-
-	tcpListener net.Listener
-	tlsListener net.Listener
-
-	engine *nbhttp.Engine
 )
 
 func newUpgrader() *websocket.Upgrader {
@@ -53,7 +43,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
 	}
-	tlsConfig = &tls.Config{
+	tlsConfig := &tls.Config{
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
@@ -62,7 +52,7 @@ func main() {
 	mux.HandleFunc("/ws", onWebsocket)
 	mux.HandleFunc("/wss", onWebsocket)
 
-	engine = nbhttp.NewEngine(nbhttp.Config{
+	engine := nbhttp.NewEngine(nbhttp.Config{
 		Addrs:     []string{"localhost:8080"},
 		AddrsTLS:  []string{"localhost:8443"},
 		TLSConfig: tlsConfig,
@@ -78,14 +68,6 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 	<-interrupt
-
-	if tcpListener != nil {
-		tcpListener.Close()
-	}
-
-	if tlsListener != nil {
-		tlsListener.Close()
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
