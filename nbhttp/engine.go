@@ -52,6 +52,8 @@ var (
 	DefaultTLSHandshakeTimeout = time.Second * 10
 )
 
+const defaultNetwork = "tcp"
+
 // ConfAddr .
 type ConfAddr struct {
 	Network   string
@@ -226,7 +228,7 @@ func (e *Engine) startListeners() error {
 				network = e.Network
 			}
 			if network == "" {
-				network = "tcp"
+				network = defaultNetwork
 			}
 			ln, err := net.Listen(network, conf.Addr)
 			if err != nil {
@@ -279,7 +281,7 @@ func (e *Engine) startListeners() error {
 				network = e.Network
 			}
 			if network == "" {
-				network = "tcp"
+				network = defaultNetwork
 			}
 			ln, err := net.Listen(network, conf.Addr)
 			if err != nil {

@@ -222,7 +222,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			}
 		}
 
-		netConn, err := netDial("tcp", addr)
+		netConn, err := netDial(defaultNetwork, addr)
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
 			return
