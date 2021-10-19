@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -45,9 +46,11 @@ func main() {
 			Upgrader:    newUpgrader(),
 			DialTimeout: time.Second * 3,
 		}
-		c, _, err := dialer.Dial(u.String(), nil)
+		c, res, err := dialer.Dial(u.String(), nil)
 		if err != nil {
-			panic(fmt.Errorf("dial: %v", err))
+			bReason, _ := io.ReadAll(res.Body)
+			fmt.Printf("dial: %v, reason: %v\n", err, string(bReason))
+			return
 		}
 		c.WriteMessage(websocket.TextMessage, []byte("hello"))
 	}
