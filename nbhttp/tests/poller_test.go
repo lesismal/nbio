@@ -7,8 +7,6 @@ package nbhttp
 
 import (
 	"context"
-	stockTLS "crypto/tls"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,22 +15,24 @@ import (
 	"testing"
 	"time"
 
-	gwebsocket "github.com/gorilla/websocket"
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
 var (
+	count  = 3
+	chWait = make(chan struct{}, count)
+	text   = "hello world"
+	addr   = "localhost:8889"
+
 	svr *nbhttp.Server
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
 	upgrader := websocket.NewUpgrader()
 	upgrader.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		// echo
 		c.WriteMessage(messageType, data)
-		fmt.Println("OnMessage:", messageType, string(data))
 		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	})
 	upgrader.OnClose(func(c *websocket.Conn, err error) {
@@ -61,7 +61,7 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 
 	svr = nbhttp.NewServer(nbhttp.Config{
 		Network:   "tcp",
-		AddrsTLS:  []string{":8889"},
+		AddrsTLS:  []string{addr},
 		TLSConfig: tlsConfig,
 		Handler:   mux,
 	})
@@ -78,6 +78,76 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 
 	<-ctx.Done()
 	log.Println("exit")
+}
+
+func client() error {
+	u := url.URL{Scheme: "wss", Host: addr, Path: "/wss"}
+	log.Printf("connecting to %s", u.String())
+
+	// engine := nbhttp.NewEngine(nbhttp.Config{
+	// 	TLSConfig: ,
+	// })
+	// err := engine.Start()
+	// if err != nil {
+	// 	fmt.Printf("nbio.Start failed: %v\n", err)
+	// 	return err
+	// }
+
+	dialer := &websocket.Dialer{
+		Engine: svr.Engine,
+		Upgrader: func() *websocket.Upgrader {
+			u := websocket.NewUpgrader()
+			u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+				c.WriteMessage(messageType, data)
+				chWait <- struct{}{}
+			})
+			return u
+		}(),
+		DialTimeout: time.Second * 3,
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+
+	c, _, err := dialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	err = c.WriteMessage(websocket.TextMessage, []byte(text))
+	if err != nil {
+		log.Fatalf("write: %v", err)
+		return err
+	}
+
+	for i := 0; i < count; i++ {
+		<-chWait
+	}
+
+	return nil
+}
+func TestServerSimulation(t *testing.T) {
+	waitGrp := sync.WaitGroup{}
+	ctx, cancelFunc := context.WithCancel(context.Background())
+	waitGrp.Add(1)
+	var err error
+	go server(ctx, &waitGrp, &err)
+	waitGrp.Wait()
+	if err != nil {
+		t.Errorf("client should not have errorred: %s", err)
+		cancelFunc()
+		return
+	}
+	err = client()
+	if err != nil {
+		t.Errorf("client should not have errorred: %s", err)
+	}
+	err = client()
+	if err != nil {
+		t.Errorf("client should not have errorred: %s", err)
+	}
+	cancelFunc()
 }
 
 var rsaCertPEM = []byte(`-----BEGIN CERTIFICATE-----
@@ -131,73 +201,3 @@ Mr+u5TRncZBIzAZtButlh1AHnpN/qO3P0c0Rbdep3XBc/82JWO8qdb5QvAkxga3X
 BpA7MNLxiqss+rCbwf3NbWxEMiDQ2zRwVoafVFys7tjmv6t2Xck=
 -----END RSA PRIVATE KEY-----
 `)
-
-var addr = flag.String("addr", "localhost:8889", "http service address")
-
-func client(count int) error {
-	flag.Parse()
-
-	u := url.URL{Scheme: "wss", Host: *addr, Path: "/wss"}
-	log.Printf("connecting to %s", u.String())
-
-	tlsConfig := &stockTLS.Config{
-		InsecureSkipVerify: true,
-	}
-	dialer := &gwebsocket.Dialer{
-		TLSClientConfig: tlsConfig,
-	}
-
-	c, resp, err := dialer.Dial(u.String(), nil)
-	if resp != nil {
-		defer resp.Body.Close()
-	}
-	if err != nil {
-		log.Fatal("dial:", err)
-	}
-	defer c.Close()
-
-	text := "hello world"
-	for i := 0; i < count; i++ {
-		err := c.WriteMessage(gwebsocket.TextMessage, []byte(text))
-		if err != nil {
-			log.Fatalf("write: %v", err)
-			return err
-		}
-		log.Println("write:", text)
-
-		_, message, err := c.ReadMessage()
-		if err != nil {
-			log.Println("read:", err)
-			return err
-		}
-		if string(message) != text {
-			log.Fatalf("message != text: %v, %v", len(message), string(message))
-		} else {
-			log.Println("read :", string(message))
-		}
-		time.Sleep(time.Millisecond * 500)
-	}
-	return nil
-}
-func TestServerSimulation(t *testing.T) {
-	waitGrp := sync.WaitGroup{}
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	waitGrp.Add(1)
-	var err error
-	go server(ctx, &waitGrp, &err)
-	waitGrp.Wait()
-	if err != nil {
-		t.Errorf("client should not have errorred: %s", err)
-		cancelFunc()
-		return
-	}
-	err = client(5)
-	if err != nil {
-		t.Errorf("client should not have errorred: %s", err)
-	}
-	err = client(5)
-	if err != nil {
-		t.Errorf("client should not have errorred: %s", err)
-	}
-	cancelFunc()
-}

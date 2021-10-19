@@ -349,5 +349,5 @@ g.OnData(func(c *Conn, data []byte) {
 
 ## Use With Other STD Based Frameworkds
 
-- [gin-http-and-websocket-server](https://github.com/lesismal/nbio_with_other_frameworks/blob/master/gin_server/gin_server.go)
-- [echo-http-and-websocket-server](https://github.com/lesismal/nbio_with_other_frameworks/blob/master/echo_server/echo_server.go)
+- [gin-http-and-websocket-server](https://github.com/lesismal/nbio_examples/blob/master/http_with_other_frameworks/gin_server/gin_server.go)
+- [echo-http-and-websocket-server](https://github.com/lesismal/nbio_examples/blob/master/http_with_other_frameworks/echo_server/echo_server.go)
