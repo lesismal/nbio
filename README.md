@@ -173,9 +173,6 @@ conf := nbio.Config struct {
     // MaxLoad represents the max online num, it's set to 10k by default
     MaxLoad: 1024 * 10, 
 
-    // NListener represents the listener goroutine num on *nix, it's set to 1 by default
-    NListener: 1,
-
     // NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default
     NPoller: runtime.NumCPU(),
 
@@ -294,58 +291,40 @@ g.OnData(func(c *Conn, data []byte) {
 })
 ```
 
-## Std Net Examples
-
-- [std-net-echo-server](https://github.com/lesismal/nbio/blob/master/examples/netstd/server/server.go)
-- [std-net-echo-client](https://github.com/lesismal/nbio/blob/master/examples/netstd/client/client.go)
-
 ## Echo Examples
 
-- [echo-server](https://github.com/lesismal/nbio/blob/master/examples/echo/server/server.go)
-- [echo-client](https://github.com/lesismal/nbio/blob/master/examples/echo/client/client.go)
+- [echo-server](https://github.com/lesismal/nbio_examples/blob/master/echo/server/server.go)
+- [echo-client](https://github.com/lesismal/nbio_examples/blob/master/echo/client/client.go)
 
 ## TLS Examples
 
-- [tls-server](https://github.com/lesismal/nbio/blob/master/examples/tls/server/server.go)
-- [tls-client](https://github.com/lesismal/nbio/blob/master/examples/tls/client/client.go)
+- [tls-server](https://github.com/lesismal/nbio_examples/blob/master/tls/server/server.go)
+- [tls-client](https://github.com/lesismal/nbio_examples/blob/master/tls/client/client.go)
 
 ## HTTP Examples
 
-- [http-server](https://github.com/lesismal/nbio/blob/master/examples/http/server/server.go)
-- [http-client](https://github.com/lesismal/nbio/blob/master/examples/http/client/client.go)
+- [http-server](https://github.com/lesismal/nbio_examples/blob/master/http/server/server.go)
+- [http-client](https://github.com/lesismal/nbio_examples/blob/master/http/client/client.go)
 
 ## HTTPS Examples
 
-- [http-tls_server](https://github.com/lesismal/nbio/blob/master/examples/http/server_tls/server.go)
-- visit: https://localhost:28000/echo
-
-
-## HTTP 1M Connections Examples
-
-- [http-1m-connections-server](https://github.com/lesismal/nbio/blob/master/examples/http_1m/server/server.go)
-- [http-1m-connections-client](https://github.com/lesismal/nbio/blob/master/examples/http_1m/client/client.go)
+- [http-tls_server](https://github.com/lesismal/nbio_examples/blob/master/http/server_tls/server.go)
+- visit: https://localhost:8888/echo
 
 ## Websocket Examples
 
-- [websocket-server](https://github.com/lesismal/nbio/blob/master/examples/websocket/server/server.go)
-- [websocket-client](https://github.com/lesismal/nbio/blob/master/examples/websocket/client/client.go)
+- [websocket-server](https://github.com/lesismal/nbio_examples/blob/master/websocket/server/server.go)
+- [websocket-client](https://github.com/lesismal/nbio_examples/blob/master/websocket/client/client.go)
 
 ## Websocket TLS Examples
 
-- [websocket-tls-server](https://github.com/lesismal/nbio/blob/master/examples/websocket_tls/server/server.go)
-- [websocket-tls-client](https://github.com/lesismal/nbio/blob/master/examples/websocket_tls/client/client.go)
+- [websocket-tls-server](https://github.com/lesismal/nbio_examples/blob/master/websocket_tls/server/server.go)
+- [websocket-tls-client](https://github.com/lesismal/nbio_examples/blob/master/websocket_tls/client/client.go)
 
 ## Websocket 1M Connections Examples
 
-- [websocket-1m-connections-server](https://github.com/lesismal/nbio/blob/master/examples/websocket_1m/server/server.go)
-- [websocket-1m-connections-client](https://github.com/lesismal/nbio/blob/master/examples/websocket_1m/client/client.go)
-
-## Bench Examples
-
-**refer to this test, or write your own test cases:**
-
-- [bench-server](https://github.com/lesismal/nbio/blob/master/examples/bench/server/server.go)
-- [bench-client](https://github.com/lesismal/nbio/blob/master/examples/bench/client/client.go)
+- [websocket-1m-connections-server](https://github.com/lesismal/nbio_examples/tree/master/websocket_1m/server/server.go)
+- [websocket-1m-connections-client](https://github.com/lesismal/nbio_examples/tree/master/websocket_1m/client/client.go)
 
 ## Use With Other STD Based Frameworkds
 
