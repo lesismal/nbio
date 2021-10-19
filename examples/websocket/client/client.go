@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"time"
@@ -14,9 +15,10 @@ func main() {
 	flag.Parse()
 
 	u := url.URL{Scheme: "ws", Host: "localhost:8888", Path: "/ws"}
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	c, res, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
-		log.Fatal("dial:", err)
+		bReason, _ := io.ReadAll(res.Body)
+		log.Fatalf("dial: %v, reason: %v\n", err, string(bReason))
 	}
 	defer c.Close()
 
