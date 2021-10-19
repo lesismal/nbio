@@ -22,7 +22,7 @@ bin/reporter:
 	go build -o bin/reporter ./autobahn
 
 autobahn: clean bin/reporter
-	./autobahn/script/test.sh --build fuzzingclient config/client_tests.json examples/websocket/server_autobahn -o server.test 
+	./autobahn/script/test.sh --build fuzzingclient config/client_tests.json autobahn/server -o server.test 
 	bin/reporter $(PWD)/autobahn/report/output/index.json
 
 .PHONY: all vet lint test clean  autobahn

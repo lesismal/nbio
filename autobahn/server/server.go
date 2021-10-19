@@ -1,52 +1,64 @@
-//go:build !unit
-// +build !unit
-
-// run this test via :go test -tags=integration .
-
-package nbhttp
+package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
-	"sync"
-	"testing"
+	"os"
+	"os/signal"
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
+	"github.com/lesismal/nbio/taskpool"
 )
 
-var (
-	count  = 3
-	chWait = make(chan struct{}, count)
-	text   = "hello world"
-	addr   = "localhost:8889"
+func newUpgrader(isDataFrame bool) *websocket.Upgrader {
+	u := websocket.NewUpgrader()
+	u.EnableCompression(true)
+	if isDataFrame {
+		isFirst := true
+		u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
+			err := c.WriteFrame(messageType, isFirst, fin, data)
+			if err != nil {
+				c.Close()
+				return
+			}
+			if fin {
+				isFirst = true
+			} else {
+				isFirst = false
+			}
+		})
+	} else {
+		u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+			c.WriteMessage(messageType, data)
+		})
+	}
 
-	svr *nbhttp.Server
-)
+	return u
+}
 
-func onWebsocket(w http.ResponseWriter, r *http.Request) {
-	upgrader := websocket.NewUpgrader()
-	upgrader.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-		c.WriteMessage(messageType, data)
-		c.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
-	})
-	upgrader.OnClose(func(c *websocket.Conn, err error) {
-		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
-	})
+func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
+	upgrader := newUpgrader(true)
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		panic(err)
 	}
-	wsConn := conn.(*websocket.Conn)
-	fmt.Println("OnOpen:", wsConn.RemoteAddr().String())
+	conn.SetDeadline(time.Time{})
 }
 
-func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
+func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
+	upgrader := newUpgrader(false)
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		panic(err)
+	}
+	conn.SetDeadline(time.Time{})
+}
+
+func main() {
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {
 		log.Fatalf("tls.X509KeyPair failed: %v", err)
@@ -55,102 +67,51 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
+	tlsConfig.BuildNameToCertificate()
 
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/wss", onWebsocket)
+	mux.HandleFunc("/echo/message", onWebsocketMessage)
+	mux.HandleFunc("/echo/frame", onWebsocketFrame)
 
-	svr = nbhttp.NewServer(nbhttp.Config{
-		Network:   "tcp",
-		AddrsTLS:  []string{addr},
-		TLSConfig: tlsConfig,
-		Handler:   mux,
+	log.Printf("calling new server tls\n")
+
+	messageHandlerExecutePool := taskpool.NewFixedPool(100, 1000)
+	svrTLS := nbhttp.NewServer(nbhttp.Config{
+		Network:        "tcp",
+		AddrsTLS:       []string{"localhost:9999"},
+		TLSConfig:      tlsConfig,
+		ReadBufferSize: 1024 * 1024,
+		Handler:        mux,
+		ServerExecutor: messageHandlerExecutePool.Go,
+	})
+	svr := nbhttp.NewServer(nbhttp.Config{
+		Network:        "tcp",
+		Addrs:          []string{"localhost:9998"},
+		ReadBufferSize: 1024 * 1024,
+		Handler:        mux,
+		ServerExecutor: messageHandlerExecutePool.Go,
 	})
 
+	log.Printf("calling start non-tls\n")
 	err = svr.Start()
 	if err != nil {
-		fmt.Printf("nbio.Start failed: %v\n", err)
-		*startupError = err
-		started.Done()
+		fmt.Printf("nbio.Start non-tls failed: %v\n", err)
 		return
 	}
-	started.Done()
 	defer svr.Stop()
 
-	<-ctx.Done()
-	log.Println("exit")
-}
-
-func client() error {
-	u := url.URL{Scheme: "wss", Host: addr, Path: "/wss"}
-	log.Printf("connecting to %s", u.String())
-
-	// engine := nbhttp.NewEngine(nbhttp.Config{
-	// 	TLSConfig: ,
-	// })
-	// err := engine.Start()
-	// if err != nil {
-	// 	fmt.Printf("nbio.Start failed: %v\n", err)
-	// 	return err
-	// }
-
-	dialer := &websocket.Dialer{
-		Engine: svr.Engine,
-		Upgrader: func() *websocket.Upgrader {
-			u := websocket.NewUpgrader()
-			u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-				c.WriteMessage(messageType, data)
-				chWait <- struct{}{}
-			})
-			return u
-		}(),
-		DialTimeout: time.Second * 3,
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
-	}
-
-	c, res, err := dialer.Dial(u.String(), nil)
+	log.Printf("calling start tls\n")
+	err = svrTLS.Start()
 	if err != nil {
-		log.Fatal("dial:", err)
-	}
-	if res.Body != nil {
-		res.Body.Close()
-	}
-	defer c.Close()
-
-	err = c.WriteMessage(websocket.TextMessage, []byte(text))
-	if err != nil {
-		log.Fatalf("write: %v", err)
-		return err
-	}
-
-	for i := 0; i < count; i++ {
-		<-chWait
-	}
-
-	return nil
-}
-func TestServerSimulation(t *testing.T) {
-	waitGrp := sync.WaitGroup{}
-	ctx, cancelFunc := context.WithCancel(context.Background())
-	waitGrp.Add(1)
-	var err error
-	go server(ctx, &waitGrp, &err)
-	waitGrp.Wait()
-	if err != nil {
-		t.Errorf("client should not have errorred: %s", err)
-		cancelFunc()
+		fmt.Printf("nbio.Start tls failed: %v\n", err)
 		return
 	}
-	err = client()
-	if err != nil {
-		t.Errorf("client should not have errorred: %s", err)
-	}
-	err = client()
-	if err != nil {
-		t.Errorf("client should not have errorred: %s", err)
-	}
-	cancelFunc()
+	defer svrTLS.Stop()
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt)
+	<-interrupt
+	log.Println("exit")
 }
 
 var rsaCertPEM = []byte(`-----BEGIN CERTIFICATE-----
