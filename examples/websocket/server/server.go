@@ -13,7 +13,10 @@ import (
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-var onDataFrame = flag.Bool("UseOnDataFrame", false, "Server will use OnDataFrame api instead of OnMessage")
+var (
+	onDataFrame = flag.Bool("UseOnDataFrame", false, "Server will use OnDataFrame api instead of OnMessage")
+	errBeforeUpgrade = flag.Bool("error-before-upgrade", false, "return an error on upgrade with body")
+)
 
 func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
@@ -36,6 +39,11 @@ func newUpgrader() *websocket.Upgrader {
 }
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	if *errBeforeUpgrade {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte("returning an error"))
+		return 
+	}
 	// time.Sleep(time.Second * 5)
 	upgrader := newUpgrader()
 	conn, err := upgrader.Upgrade(w, r, nil)
