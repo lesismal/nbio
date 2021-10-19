@@ -29,7 +29,8 @@ func main() {
 		Addrs:   []string{"localhost:8888"},
 		MaxLoad: 1000000,
 		NPoller: runtime.NumCPU() * 2,
-	}, mux, nil)
+		Handler: mux,
+	})
 
 	err := svr.Start()
 	if err != nil {

@@ -57,10 +57,12 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
-	svr = nbhttp.NewServerTLS(nbhttp.Config{
-		Network: "tcp",
-		Addrs:   []string{"localhost:9999"},
-	}, mux, nil, tlsConfig)
+	svr = nbhttp.NewServer(nbhttp.Config{
+		Network:   "tcp",
+		AddrsTLS:  []string{"localhost:8888"},
+		TLSConfig: tlsConfig,
+		Handler:   mux,
+	})
 
 	err = svr.Start()
 	if err != nil {

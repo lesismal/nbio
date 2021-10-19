@@ -53,7 +53,8 @@ func server(ctx context.Context, cancelFunc context.CancelFunc, readCount int) {
 	svr = nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{*addr},
-	}, mux, nil)
+		Handler: mux,
+	})
 
 	err := svr.Start()
 	if err != nil {

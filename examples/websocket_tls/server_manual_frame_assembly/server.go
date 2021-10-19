@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/lesismal/llib/std/crypto/tls"
+	"github.com/lesismal/nbio/examples/fixedbufferpool"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
-	"github.com/lesismal/nbio/examples/fixedbufferpool"
 )
 
 var (
@@ -97,11 +97,13 @@ func main() {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
-	svr := nbhttp.NewServerTLS(nbhttp.Config{
+	svr := nbhttp.NewServer(nbhttp.Config{
 		Network:                 "tcp",
-		Addrs:                   []string{"localhost:8888"},
+		AddrsTLS:                []string{"localhost:8888"},
+		TLSConfig:               tlsConfig,
 		ReleaseWebsocketPayload: true,
-	}, mux, nil, tlsConfig)
+		Handler:                 mux,
+	})
 
 	err = svr.Start()
 	if err != nil {

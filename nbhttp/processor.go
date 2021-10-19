@@ -16,9 +16,8 @@ import (
 )
 
 var (
-	emptyRequest     = http.Request{}
-	emptyResponse    = Response{}
-	emptyStdResponse = http.Response{}
+	emptyRequest  = http.Request{}
+	emptyResponse = Response{}
 
 	requestPool = sync.Pool{
 		New: func() interface{} {
@@ -31,18 +30,6 @@ var (
 			return &Response{}
 		},
 	}
-
-	stdResponsePool = sync.Pool{
-		New: func() interface{} {
-			return &http.Response{}
-		},
-	}
-
-	// serverProcessorPool = sync.Pool{
-	// 	New: func() interface{} {
-	// 		return &ServerProcessor{}
-	// 	},
-	// }.
 )
 
 func releaseRequest(req *http.Request) {
@@ -65,12 +52,12 @@ func releaseResponse(res *Response) {
 	}
 }
 
-func releaseStdResponse(res *http.Response) {
-	if res != nil {
-		*res = emptyStdResponse
-		stdResponsePool.Put(res)
-	}
-}
+// func releaseStdResponse(res *http.Response) {
+// 	if res != nil {
+// 		*res = emptyStdResponse
+// 		stdResponsePool.Put(res)
+// 	}
+// }
 
 // Processor .
 type Processor interface {
@@ -329,7 +316,7 @@ func (p *ClientProcessor) OnProto(proto string) error {
 		// 	Proto:  proto,
 		// 	Header: http.Header{},
 		// }
-		p.response = stdResponsePool.Get().(*http.Response)
+		p.response = &http.Response{}
 		p.response.Proto = proto
 		p.response.Header = http.Header{}
 	} else {
@@ -379,7 +366,6 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 	p.response = nil
 	parser.Execute(func() {
 		p.handler(res, nil)
-		releaseStdResponse(res)
 	})
 }
 

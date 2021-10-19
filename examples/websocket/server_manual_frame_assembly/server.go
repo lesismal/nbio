@@ -9,9 +9,9 @@ import (
 	"os/signal"
 	"time"
 
+	"github.com/lesismal/nbio/examples/fixedbufferpool"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
-	"github.com/lesismal/nbio/examples/fixedbufferpool"
 )
 
 var (
@@ -83,7 +83,8 @@ func main() {
 		Network:                 "tcp",
 		Addrs:                   []string{"localhost:8888"},
 		ReleaseWebsocketPayload: true,
-	}, mux, nil)
+		Handler:                 mux,
+	})
 
 	err := svr.Start()
 	if err != nil {

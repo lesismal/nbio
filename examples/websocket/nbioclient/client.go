@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/url"
 	"os"
@@ -31,9 +32,7 @@ func newUpgrader() *websocket.Upgrader {
 }
 
 func main() {
-	engine := nbhttp.NewEngine(nbhttp.Config{
-		SupportClient: true,
-	})
+	engine := nbhttp.NewEngine(nbhttp.Config{})
 	err := engine.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
@@ -47,9 +46,11 @@ func main() {
 			Upgrader:    newUpgrader(),
 			DialTimeout: time.Second * 3,
 		}
-		c, _, err := dialer.Dial(u.String(), nil)
+		c, res, err := dialer.Dial(u.String(), nil)
 		if err != nil {
-			panic(fmt.Errorf("dial: %v", err))
+			bReason, _ := io.ReadAll(res.Body)
+			fmt.Printf("dial: %v, reason: %v\n", err, string(bReason))
+			return
 		}
 		c.WriteMessage(websocket.TextMessage, []byte("hello"))
 	}

@@ -46,7 +46,8 @@ func main() {
 		Addrs:                   addrs,
 		MaxLoad:                 1000000,
 		ReleaseWebsocketPayload: true,
-	}, mux, nil)
+		Handler:                 mux,
+	})
 
 	err := svr.Start()
 	if err != nil {

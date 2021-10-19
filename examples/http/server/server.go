@@ -35,7 +35,8 @@ func main() {
 	svr := nbhttp.NewServer(nbhttp.Config{
 		Network: "tcp",
 		Addrs:   []string{"localhost:8888"},
-	}, mux, nil) // pool.Go)
+		Handler: mux,
+	}) // pool.Go)
 
 	err := svr.Start()
 	if err != nil {
