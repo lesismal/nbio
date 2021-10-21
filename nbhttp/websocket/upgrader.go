@@ -148,11 +148,22 @@ func (u *Upgrader) CompressionEnabled() bool {
 	return u.compress
 }
 
-// NewUpgrader .
-func NewUpgrader() *Upgrader {
-	return NewUpgraderWithSetttings(NewSettings())
+// NewUpgrader Returns an Upgrader that can be used by one connection only. You may provide as argument
+// a Settings pointer that is common to multiple connections. If no Settings argument is provided,
+// a default one will be allocated for each call without the Settings aguement. To reduce memory usage,
+// it is advised to create a common setting instance to be shared by multple connections.
+func NewUpgrader(v ...interface{}) *Upgrader {
+	var settings *Settings
+	if len(v) > 0 {
+		settings, _ = v[0].(*Settings)
+	}
+	if settings == nil {
+		settings = NewSettings()
+	}
+	return NewUpgraderWithSettings(settings)
 }
-func NewUpgraderWithSetttings(s *Settings) *Upgrader {
+
+func NewUpgraderWithSettings(s *Settings) *Upgrader {
 	u := &Upgrader{settings: s}
 	return u
 }
