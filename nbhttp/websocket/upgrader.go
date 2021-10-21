@@ -205,6 +205,9 @@ func (u *Upgrader) SetCompressionLevel(level int) error {
 
 // Upgrade .
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
+	if u.conn != nil {
+		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeInstanceReused)
+	}
 	if !headerContains(r.Header, "Connection", "upgrade") {
 		return nil, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}
