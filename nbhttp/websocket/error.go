@@ -9,6 +9,9 @@ import (
 )
 
 var (
+	// ErrUpgradeInstanceReused this is a developer error the should only occur when a Websocket Upgrade object is used more than once.
+	ErrUpgradeInstanceReused = errors.New("developer error: Websocket upgrader used for more than one connection")
+
 	// ErrUpgradeTokenNotFound .
 	ErrUpgradeTokenNotFound = errors.New("websocket: the client is not using the websocket protocol: 'upgrade' token not found in 'Connection' header")
 

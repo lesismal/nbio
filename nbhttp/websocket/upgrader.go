@@ -27,105 +27,86 @@ type Hijacker interface {
 	Hijack() (net.Conn, error)
 }
 
-// Upgrader .
-type Upgrader struct {
-	conn *Conn
-
+type Settings struct {
 	ReadLimit int64
 	// MessageLengthLimit is the maximum length of websocket message. 0 for unlimited.
 	MessageLengthLimit int64
 	HandshakeTimeout   time.Duration
 
-	enableCompression bool
-	Subprotocols      []string
-
-	CheckOrigin func(r *http.Request) bool
-
-	expectingFragments     bool
-	compress               bool
+	enableCompression      bool
+	Subprotocols           []string
+	CheckOrigin            func(r *http.Request) bool
 	enableWriteCompression bool
 	compressionLevel       int
-
-	opcode  MessageType
-	buffer  []byte
-	message []byte
-
-	pingMessageHandler  func(c *Conn, appData string)
-	pongMessageHandler  func(c *Conn, appData string)
-	closeMessageHandler func(c *Conn, code int, text string)
-
-	openHandler      func(*Conn)
-	messageHandler   func(c *Conn, messageType MessageType, data []byte)
-	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
-	onClose          func(c *Conn, err error)
-
-	Engine *nbhttp.Engine
+	pingMessageHandler     func(c *Conn, appData string)
+	pongMessageHandler     func(c *Conn, appData string)
+	closeMessageHandler    func(c *Conn, code int, text string)
+	openHandler            func(*Conn)
+	messageHandler         func(c *Conn, messageType MessageType, data []byte)
+	dataFrameHandler       func(c *Conn, messageType MessageType, fin bool, data []byte)
+	onClose                func(c *Conn, err error)
+	Engine                 *nbhttp.Engine
 }
 
-// CompressionEnabled .
-func (u *Upgrader) CompressionEnabled() bool {
-	return u.compress
-}
+func NewSettings() *Settings {
+	s := &Settings{}
 
-// NewUpgrader .
-func NewUpgrader() *Upgrader {
-	u := &Upgrader{}
-	u.pingMessageHandler = func(c *Conn, data string) {
+	s.pingMessageHandler = func(c *Conn, data string) {
 		if len(data) > 125 {
-			u.conn.Close()
+			c.Close()
 			return
 		}
 		err := c.WriteMessage(PongMessage, []byte(data))
 		if err != nil {
 			logging.Debug("failed to send pong %v", err)
-			u.conn.Close()
+			c.Close()
 			return
 		}
 	}
-	u.pongMessageHandler = func(*Conn, string) {}
-	u.closeMessageHandler = func(c *Conn, code int, text string) {
+	s.pongMessageHandler = func(*Conn, string) {}
+	s.closeMessageHandler = func(c *Conn, code int, text string) {
 		if len(text)+2 > maxControlFramePayloadSize {
 			return //ErrInvalidControlFrame
 		}
 		buf := mempool.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
-		u.conn.WriteMessage(CloseMessage, buf)
+		c.WriteMessage(CloseMessage, buf)
 		mempool.Free(buf)
 	}
-	return u
+	return s
 }
 
 // SetCloseHandler .
-func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
+func (s *Settings) SetCloseHandler(h func(*Conn, int, string)) {
 	if h != nil {
-		u.closeMessageHandler = h
+		s.closeMessageHandler = h
 	}
 }
 
 // SetPingHandler .
-func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
+func (s *Settings) SetPingHandler(h func(*Conn, string)) {
 	if h != nil {
-		u.pingMessageHandler = h
+		s.pingMessageHandler = h
 	}
 }
 
 // SetPongHandler .
-func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
+func (s *Settings) SetPongHandler(h func(*Conn, string)) {
 	if h != nil {
-		u.pongMessageHandler = h
+		s.pongMessageHandler = h
 	}
 }
 
 // OnOpen .
-func (u *Upgrader) OnOpen(h func(*Conn)) {
-	u.openHandler = h
+func (s *Settings) OnOpen(h func(*Conn)) {
+	s.openHandler = h
 }
 
 // OnMessage .
-func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
+func (s *Settings) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
-		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
+		s.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			if c.Engine.ReleaseWebsocketPayload {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
@@ -135,9 +116,9 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 }
 
 // OnDataFrame .
-func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
+func (s *Settings) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
-		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
+		s.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			if c.Engine.ReleaseWebsocketPayload {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
@@ -146,24 +127,79 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	}
 }
 
+// Upgrader must have one per connection.
+type Upgrader struct {
+	settings           *Settings
+	conn               *Conn
+	expectingFragments bool
+	compress           bool
+	opcode             MessageType
+	buffer             []byte
+	message            []byte
+}
+
+// CompressionEnabled .
+func (u *Upgrader) CompressionEnabled() bool {
+	return u.compress
+}
+
+// NewUpgrader .
+func NewUpgrader() *Upgrader {
+	return NewUpgraderWithSetttings(NewSettings())
+}
+func NewUpgraderWithSetttings(s *Settings) *Upgrader {
+	u := &Upgrader{settings: s}
+	return u
+}
+
+// SetCloseHandler .
+func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
+	u.settings.SetCloseHandler(h)
+}
+
+// SetPingHandler .
+func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
+	u.settings.SetPingHandler(h)
+}
+
+// SetPongHandler .
+func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
+	u.settings.SetPongHandler(h)
+}
+
+// OnOpen .
+func (u *Upgrader) OnOpen(h func(*Conn)) {
+	u.settings.OnOpen(h)
+}
+
+// OnMessage .
+func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
+	u.settings.OnMessage(h)
+}
+
+// OnDataFrame .
+func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
+	u.settings.OnDataFrame(h)
+}
+
 // OnClose .
 func (u *Upgrader) OnClose(h func(*Conn, error)) {
-	u.onClose = h
+	u.settings.onClose = h
 }
 
 // EnableCompression .
 func (u *Upgrader) EnableCompression(enable bool) {
-	u.enableCompression = enable
+	u.settings.enableCompression = enable
 }
 
 // EnableWriteCompression .
 func (u *Upgrader) EnableWriteCompression(enable bool) {
-	u.enableWriteCompression = enable
+	u.settings.enableWriteCompression = enable
 }
 
 // SetCompressionLevel .
 func (u *Upgrader) SetCompressionLevel(level int) error {
-	u.compressionLevel = level
+	u.settings.compressionLevel = level
 	return nil
 }
 
@@ -189,7 +225,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeUnsupportedExtensions)
 	}
 
-	checkOrigin := u.CheckOrigin
+	checkOrigin := u.settings.CheckOrigin
 	if checkOrigin == nil {
 		checkOrigin = checkSameOrigin
 	}
@@ -206,7 +242,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	// Negotiate PMCE
 	var compress bool
-	if u.enableCompression {
+	if u.settings.enableCompression {
 		for _, ext := range parseExtensions(r.Header) {
 			if ext[""] != "permessage-deflate" {
 				continue
@@ -276,16 +312,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 	buf = append(buf, "\r\n"...)
 
-	if u.HandshakeTimeout > 0 {
-		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
+	if u.settings.HandshakeTimeout > 0 {
+		conn.SetWriteDeadline(time.Now().Add(u.settings.HandshakeTimeout))
 	}
 
 	u.conn = newConn(u, conn, subprotocol, compress)
-	u.Engine = parser.Engine
+	u.settings.Engine = parser.Engine
 	u.conn.Engine = parser.Engine
 
-	if u.openHandler != nil {
-		u.openHandler(u.conn)
+	if u.settings.openHandler != nil {
+		u.settings.openHandler(u.conn)
 	}
 
 	if _, err = conn.Write(buf); err != nil {
@@ -293,13 +329,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
-	u.conn.OnClose(u.onClose)
+	u.conn.OnClose(u.settings.onClose)
 
 	return u.conn, nil
 }
 
 func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
-	if res1 && !u.enableCompression {
+	if res1 && !u.settings.enableCompression {
 		return ErrReserveBitSet
 	}
 	if res2 || res3 {
@@ -319,17 +355,17 @@ func (u *Upgrader) validFrame(opcode MessageType, fin, res1, res2, res3, expecti
 
 // return false if length is ok.
 func (u *Upgrader) isMessageTooLarge(len int) bool {
-	if u.MessageLengthLimit == 0 {
+	if u.settings.MessageLengthLimit == 0 {
 		// 0 means unlimitted size
 		return false
 	}
-	return len > int(u.MessageLengthLimit)
+	return len > int(u.settings.MessageLengthLimit)
 }
 
 // Read .
 func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 	bufLen := len(u.buffer)
-	if u.ReadLimit > 0 && (int64(bufLen+len(data)) > u.ReadLimit || int64(bufLen+len(u.message)) > u.ReadLimit) {
+	if u.settings.ReadLimit > 0 && (int64(bufLen+len(data)) > u.settings.ReadLimit || int64(bufLen+len(u.message)) > u.settings.ReadLimit) {
 		return nbhttp.ErrTooLong
 	}
 
@@ -356,25 +392,25 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				u.compress = res1
 			}
 			bl := len(body)
-			if u.dataFrameHandler != nil {
+			if u.settings.dataFrameHandler != nil {
 				var frame []byte
 				if bl > 0 {
 					if u.isMessageTooLarge(bl) {
 						err = ErrMessageTooLarge
 						break
 					}
-					frame = u.Engine.BodyAllocator.Malloc(bl)
+					frame = u.settings.Engine.BodyAllocator.Malloc(bl)
 					copy(frame, body)
 				}
-				if u.opcode == TextMessage && len(frame) > 0 && !u.Engine.CheckUtf8(frame) {
+				if u.opcode == TextMessage && len(frame) > 0 && !u.settings.Engine.CheckUtf8(frame) {
 					u.conn.Close()
 				} else {
 					u.handleDataFrame(p, u.conn, u.opcode, fin, frame)
 				}
 			}
-			if bl > 0 && u.messageHandler != nil {
+			if bl > 0 && u.settings.messageHandler != nil {
 				if u.message == nil {
-					u.message = u.Engine.BodyAllocator.Malloc(len(body))
+					u.message = u.settings.Engine.BodyAllocator.Malloc(len(body))
 					if u.isMessageTooLarge(len(body)) {
 						err = ErrMessageTooLarge
 						break
@@ -389,12 +425,12 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 				}
 			}
 			if fin {
-				if u.messageHandler != nil {
+				if u.settings.messageHandler != nil {
 					if u.compress {
 						var b []byte
 						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
 						b, err = u.readAll(rc, len(u.message)*2)
-						u.Engine.BodyAllocator.Free(u.message)
+						u.settings.Engine.BodyAllocator.Free(u.message)
 						u.message = b
 						rc.Close()
 						if err != nil {
@@ -417,7 +453,7 @@ func (u *Upgrader) Read(p *nbhttp.Parser, data []byte) error {
 					err = ErrMessageTooLarge
 					break
 				}
-				frame = u.Engine.BodyAllocator.Malloc(len(body))
+				frame = u.settings.Engine.BodyAllocator.Malloc(len(body))
 				copy(frame, body)
 			}
 			u.handleProtocolMessage(p, opcode, frame)
@@ -460,14 +496,14 @@ func (u *Upgrader) Close(p *nbhttp.Parser, err error) {
 }
 
 func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType, fin bool, data []byte) {
-	h := u.dataFrameHandler
+	h := u.settings.dataFrameHandler
 	p.Execute(func() {
 		h(c, opcode, fin, data)
 	})
 }
 
 func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
-	if u.opcode == TextMessage && !u.Engine.CheckUtf8(u.message) {
+	if u.opcode == TextMessage && !u.settings.Engine.CheckUtf8(u.message) {
 		u.conn.Close()
 		return
 	}
@@ -481,8 +517,8 @@ func (u *Upgrader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []by
 func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	p.Execute(func() {
 		u.handleWsMessage(u.conn, opcode, body)
-		if len(body) > 0 && u.Engine.ReleaseWebsocketPayload {
-			u.Engine.BodyAllocator.Free(body)
+		if len(body) > 0 && u.settings.Engine.ReleaseWebsocketPayload {
+			u.settings.Engine.BodyAllocator.Free(body)
 		}
 	})
 }
@@ -490,7 +526,7 @@ func (u *Upgrader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, b
 func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 	switch opcode {
 	case TextMessage, BinaryMessage:
-		u.messageHandler(c, opcode, data)
+		u.settings.messageHandler(c, opcode, data)
 	case CloseMessage:
 		if len(data) >= 2 {
 			code := int(binary.BigEndian.Uint16(data[:2]))
@@ -499,7 +535,7 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
 				c.WriteMessage(CloseMessage, protoErrorCode)
 			} else {
-				u.closeMessageHandler(c, code, string(data[2:]))
+				u.settings.closeMessageHandler(c, code, string(data[2:]))
 			}
 		} else {
 			c.WriteMessage(CloseMessage, nil)
@@ -507,9 +543,9 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 		// close immediately, no need to wait for data flushed on a blocked conn
 		c.Close()
 	case PingMessage:
-		u.pingMessageHandler(c, string(data))
+		u.settings.pingMessageHandler(c, string(data))
 	case PongMessage:
-		u.pongMessageHandler(c, string(data))
+		u.settings.pongMessageHandler(c, string(data))
 	case FragmentMessage:
 		logging.Debug("invalid fragment message")
 		c.Close()
@@ -575,9 +611,9 @@ func (u *Upgrader) returnError(w http.ResponseWriter, _ *http.Request, status in
 }
 
 func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
-	if u.Subprotocols != nil {
+	if u.settings.Subprotocols != nil {
 		clientProtocols := subprotocols(r)
-		for _, serverProtocol := range u.Subprotocols {
+		for _, serverProtocol := range u.settings.Subprotocols {
 			for _, clientProtocol := range clientProtocols {
 				if clientProtocol == serverProtocol {
 					return clientProtocol
@@ -870,7 +906,7 @@ func nextTokenOrQuoted(s string) (value string, rest string) {
 
 func (u *Upgrader) readAll(r io.Reader, size int) ([]byte, error) {
 	const maxAppendSize = 1024 * 1024 * 4
-	buf := u.Engine.BodyAllocator.Malloc(size)[0:0]
+	buf := u.settings.Engine.BodyAllocator.Malloc(size)[0:0]
 	for {
 		n, err := r.Read(buf[len(buf):cap(buf)])
 		if n > 0 {

@@ -305,8 +305,8 @@ func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 		compressionLevel:         defaultCompressionLevel,
 		onClose:                  func(*Conn, error) {},
 	}
-	conn.EnableWriteCompression(u.enableWriteCompression)
-	conn.SetCompressionLevel(u.compressionLevel)
+	conn.EnableWriteCompression(u.settings.enableWriteCompression)
+	conn.SetCompressionLevel(u.settings.compressionLevel)
 
 	return conn
 }

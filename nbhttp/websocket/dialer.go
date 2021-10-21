@@ -241,13 +241,13 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		wsConn = newConn(upgrader, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled)
 		wsConn.isClient = true
 		wsConn.Engine = d.Engine
-		wsConn.OnClose(upgrader.onClose)
+		wsConn.OnClose(upgrader.settings.onClose)
 
 		upgrader.conn = wsConn
-		upgrader.Engine = parser.Engine
+		upgrader.settings.Engine = parser.Engine
 
-		if upgrader.openHandler != nil {
-			upgrader.openHandler(wsConn)
+		if upgrader.settings.openHandler != nil {
+			upgrader.settings.openHandler(wsConn)
 		}
 
 		notifyResult(err)
