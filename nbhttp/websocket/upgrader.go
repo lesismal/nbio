@@ -127,6 +127,11 @@ func (s *Settings) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	}
 }
 
+// OnClose .
+func (s *Settings) OnClose(h func(*Conn, error)) {
+	s.onClose = h
+}
+
 // Upgrader must have one per connection.
 type Upgrader struct {
 	settings           *Settings
@@ -184,7 +189,7 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 
 // OnClose .
 func (u *Upgrader) OnClose(h func(*Conn, error)) {
-	u.settings.onClose = h
+	u.settings.OnClose(h)
 }
 
 // EnableCompression .
