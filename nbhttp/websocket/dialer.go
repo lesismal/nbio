@@ -203,8 +203,9 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			notifyResult(err)
 			return
 		}
+		state := &connState{common: upgrader}
 
-		parser.Upgrader = upgrader
+		parser.ConnState = state
 
 		if d.Jar != nil {
 			if rc := resp.Cookies(); len(rc) > 0 {
@@ -243,7 +244,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		wsConn.Engine = d.Engine
 		wsConn.OnClose(upgrader.onClose)
 
-		upgrader.conn = wsConn
+		state.conn = wsConn
 		upgrader.Engine = parser.Engine
 
 		if upgrader.openHandler != nil {
