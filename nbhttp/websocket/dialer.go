@@ -245,7 +245,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		wsConn.OnClose(upgrader.onClose)
 
 		state.conn = wsConn
-		upgrader.Engine = parser.Engine
+		state.Engine = parser.Engine
 
 		if upgrader.openHandler != nil {
 			upgrader.openHandler(wsConn)
