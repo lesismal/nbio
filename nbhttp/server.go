@@ -17,18 +17,14 @@ type Server struct {
 
 // NewServer .
 func NewServer(conf Config, v ...interface{}) *Server {
-	if conf.Handler != nil {
-		if len(v) > 0 {
-			if handler, ok := v[0].(http.Handler); ok {
-				conf.Handler = handler
-			}
+	if len(v) > 0 {
+		if handler, ok := v[0].(http.Handler); ok {
+			conf.Handler = handler
 		}
 	}
-	if conf.ServerExecutor != nil {
-		if len(v) > 1 {
-			if messageHandlerExecutor, ok := v[1].(func(f func())); ok {
-				conf.ServerExecutor = messageHandlerExecutor
-			}
+	if len(v) > 1 {
+		if messageHandlerExecutor, ok := v[1].(func(f func())); ok {
+			conf.ServerExecutor = messageHandlerExecutor
 		}
 	}
 	return &Server{Engine: NewEngine(conf)}
@@ -36,25 +32,19 @@ func NewServer(conf Config, v ...interface{}) *Server {
 
 // NewServerTLS .
 func NewServerTLS(conf Config, v ...interface{}) *Server {
-	if conf.Handler != nil {
-		if len(v) > 0 {
-			if handler, ok := v[0].(http.Handler); ok {
-				conf.Handler = handler
-			}
+	if len(v) > 0 {
+		if handler, ok := v[0].(http.Handler); ok {
+			conf.Handler = handler
 		}
 	}
-	if conf.ServerExecutor != nil {
-		if len(v) > 1 {
-			if messageHandlerExecutor, ok := v[1].(func(f func())); ok {
-				conf.ServerExecutor = messageHandlerExecutor
-			}
+	if len(v) > 1 {
+		if messageHandlerExecutor, ok := v[1].(func(f func())); ok {
+			conf.ServerExecutor = messageHandlerExecutor
 		}
 	}
-	if conf.TLSConfig != nil {
-		if len(v) > 2 {
-			if tlsConfig, ok := v[2].(*tls.Config); ok {
-				conf.TLSConfig = tlsConfig
-			}
+	if len(v) > 2 {
+		if tlsConfig, ok := v[2].(*tls.Config); ok {
+			conf.TLSConfig = tlsConfig
 		}
 	}
 	return &Server{Engine: NewEngine(conf)}
