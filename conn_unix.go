@@ -316,7 +316,7 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		left := len(b) - n
 		if left > 0 {
-			// c.writeBuffer = c.g.allocator.Malloc(left)
+			c.writeBuffer = c.g.writeBufferAllocator.Malloc(left)
 			copy(c.writeBuffer, b[n:])
 			c.modWrite()
 		}
@@ -353,9 +353,9 @@ func (c *Conn) flush() error {
 	left := len(old) - n
 	if left > 0 {
 		if n > 0 {
-			// c.writeBuffer = c.g.allocator.Malloc(left)
+			c.writeBuffer = c.g.writeBufferAllocator.Malloc(left)
 			copy(c.writeBuffer, old[n:])
-			// c.g.allocator.Free(old)
+			c.g.writeBufferAllocator.Free(old)
 		}
 		// c.modWrite()
 	} else {
@@ -393,13 +393,15 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	}
 
 	if len(in) > 1 && size <= 65536 {
-		// b := c.g.allocator.Malloc(size)
+		b := c.g.writeBufferAllocator.Malloc(size)
 		copied := 0
 		for _, v := range in {
 			copy(b[copied:], v)
 			copied += len(v)
 		}
-		return c.write(b)
+		n, err := c.write(b)
+		c.g.writeBufferAllocator.Free(b)
+		return n, err
 	}
 
 	nwrite := 0
@@ -443,9 +445,9 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	if c.writeBuffer != nil {
-		// c.g.allocator.Free(c.writeBuffer)
+		c.g.writeBufferAllocator.Free(c.writeBuffer)
+		c.writeBuffer = nil
 	}
-	c.writeBuffer = nil
 
 	if c.chWaitWrite != nil {
 		select {

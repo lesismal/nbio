@@ -130,7 +130,7 @@ type Gopher struct {
 	trigger   *time.Timer
 	chTimer   chan struct{}
 
-	allocator mempool.Allocator
+	writeBufferAllocator mempool.Allocator
 
 	Execute func(f func())
 }

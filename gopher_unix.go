@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 )
 
 // Start init and start pollers.
@@ -117,7 +118,7 @@ func NewGopher(conf Config) *Gopher {
 		chCalling:                make(chan struct{}, 1),
 		trigger:                  time.NewTimer(timeForever),
 		chTimer:                  make(chan struct{}),
-		allocator:                conf.WriteBufferAllocator,
+		writeBufferAllocator:     conf.WriteBufferAllocator,
 	}
 
 	g.initHandlers()
