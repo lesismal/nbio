@@ -16,7 +16,6 @@ import (
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
-	"github.com/lesismal/nbio/mempool"
 )
 
 // Response represents the server side of an HTTP response.
@@ -119,10 +118,11 @@ func (res *Response) Write(data []byte) (int, error) {
 			return l, nil
 		}
 		_, err := conn.Write(buf)
+		res.parser.Engine.HttpWriteAllocator.Free(buf)
 		if err != nil {
 			return 0, err
 		}
-		buf = mempool.Malloc(0)
+		buf = res.parser.Engine.HttpWriteAllocator.Malloc(1024)[0:0]
 		buf = append(buf, lenStr...)
 		buf = append(buf, "\r\n"...)
 		buf = append(buf, data...)
@@ -131,7 +131,9 @@ func (res *Response) Write(data []byte) (int, error) {
 			res.buffer = buf
 			return l, nil
 		}
-		return conn.Write(buf)
+		n, err := conn.Write(buf)
+		res.parser.Engine.HttpWriteAllocator.Free(buf)
+		return n, err
 	}
 
 	if len(res.header[contentLengthHeader]) > 0 {
@@ -140,13 +142,15 @@ func (res *Response) Write(data []byte) (int, error) {
 		buf := res.buffer
 		res.buffer = nil
 		if buf == nil {
-			buf = mempool.Malloc(l)[0:0]
+			buf = res.parser.Engine.HttpWriteAllocator.Malloc(l)[0:0]
 		}
 		buf = append(buf, data...)
-		return conn.Write(buf)
+		n, err := conn.Write(buf)
+		res.parser.Engine.HttpWriteAllocator.Free(buf)
+		return n, err
 	}
 	if res.bodyBuffer == nil {
-		res.bodyBuffer = mempool.Malloc(l)[0:0]
+		res.bodyBuffer = res.parser.Engine.HttpWriteAllocator.Malloc(l)[0:0]
 	}
 
 	res.bodyBuffer = append(res.bodyBuffer, data...)
@@ -164,6 +168,7 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 	res.hasBody = true
 	res.eoncodeHead()
 	_, err = c.Write(res.buffer)
+	res.parser.Engine.HttpWriteAllocator.Free(res.buffer)
 	res.buffer = nil
 	if err != nil {
 		return 0, err
@@ -235,7 +240,7 @@ func (res *Response) eoncodeHead() {
 	status := res.status
 	statusCode := res.statusCode
 
-	data := mempool.Malloc(1024)[0:0]
+	data := res.parser.Engine.HttpWriteAllocator.Malloc(1024)[0:0]
 
 	data = append(data, res.request.Proto...)
 	data = append(data, ' ', '0'+byte(statusCode/100), '0'+byte(statusCode%100)/10, '0'+byte(statusCode%10), ' ')
@@ -320,10 +325,11 @@ func (res *Response) flushTrailer(conn io.Writer) error {
 		if res.buffer != nil {
 			if res.bodyBuffer != nil {
 				res.buffer = append(res.buffer, res.bodyBuffer...)
-				mempool.Free(res.bodyBuffer)
+				res.parser.Engine.HttpWriteAllocator.Free(res.bodyBuffer)
 				res.bodyBuffer = nil
 			}
 			_, err = conn.Write(res.buffer)
+			res.parser.Engine.HttpWriteAllocator.Free(res.buffer)
 			res.buffer = nil
 			if err != nil {
 				return err
@@ -331,6 +337,7 @@ func (res *Response) flushTrailer(conn io.Writer) error {
 		}
 		if res.bodyBuffer != nil {
 			_, err = conn.Write(res.bodyBuffer)
+			res.parser.Engine.HttpWriteAllocator.Free(res.bodyBuffer)
 			res.bodyBuffer = nil
 		}
 
@@ -340,7 +347,7 @@ func (res *Response) flushTrailer(conn io.Writer) error {
 	data := res.buffer
 	res.buffer = nil
 	if data == nil {
-		data = mempool.Malloc(0)
+		data = res.parser.Engine.HttpWriteAllocator.Malloc(1024)[0:0]
 	}
 	if len(res.trailer) == 0 {
 		data = append(data, "0\r\n\r\n"...)
@@ -355,6 +362,7 @@ func (res *Response) flushTrailer(conn io.Writer) error {
 		data = append(data, "\r\n"...)
 	}
 	_, err = conn.Write(data)
+	res.parser.Engine.HttpWriteAllocator.Free(data)
 	return err
 }
 

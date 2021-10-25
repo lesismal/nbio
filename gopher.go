@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 )
 
 const (
@@ -79,6 +80,8 @@ type Config struct {
 
 	// EpollMod sets the epoll mod, EPOLLLT by default.
 	EpollMod int
+
+	WriteBufferAllocator mempool.Allocator
 }
 
 // Gopher is a manager of poller.
@@ -126,6 +129,8 @@ type Gopher struct {
 	timers    timerHeap
 	trigger   *time.Timer
 	chTimer   chan struct{}
+
+	allocator mempool.Allocator
 
 	Execute func(f func())
 }

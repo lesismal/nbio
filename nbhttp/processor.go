@@ -37,7 +37,6 @@ func releaseRequest(req *http.Request) {
 		if req.Body != nil {
 			br := req.Body.(*BodyReader)
 			br.close()
-			bodyReaderPool.Put(br)
 		}
 		// fast gc for fields
 		*req = emptyRequest
@@ -155,7 +154,7 @@ func (p *ServerProcessor) OnContentLength(contentLength int) {
 // OnBody .
 func (p *ServerProcessor) OnBody(data []byte) {
 	if p.request.Body == nil {
-		p.request.Body = NewBodyReader(data)
+		p.request.Body = NewBodyReader(p.parser.Engine.HttpBodyAllocator, data)
 	} else {
 		p.request.Body.(*BodyReader).Append(data)
 	}
@@ -221,7 +220,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	// }
 
 	if request.Body == nil {
-		request.Body = NewBodyReader(nil)
+		request.Body = NewBodyReader(parser.Engine.HttpBodyAllocator, nil)
 	}
 
 	response := NewResponse(p.parser, request, p.enableSendfile)
@@ -246,7 +245,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 		if req.Close {
 			// the data may still in the send queue
 			p.conn.Close()
-		} else if p.parser == nil || p.parser.ConnState == nil {
+		} else if p.parser == nil || p.parser.Reader == nil {
 			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 		}
 		releaseRequest(req)
@@ -346,7 +345,7 @@ func (p *ClientProcessor) OnContentLength(contentLength int) {
 // OnBody .
 func (p *ClientProcessor) OnBody(data []byte) {
 	if p.response.Body == nil {
-		p.response.Body = NewBodyReader(data)
+		p.response.Body = NewBodyReader(p.conn.Engine.HttpBodyAllocator, data)
 	} else {
 		p.response.Body.(*BodyReader).Append(data)
 	}

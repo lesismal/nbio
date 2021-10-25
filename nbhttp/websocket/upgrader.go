@@ -50,8 +50,9 @@ type Upgrader struct {
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
 	onClose          func(c *Conn, err error)
 }
-type connState struct {
-	common             *Upgrader
+
+type wsReader struct {
+	config             *Upgrader
 	conn               *Conn
 	expectingFragments bool
 	compress           bool
@@ -62,8 +63,8 @@ type connState struct {
 }
 
 // CompressionEnabled .
-func (u *connState) CompressionEnabled() bool {
-	return u.compress
+func (wr *wsReader) CompressionEnabled() bool {
+	return wr.compress
 }
 
 // NewUpgrader .
@@ -126,7 +127,7 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
 			if c.Engine.ReleaseWebsocketPayload {
-				defer c.Engine.BodyAllocator.Free(data)
+				defer c.Engine.WebsocketReadAllocator.Free(data)
 			}
 			h(c, messageType, data)
 		}
@@ -138,7 +139,7 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
 			if c.Engine.ReleaseWebsocketPayload {
-				defer c.Engine.BodyAllocator.Free(data)
+				defer c.Engine.WebsocketReadAllocator.Free(data)
 			}
 			h(c, messageType, fin, data)
 		}
@@ -241,8 +242,8 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
 
-	state := &connState{common: u}
-	parser.ConnState = state
+	state := &wsReader{config: u}
+	parser.Reader = state
 
 	buf := mempool.Malloc(1024)[0:0]
 	buf = append(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "...)
@@ -298,8 +299,8 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	return state.conn, nil
 }
 
-func (u *connState) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
-	if res1 && !u.common.enableCompression {
+func (wr *wsReader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
+	if res1 && !wr.config.enableCompression {
 		return ErrReserveBitSet
 	}
 	if res2 || res3 {
@@ -318,128 +319,128 @@ func (u *connState) validFrame(opcode MessageType, fin, res1, res2, res3, expect
 }
 
 // return false if length is ok.
-func (u *connState) isMessageTooLarge(len int) bool {
-	if u.common.MessageLengthLimit == 0 {
+func (wr *wsReader) isMessageTooLarge(len int) bool {
+	if wr.config.MessageLengthLimit == 0 {
 		// 0 means unlimitted size
 		return false
 	}
-	return len > int(u.common.MessageLengthLimit)
+	return len > int(wr.config.MessageLengthLimit)
 }
 
 // Read .
-func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
-	bufLen := len(u.buffer)
-	if u.common.ReadLimit > 0 && (int64(bufLen+len(data)) > u.common.ReadLimit || int64(bufLen+len(u.message)) > u.common.ReadLimit) {
+func (wr *wsReader) Read(p *nbhttp.Parser, data []byte) error {
+	bufLen := len(wr.buffer)
+	if wr.config.ReadLimit > 0 && (int64(bufLen+len(data)) > wr.config.ReadLimit || int64(bufLen+len(wr.message)) > wr.config.ReadLimit) {
 		return nbhttp.ErrTooLong
 	}
 
 	var oldBuffer []byte
 	if bufLen == 0 {
-		u.buffer = data
+		wr.buffer = data
 	} else {
-		u.buffer = append(u.buffer, data...)
-		oldBuffer = u.buffer
+		wr.buffer = append(wr.buffer, data...)
+		oldBuffer = wr.buffer
 	}
 
 	var err error
 	for i := 0; true; i++ {
-		opcode, body, ok, fin, res1, res2, res3 := u.nextFrame()
+		opcode, body, ok, fin, res1, res2, res3 := wr.nextFrame()
 		if !ok {
 			break
 		}
-		if err = u.validFrame(opcode, fin, res1, res2, res3, u.expectingFragments); err != nil {
+		if err = wr.validFrame(opcode, fin, res1, res2, res3, wr.expectingFragments); err != nil {
 			break
 		}
 		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
-			if u.opcode == 0 {
-				u.opcode = opcode
-				u.compress = res1
+			if wr.opcode == 0 {
+				wr.opcode = opcode
+				wr.compress = res1
 			}
 			bl := len(body)
-			if u.common.dataFrameHandler != nil {
+			if wr.config.dataFrameHandler != nil {
 				var frame []byte
 				if bl > 0 {
-					if u.isMessageTooLarge(bl) {
+					if wr.isMessageTooLarge(bl) {
 						err = ErrMessageTooLarge
 						break
 					}
-					frame = u.Engine.BodyAllocator.Malloc(bl)
+					frame = wr.Engine.WebsocketReadAllocator.Malloc(bl)
 					copy(frame, body)
 				}
-				if u.opcode == TextMessage && len(frame) > 0 && !u.Engine.CheckUtf8(frame) {
-					u.conn.Close()
+				if wr.opcode == TextMessage && len(frame) > 0 && !wr.Engine.CheckUtf8(frame) {
+					wr.conn.Close()
 				} else {
-					u.common.handleDataFrame(p, u.conn, u.opcode, fin, frame)
+					wr.config.handleDataFrame(p, wr.conn, wr.opcode, fin, frame)
 				}
 			}
-			if bl > 0 && u.common.messageHandler != nil {
-				if u.message == nil {
-					u.message = u.Engine.BodyAllocator.Malloc(len(body))
-					if u.isMessageTooLarge(len(body)) {
+			if bl > 0 && wr.config.messageHandler != nil {
+				if wr.message == nil {
+					wr.message = wr.Engine.WebsocketReadAllocator.Malloc(len(body))
+					if wr.isMessageTooLarge(len(body)) {
 						err = ErrMessageTooLarge
 						break
 					}
-					copy(u.message, body)
+					copy(wr.message, body)
 				} else {
-					if u.isMessageTooLarge(len(u.message) + len(body)) {
+					if wr.isMessageTooLarge(len(wr.message) + len(body)) {
 						err = ErrMessageTooLarge
 						break
 					}
-					u.message = append(u.message, body...)
+					wr.message = append(wr.message, body...)
 				}
 			}
 			if fin {
-				if u.common.messageHandler != nil {
-					if u.compress {
+				if wr.config.messageHandler != nil {
+					if wr.compress {
 						var b []byte
-						rc := decompressReader(io.MultiReader(bytes.NewBuffer(u.message), strings.NewReader(flateReaderTail)))
-						b, err = u.readAll(rc, len(u.message)*2)
-						u.Engine.BodyAllocator.Free(u.message)
-						u.message = b
+						rc := decompressReader(io.MultiReader(bytes.NewBuffer(wr.message), strings.NewReader(flateReaderTail)))
+						b, err = wr.readAll(rc, len(wr.message)*2)
+						wr.Engine.WebsocketReadAllocator.Free(wr.message)
+						wr.message = b
 						rc.Close()
 						if err != nil {
 							break
 						}
 					}
-					u.handleMessage(p, u.opcode, u.message)
+					wr.handleMessage(p, wr.opcode, wr.message)
 				}
-				u.compress = false
-				u.expectingFragments = false
-				u.message = nil
-				u.opcode = 0
+				wr.compress = false
+				wr.expectingFragments = false
+				wr.message = nil
+				wr.opcode = 0
 			} else {
-				u.expectingFragments = true
+				wr.expectingFragments = true
 			}
 		} else {
 			var frame []byte
 			if len(body) > 0 {
-				if u.isMessageTooLarge(len(body)) {
+				if wr.isMessageTooLarge(len(body)) {
 					err = ErrMessageTooLarge
 					break
 				}
-				frame = u.Engine.BodyAllocator.Malloc(len(body))
+				frame = wr.Engine.WebsocketReadAllocator.Malloc(len(body))
 				copy(frame, body)
 			}
-			u.handleProtocolMessage(p, opcode, frame)
+			wr.handleProtocolMessage(p, opcode, frame)
 		}
 
-		if len(u.buffer) == 0 {
+		if len(wr.buffer) == 0 {
 			break
 		}
 	}
 
 	if bufLen == 0 {
-		if len(u.buffer) > 0 {
-			tmp := u.buffer
-			u.buffer = mempool.Malloc(len(tmp))
-			copy(u.buffer, tmp)
+		if len(wr.buffer) > 0 {
+			tmp := wr.buffer
+			wr.buffer = wr.Engine.WebsocketReadAllocator.Malloc(len(tmp))
+			copy(wr.buffer, tmp)
 		}
 	} else {
-		if len(u.buffer) < len(oldBuffer) {
-			tmp := u.buffer
-			u.buffer = mempool.Malloc(len(tmp))
-			copy(u.buffer, tmp)
-			mempool.Free(oldBuffer)
+		if len(wr.buffer) < len(oldBuffer) {
+			tmp := wr.buffer
+			wr.buffer = wr.Engine.WebsocketReadAllocator.Malloc(len(tmp))
+			copy(wr.buffer, tmp)
+			wr.Engine.WebsocketReadAllocator.Free(oldBuffer)
 		}
 	}
 
@@ -447,15 +448,15 @@ func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
 }
 
 // Close .
-func (u *connState) Close(p *nbhttp.Parser, err error) {
-	if u.conn != nil {
-		u.conn.onClose(u.conn, err)
+func (wr *wsReader) Close(p *nbhttp.Parser, err error) {
+	if wr.conn != nil {
+		wr.conn.onClose(wr.conn, err)
 	}
-	if len(u.buffer) > 0 {
-		mempool.Free(u.buffer)
+	if len(wr.buffer) > 0 {
+		wr.Engine.WebsocketReadAllocator.Free(wr.buffer)
 	}
-	if len(u.message) > 0 {
-		mempool.Free(u.message)
+	if len(wr.message) > 0 {
+		wr.Engine.WebsocketReadAllocator.Free(wr.message)
 	}
 }
 
@@ -466,23 +467,23 @@ func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType
 	})
 }
 
-func (u *connState) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
-	if u.opcode == TextMessage && !u.Engine.CheckUtf8(u.message) {
-		u.conn.Close()
+func (wr *wsReader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
+	if wr.opcode == TextMessage && !wr.Engine.CheckUtf8(wr.message) {
+		wr.conn.Close()
 		return
 	}
 
 	p.Execute(func() {
-		u.common.handleWsMessage(u.conn, opcode, body)
+		wr.config.handleWsMessage(wr.conn, opcode, body)
 	})
 
 }
 
-func (u *connState) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
+func (wr *wsReader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	p.Execute(func() {
-		u.common.handleWsMessage(u.conn, opcode, body)
-		if len(body) > 0 && u.Engine.ReleaseWebsocketPayload {
-			u.Engine.BodyAllocator.Free(body)
+		wr.config.handleWsMessage(wr.conn, opcode, body)
+		if len(body) > 0 && wr.Engine.ReleaseWebsocketPayload {
+			wr.Engine.WebsocketReadAllocator.Free(body)
 		}
 	})
 }
@@ -518,49 +519,49 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 	}
 }
 
-func (u *connState) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
-	l := int64(len(u.buffer))
+func (wr *wsReader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
+	l := int64(len(wr.buffer))
 	headLen := int64(2)
 	if l >= 2 {
-		opcode = MessageType(u.buffer[0] & 0xF)
-		res1 = int8(u.buffer[0]&0x40) != 0
-		res2 = int8(u.buffer[0]&0x20) != 0
-		res3 = int8(u.buffer[0]&0x10) != 0
-		fin = ((u.buffer[0] & 0x80) != 0)
-		payloadLen := u.buffer[1] & 0x7F
+		opcode = MessageType(wr.buffer[0] & 0xF)
+		res1 = int8(wr.buffer[0]&0x40) != 0
+		res2 = int8(wr.buffer[0]&0x20) != 0
+		res3 = int8(wr.buffer[0]&0x10) != 0
+		fin = ((wr.buffer[0] & 0x80) != 0)
+		payloadLen := wr.buffer[1] & 0x7F
 		bodyLen := int64(-1)
 
 		switch payloadLen {
 		case 126:
 			if l >= 4 {
-				bodyLen = int64(binary.BigEndian.Uint16(u.buffer[2:4]))
+				bodyLen = int64(binary.BigEndian.Uint16(wr.buffer[2:4]))
 				headLen = 4
 			}
 		case 127:
-			if len(u.buffer) >= 10 {
-				bodyLen = int64(binary.BigEndian.Uint64(u.buffer[2:10]))
+			if len(wr.buffer) >= 10 {
+				bodyLen = int64(binary.BigEndian.Uint64(wr.buffer[2:10]))
 				headLen = 10
 			}
 		default:
 			bodyLen = int64(payloadLen)
 		}
 		if bodyLen >= 0 {
-			masked := (u.buffer[1] & 0x80) != 0
+			masked := (wr.buffer[1] & 0x80) != 0
 			if masked {
 				headLen += 4
 			}
 			total := headLen + bodyLen
 			if l >= total {
-				body = u.buffer[headLen:total]
+				body = wr.buffer[headLen:total]
 				if masked {
-					maskKey := u.buffer[headLen-4 : headLen]
+					maskKey := wr.buffer[headLen-4 : headLen]
 					for i := 0; i < len(body); i++ {
 						body[i] ^= maskKey[i%4]
 					}
 				}
 
 				ok = true
-				u.buffer = u.buffer[total:l]
+				wr.buffer = wr.buffer[total:l]
 			}
 		}
 	}
@@ -868,9 +869,9 @@ func nextTokenOrQuoted(s string) (value string, rest string) {
 	return "", ""
 }
 
-func (u *connState) readAll(r io.Reader, size int) ([]byte, error) {
+func (wr *wsReader) readAll(r io.Reader, size int) ([]byte, error) {
 	const maxAppendSize = 1024 * 1024 * 4
-	buf := u.Engine.BodyAllocator.Malloc(size)[0:0]
+	buf := wr.Engine.WebsocketReadAllocator.Malloc(size)[0:0]
 	for {
 		n, err := r.Read(buf[len(buf):cap(buf)])
 		if n > 0 {

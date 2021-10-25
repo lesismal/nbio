@@ -93,6 +93,9 @@ func NewGopher(conf Config) *Gopher {
 	if conf.MaxReadTimesPerEventLoop <= 0 {
 		conf.MaxReadTimesPerEventLoop = DefaultMaxReadTimesPerEventLoop
 	}
+	if conf.WriteBufferAllocator == nil {
+		conf.WriteBufferAllocator = mempool.DefaultMemPool
+	}
 
 	g := &Gopher{
 		Name:                     conf.Name,
@@ -114,6 +117,7 @@ func NewGopher(conf Config) *Gopher {
 		chCalling:                make(chan struct{}, 1),
 		trigger:                  time.NewTimer(timeForever),
 		chTimer:                  make(chan struct{}),
+		allocator:                conf.WriteBufferAllocator,
 	}
 
 	g.initHandlers()

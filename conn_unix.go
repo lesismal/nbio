@@ -13,8 +13,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 // Conn implements net.Conn.
@@ -318,7 +316,7 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		left := len(b) - n
 		if left > 0 {
-			c.writeBuffer = mempool.Malloc(left)
+			// c.writeBuffer = c.g.allocator.Malloc(left)
 			copy(c.writeBuffer, b[n:])
 			c.modWrite()
 		}
@@ -342,7 +340,6 @@ func (c *Conn) flush() error {
 	}
 
 	old := c.writeBuffer
-
 	n, err := syscall.Write(c.fd, old)
 	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
@@ -356,9 +353,9 @@ func (c *Conn) flush() error {
 	left := len(old) - n
 	if left > 0 {
 		if n > 0 {
-			c.writeBuffer = mempool.Malloc(left)
+			// c.writeBuffer = c.g.allocator.Malloc(left)
 			copy(c.writeBuffer, old[n:])
-			mempool.Free(old)
+			// c.g.allocator.Free(old)
 		}
 		// c.modWrite()
 	} else {
@@ -396,7 +393,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	}
 
 	if len(in) > 1 && size <= 65536 {
-		b := mempool.Malloc(size)
+		// b := c.g.allocator.Malloc(size)
 		copied := 0
 		for _, v := range in {
 			copy(b[copied:], v)
@@ -445,7 +442,9 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 		c.rTimer = nil
 	}
 
-	mempool.Free(c.writeBuffer)
+	if c.writeBuffer != nil {
+		// c.g.allocator.Free(c.writeBuffer)
+	}
 	c.writeBuffer = nil
 
 	if c.chWaitWrite != nil {

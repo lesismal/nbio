@@ -12,7 +12,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -149,9 +148,9 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	if compress {
 		compress = true
 		w := &writeBuffer{
-			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
+			Buffer: bytes.NewBuffer(c.Engine.WebsocketWriteAllocator.Malloc(len(data))),
 		}
-		defer w.Close()
+		defer c.Engine.WebsocketWriteAllocator.Free(w.Bytes())
 		w.Reset()
 		cw := compressWriter(w, c.compressionLevel)
 		_, err := cw.Write(data)
@@ -199,7 +198,6 @@ type writeBuffer struct {
 
 // Close .
 func (w *writeBuffer) Close() error {
-	mempool.Free(w.Bytes())
 	return nil
 }
 
@@ -224,18 +222,18 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 
 	if bodyLen < 126 {
 		headLen = 2 + maskLen
-		buf = mempool.Malloc(len(data) + headLen)
+		buf = c.Engine.WebsocketWriteAllocator.Malloc(len(data) + headLen)
 		buf[0] = 0
 		buf[1] = (byte1 | byte(bodyLen))
 	} else if bodyLen <= 65535 {
 		headLen = 4 + maskLen
-		buf = mempool.Malloc(len(data) + headLen)
+		buf = c.Engine.WebsocketWriteAllocator.Malloc(len(data) + headLen)
 		buf[0] = 0
 		buf[1] = (byte1 | 126)
 		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
 	} else {
 		headLen = 10 + maskLen
-		buf = mempool.Malloc(len(data) + headLen)
+		buf = c.Engine.WebsocketWriteAllocator.Malloc(len(data) + headLen)
 		buf[0] = 0
 		buf[1] = (byte1 | 127)
 		binary.BigEndian.PutUint64(buf[2:10], uint64(bodyLen))
@@ -269,6 +267,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	}
 
 	_, err := c.Conn.Write(buf)
+	c.Engine.WebsocketWriteAllocator.Free(buf)
 	return err
 }
 

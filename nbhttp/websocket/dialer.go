@@ -203,9 +203,9 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			notifyResult(err)
 			return
 		}
-		state := &connState{common: upgrader}
+		state := &wsReader{config: upgrader}
 
-		parser.ConnState = state
+		parser.Reader = state
 
 		if d.Jar != nil {
 			if rc := resp.Cookies(); len(rc) > 0 {

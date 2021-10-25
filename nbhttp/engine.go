@@ -144,9 +144,12 @@ type Config struct {
 
 	ClientExecutor func(f func())
 
-	TLSAllocator tls.Allocator
-
-	BodyAllocator mempool.Allocator
+	ConnWriteBufferAllocator mempool.Allocator
+	TLSAllocator             mempool.Allocator
+	HttpBodyAllocator        mempool.Allocator
+	HttpWriteAllocator       mempool.Allocator
+	WebsocketReadAllocator   mempool.Allocator
+	WebsocketWriteAllocator  mempool.Allocator
 
 	Context context.Context
 	Cancel  func()
@@ -162,7 +165,6 @@ type Engine struct {
 	MaxLoad                      int
 	MaxWebsocketFramePayloadSize int
 	ReleaseWebsocketPayload      bool
-	BodyAllocator                mempool.Allocator
 	CheckUtf8                    func(data []byte) bool
 
 	listeners []net.Listener
@@ -580,8 +582,23 @@ func NewEngine(conf Config) *Engine {
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
 	}
-	if conf.BodyAllocator == nil {
-		conf.BodyAllocator = mempool.DefaultMemPool
+	if conf.ConnWriteBufferAllocator == nil {
+		conf.ConnWriteBufferAllocator = mempool.DefaultMemPool
+	}
+	if conf.TLSAllocator == nil {
+		conf.TLSAllocator = mempool.DefaultMemPool
+	}
+	if conf.HttpBodyAllocator == nil {
+		conf.HttpBodyAllocator = mempool.DefaultMemPool
+	}
+	if conf.HttpWriteAllocator == nil {
+		conf.HttpWriteAllocator = mempool.DefaultMemPool
+	}
+	if conf.WebsocketReadAllocator == nil {
+		conf.WebsocketReadAllocator = mempool.DefaultMemPool
+	}
+	if conf.WebsocketWriteAllocator == nil {
+		conf.WebsocketWriteAllocator = mempool.DefaultMemPool
 	}
 
 	var handler = conf.Handler
@@ -640,6 +657,7 @@ func NewEngine(conf Config) *Engine {
 		MaxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
 		LockPoller:               conf.LockPoller,
 		LockListener:             conf.LockListener,
+		WriteBufferAllocator:     conf.ConnWriteBufferAllocator,
 	}
 	g := nbio.NewGopher(gopherConf)
 	g.Execute = serverExecutor
@@ -667,8 +685,6 @@ func NewEngine(conf Config) *Engine {
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
 		Cancel:       cancel,
-
-		BodyAllocator: conf.BodyAllocator,
 	}
 
 	shouldSupportTLS := !conf.SupportServerOnly || len(conf.AddrsTLS) > 0
@@ -695,9 +711,9 @@ func NewEngine(conf Config) *Engine {
 			c.DataHandler(c, data)
 		}
 	})
-	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-		mempool.Free(buffer)
-	})
+	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+	// 	mempool.Free(buffer)
+	// })
 	g.OnStop(func() {
 		engine._onStop()
 		g.Execute = func(f func()) {}

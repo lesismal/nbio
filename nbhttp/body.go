@@ -21,8 +21,9 @@ var (
 
 // BodyReader .
 type BodyReader struct {
-	index  int
-	buffer []byte
+	index     int
+	buffer    []byte
+	allocator mempool.Allocator
 }
 
 // Read implements io.Reader.
@@ -49,7 +50,7 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 func (br *BodyReader) Append(data []byte) {
 	if len(data) > 0 {
 		if br.buffer == nil {
-			br.buffer = mempool.Malloc(len(data))
+			br.buffer = br.allocator.Malloc(len(data))
 			copy(br.buffer, data)
 		} else {
 			br.buffer = append(br.buffer, data...)
@@ -81,19 +82,21 @@ func (br *BodyReader) Close() error {
 
 func (br *BodyReader) close() {
 	if br.buffer != nil {
-		mempool.Free(br.buffer)
+		br.allocator.Free(br.buffer)
 		br.buffer = nil
 		br.index = 0
+		bodyReaderPool.Put(br)
 	}
 }
 
 // NewBodyReader creates a BodyReader.
-func NewBodyReader(data []byte) *BodyReader {
+func NewBodyReader(allocator mempool.Allocator, data []byte) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
+	br.index = 0
+	br.allocator = allocator
 	if len(data) > 0 {
-		br.buffer = mempool.Malloc(len(data))
+		br.buffer = br.allocator.Malloc(len(data))
 		copy(br.buffer, data)
 	}
-	br.index = 0
 	return br
 }
