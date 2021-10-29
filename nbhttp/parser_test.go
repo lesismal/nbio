@@ -135,13 +135,14 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 			nRequest++
 		})
 	}
-	svr := &Server{
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
-	}
+	svr := NewServer(Config{})
 	parser = NewParser(processor, isClient, maxReadSize, nil)
 	parser.Engine = svr.Engine
+	if pr, ok := processor.(*ServerProcessor); ok {
+		pr.parser = parser
+	} else {
+		processor.(*ClientProcessor).conn = &ClientConn{Engine: parser.Engine}
+	}
 	tBegin := time.Now()
 	loop := 10000
 	for i := 0; i < loop; i++ {
@@ -169,16 +170,13 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 }
 
 func newParser(isClient bool) *Parser {
-	svr := &Server{
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
-	}
+	engine := NewEngine(Config{})
 	maxReadSize := 1024 * 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response, error) {})
 		parser := NewParser(processor, isClient, maxReadSize, nil)
-		parser.Engine = svr.Engine
+		parser.Engine = engine
+		processor.(*ClientProcessor).conn = &ClientConn{Engine: engine}
 		return parser
 	}
 	mux := &http.ServeMux{}
@@ -186,7 +184,8 @@ func newParser(isClient bool) *Parser {
 	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
 
 	parser := NewParser(processor, isClient, maxReadSize, nil)
-	parser.Engine = svr.Engine
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
 	return parser
 }
 
