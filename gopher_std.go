@@ -21,7 +21,6 @@ func (g *Gopher) Start() error {
 
 	g.lfds = []int{}
 
-	g.listeners = make([]*poller, len(g.addrs))
 	for i := range g.addrs {
 		g.listeners[i], err = newPoller(g, true, int(i))
 		if err != nil {
