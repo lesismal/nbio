@@ -292,7 +292,7 @@ type ClientProcessor struct {
 
 // Conn .
 func (p *ClientProcessor) Conn() net.Conn {
-	return p.conn.conn
+	return p.conn.rawConn
 }
 
 // OnMethod .
