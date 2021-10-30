@@ -1,7 +1,6 @@
 package nbhttp
 
 import (
-	"bufio"
 	"io"
 	"net"
 	"net/http"
@@ -26,10 +25,9 @@ type resHandler struct {
 
 // ClientConn .
 type ClientConn struct {
-	mux        sync.Mutex
-	rawConn    net.Conn
-	connWriter *bufio.Writer
-	handlers   []resHandler
+	mux      sync.Mutex
+	conn     net.Conn
+	handlers []resHandler
 
 	closed bool
 
@@ -52,8 +50,7 @@ type ClientConn struct {
 
 // Reset .
 func (c *ClientConn) Reset() {
-	c.rawConn = nil
-	c.connWriter = nil
+	c.conn = nil
 	c.handlers = nil
 	c.closed = false
 }
@@ -91,14 +88,11 @@ func (c *ClientConn) CloseWithError(err error) {
 
 func (c *ClientConn) closeWithErrorWithoutLock(err error) {
 	for _, h := range c.handlers {
-		h.h(nil, c.rawConn, err)
+		h.h(nil, c.conn, err)
 	}
 	c.handlers = nil
-	if c.connWriter != nil {
-		c.connWriter.Flush()
-	}
-	if c.rawConn != nil {
-		c.rawConn.Close()
+	if c.conn != nil {
+		c.conn.Close()
 	}
 	if c.onClose != nil {
 		c.onClose()
@@ -111,7 +105,7 @@ func (c *ClientConn) onResponse(res *http.Response, err error) {
 
 	if !c.closed && len(c.handlers) > 0 {
 		head := c.handlers[0]
-		head.h(res, c.rawConn, err)
+		head.h(res, c.conn, err)
 
 		c.handlers = c.handlers[1:]
 		if len(c.handlers) > 0 {
@@ -123,13 +117,13 @@ func (c *ClientConn) onResponse(res *http.Response, err error) {
 					c.closeWithErrorWithoutLock(ErrClientTimeout)
 				}
 			} else {
-				c.rawConn.SetReadDeadline(deadline)
+				c.conn.SetReadDeadline(deadline)
 			}
 		} else {
 			if c.IdleConnTimeout > 0 {
-				c.rawConn.SetReadDeadline(time.Now().Add(c.IdleConnTimeout))
+				c.conn.SetReadDeadline(time.Now().Add(c.IdleConnTimeout))
 			} else {
-				c.rawConn.SetReadDeadline(time.Time{})
+				c.conn.SetReadDeadline(time.Time{})
 			}
 		}
 		if len(c.handlers) == 0 {
@@ -159,7 +153,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 	var engine = c.Engine
 	var confTimeout = c.Timeout
 
-	c.handlers = append(c.handlers, resHandler{c: c.rawConn, t: time.Now(), h: handler})
+	c.handlers = append(c.handlers, resHandler{c: c.conn, t: time.Now(), h: handler})
 
 	var deadline time.Time
 	if confTimeout > 0 {
@@ -167,16 +161,16 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 	}
 
 	sendRequest := func() {
-		err := req.Write(c.connWriter)
+		err := req.Write(c.conn)
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
 			return
 		}
 	}
 
-	if c.connWriter != nil {
+	if c.conn != nil {
 		if confTimeout > 0 && len(c.handlers) == 1 {
-			c.rawConn.SetReadDeadline(deadline)
+			c.conn.SetReadDeadline(deadline)
 		}
 		sendRequest()
 	} else {
@@ -243,12 +237,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 				return
 			}
 
-			c.rawConn = nbc
-			if c.connWriter == nil {
-				c.connWriter = bufio.NewWriter(nbc)
-			} else {
-				c.connWriter.Reset(nbc)
-			}
+			c.conn = nbc
 			processor := NewClientProcessor(c, c.onResponse)
 			parser := NewParser(processor, true, engine.ReadLimit, nbc.Execute)
 			parser.Conn = nbc
@@ -290,12 +279,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			isNonblock := true
 			tlsConn.ResetConn(nbc, isNonblock)
 
-			c.rawConn = tlsConn
-			if c.connWriter == nil {
-				c.connWriter = bufio.NewWriter(tlsConn)
-			} else {
-				c.connWriter.Reset(tlsConn)
-			}
+			c.conn = tlsConn
 			processor := NewClientProcessor(c, c.onResponse)
 			parser := NewParser(processor, true, engine.ReadLimit, nbc.Execute)
 			parser.Conn = tlsConn
