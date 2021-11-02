@@ -95,7 +95,6 @@ type Gopher struct {
 	network                  string
 	addrs                    []string
 	pollerNum                int
-	backlogSize              int
 	readBufferSize           int
 	maxWriteBufferSize       int
 	maxReadTimesPerEventLoop int
@@ -118,7 +117,6 @@ type Gopher struct {
 	onData            func(c *Conn, data []byte)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
-	onWriteBufferFree func(c *Conn, buffer []byte)
 	beforeRead        func(c *Conn)
 	afterRead         func(c *Conn)
 	beforeWrite       func(c *Conn)
@@ -226,14 +224,6 @@ func (g *Gopher) OnReadBufferFree(h func(c *Conn, b []byte)) {
 		panic("invalid nil handler")
 	}
 	g.onReadBufferFree = h
-}
-
-// OnWriteBufferRelease registers callback for write buffer memory release.
-func (g *Gopher) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.onWriteBufferFree = h
 }
 
 // BeforeRead registers callback before syscall.Read
@@ -432,17 +422,9 @@ func (g *Gopher) PollerBuffer(c *Conn) []byte {
 func (g *Gopher) initHandlers() {
 	g.OnOpen(func(c *Conn) {})
 	g.OnClose(func(c *Conn, err error) {})
-	// g.OnRead(func(c *Conn, b []byte) ([]byte, error) {
-	// 	n, err := c.Read(b)
-	// 	if n > 0 {
-	// 		return b[:n], err
-	// 	}
-	// 	return nil, err
-	// })
 	g.OnData(func(c *Conn, data []byte) {})
 	g.OnReadBufferAlloc(g.PollerBuffer)
 	g.OnReadBufferFree(func(c *Conn, buffer []byte) {})
-	g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
 	g.BeforeRead(func(c *Conn) {})
 	g.AfterRead(func(c *Conn) {})
 	g.BeforeWrite(func(c *Conn) {})

@@ -71,8 +71,6 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write implements Write.
 func (c *Conn) Write(b []byte) (int, error) {
-	defer c.g.onWriteBufferFree(c, b)
-
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -104,11 +102,6 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Writev implements Writev.
 func (c *Conn) Writev(in [][]byte) (int, error) {
-	defer func() {
-		for _, v := range in {
-			c.g.onWriteBufferFree(c, v)
-		}
-	}()
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -359,6 +352,7 @@ func (c *Conn) flush() error {
 		}
 		// c.modWrite()
 	} else {
+		c.g.writeBufferAllocator.Free(old)
 		c.writeBuffer = nil
 		if c.wTimer != nil {
 			c.wTimer.Stop()
