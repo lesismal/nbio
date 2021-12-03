@@ -329,12 +329,16 @@ func (e *Engine) stopListeners() {
 
 // Start .
 func (e *Engine) Start() error {
-	err := e.startListeners()
+	err := e.Gopher.Start()
 	if err != nil {
 		return err
 	}
-
-	return e.Gopher.Start()
+	err = e.startListeners()
+	if err != nil {
+		e.Gopher.Stop()
+		return err
+	}
+	return err
 }
 
 // Stop .
