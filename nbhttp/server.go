@@ -47,5 +47,7 @@ func NewServerTLS(conf Config, v ...interface{}) *Server {
 			conf.TLSConfig = tlsConfig
 		}
 	}
+	conf.AddrsTLS = append(conf.AddrsTLS, conf.Addrs...)
+	conf.Addrs = nil
 	return &Server{Engine: NewEngine(conf)}
 }
