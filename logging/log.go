@@ -70,28 +70,28 @@ func (l *logger) SetLevel(lvl int) {
 // Debug uses fmt.Printf to log a message at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LevelDebug >= l.level {
-		log.Printf("[DBG] "+format+"\n", v...)
+		log.Printf("[DBG] "+format, v...)
 	}
 }
 
 // Info uses fmt.Printf to log a message at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
 	if LevelInfo >= l.level {
-		log.Printf("[INF] "+format+"\n", v...)
+		log.Printf("[INF] "+format, v...)
 	}
 }
 
 // Warn uses fmt.Printf to log a message at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LevelWarn >= l.level {
-		log.Printf("[WRN] "+format+"\n", v...)
+		log.Printf("[WRN] "+format, v...)
 	}
 }
 
 // Error uses fmt.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LevelError >= l.level {
-		log.Printf("[ERR] "+format+"\n", v...)
+		log.Printf("[ERR] "+format, v...)
 	}
 }
 
