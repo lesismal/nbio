@@ -5,17 +5,12 @@
 package logging
 
 import (
-	"fmt"
-	"os"
-	"time"
+	"log"
 )
 
 var (
 	// TimeFormat is used to format time parameters.
 	TimeFormat = "2006/01/02 15:04:05.000"
-
-	// Output is used to receive log output.
-	Output = os.Stdout
 
 	// DefaultLogger is the default logger and is used by arpc.
 	DefaultLogger Logger = &logger{level: LevelInfo}
@@ -56,7 +51,7 @@ func SetLevel(lvl int) {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
 		DefaultLogger.SetLevel(lvl)
 	default:
-		fmt.Fprintf(Output, "invalid log level: %v", lvl)
+		log.Printf("invalid log level: %v", lvl)
 	}
 }
 
@@ -71,35 +66,35 @@ func (l *logger) SetLevel(lvl int) {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
 		l.level = lvl
 	default:
-		fmt.Fprintf(Output, "invalid log level: %v", lvl)
+		log.Printf("invalid log level: %v", lvl)
 	}
 }
 
 // Debug uses fmt.Printf to log a message at LevelDebug.
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LevelDebug >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format+"\n", v...)
+		log.Printf("[DBG] "+format+"\n", v...)
 	}
 }
 
 // Info uses fmt.Printf to log a message at LevelInfo.
 func (l *logger) Info(format string, v ...interface{}) {
 	if LevelInfo >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format+"\n", v...)
+		log.Printf("[INF] "+format+"\n", v...)
 	}
 }
 
 // Warn uses fmt.Printf to log a message at LevelWarn.
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LevelWarn >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format+"\n", v...)
+		log.Printf("[WRN] "+format+"\n", v...)
 	}
 }
 
 // Error uses fmt.Printf to log a message at LevelError.
 func (l *logger) Error(format string, v ...interface{}) {
 	if LevelError >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format+"\n", v...)
+		log.Printf("[ERR] "+format+"\n", v...)
 	}
 }
 
