@@ -9,9 +9,6 @@ import (
 )
 
 var (
-	// TimeFormat is used to format time parameters.
-	TimeFormat = "2006/01/02 15:04:05.000"
-
 	// DefaultLogger is the default logger and is used by arpc.
 	DefaultLogger Logger = &logger{level: LevelInfo}
 )
