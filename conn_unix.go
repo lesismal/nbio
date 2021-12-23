@@ -61,9 +61,9 @@ func (c *Conn) Read(b []byte) (int, error) {
 		c.mux.Unlock()
 		return 0, errClosed
 	}
-	c.mux.Unlock()
-
+	
 	n, err := syscall.Read(c.fd, b)
+	c.mux.Unlock()
 	if err == nil {
 		c.g.afterRead(c)
 	}
