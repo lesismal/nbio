@@ -61,7 +61,7 @@
   
 
 ## Features
-- [x] linux: epoll
+- [x] linux: epoll, both ET/LT(default) supported
 - [x] macos(bsd): kqueue
 - [x] windows: golang std net
 - [x] nbio.Conn implements a non-blocking net.Conn(except windows)
