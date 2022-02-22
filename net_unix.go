@@ -40,11 +40,11 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 
 	conn.Close()
 
-	err = syscall.SetNonblock(newFd, true)
-	if err != nil {
-		syscall.Close(newFd)
-		return nil, err
-	}
+	// err = syscall.SetNonblock(newFd, true)
+	// if err != nil {
+	// 	syscall.Close(newFd)
+	// 	return nil, err
+	// }
 
 	return &Conn{
 		fd:    newFd,
