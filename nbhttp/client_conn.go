@@ -50,9 +50,13 @@ type ClientConn struct {
 
 // Reset .
 func (c *ClientConn) Reset() {
-	c.conn = nil
-	c.handlers = nil
-	c.closed = false
+	c.mux.Lock()
+	if c.closed {
+		c.conn = nil
+		c.handlers = nil
+		c.closed = false
+	}
+	c.mux.Unlock()
 }
 
 // OnClose .
@@ -78,21 +82,24 @@ func (c *ClientConn) Close() {
 // CloseWithError .
 func (c *ClientConn) CloseWithError(err error) {
 	c.mux.Lock()
-	closed := c.closed
-	c.closed = true
-	c.mux.Unlock()
-	if !closed {
+	defer c.mux.Unlock()
+	if !c.closed {
+		c.closed = true
 		c.closeWithErrorWithoutLock(err)
 	}
 }
 
 func (c *ClientConn) closeWithErrorWithoutLock(err error) {
+	if err == nil {
+		err = io.EOF
+	}
 	for _, h := range c.handlers {
 		h.h(nil, c.conn, err)
 	}
 	c.handlers = nil
 	if c.conn != nil {
 		c.conn.Close()
+		c.conn = nil
 	}
 	if c.onClose != nil {
 		c.onClose()

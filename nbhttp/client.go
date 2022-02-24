@@ -173,9 +173,7 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 			handler(nil, nil, err)
 			return
 		}
-		if hc.closed {
-			hc.Reset()
-		}
+		hc.Reset()
 		hc.Do(req, func(res *http.Response, conn net.Conn, err error) {
 			hcs.releaseConn(hc)
 			handler(res, conn, err)
