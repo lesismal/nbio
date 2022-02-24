@@ -90,6 +90,9 @@ func (c *ClientConn) CloseWithError(err error) {
 }
 
 func (c *ClientConn) closeWithErrorWithoutLock(err error) {
+	if err == nil {
+		err = io.EOF
+	}
 	for _, h := range c.handlers {
 		h.h(nil, c.conn, err)
 	}
