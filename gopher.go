@@ -132,17 +132,10 @@ type Gopher struct {
 
 // Stop pollers.
 func (g *Gopher) Stop() {
-	g.onStop()
-
-	g.trigger.Stop()
-	close(g.chTimer)
-
 	for _, l := range g.listeners {
 		l.stop()
 	}
-	for i := 0; i < g.pollerNum; i++ {
-		g.pollers[i].stop()
-	}
+
 	g.mux.Lock()
 	conns := g.connsStd
 	g.connsStd = map[*Conn]struct{}{}
@@ -156,8 +149,19 @@ func (g *Gopher) Stop() {
 	}
 	for _, c := range connsUnix {
 		if c != nil {
-			go c.Close()
+			c.Close()
 		}
+	}
+
+	time.Sleep(time.Second / 5)
+
+	g.onStop()
+
+	g.trigger.Stop()
+	close(g.chTimer)
+
+	for i := 0; i < g.pollerNum; i++ {
+		g.pollers[i].stop()
 	}
 
 	g.Wait()
