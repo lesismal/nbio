@@ -87,6 +87,8 @@ type Gopher struct {
 	mux  sync.Mutex
 	tmux sync.Mutex
 
+	wgConn sync.WaitGroup
+
 	Name string
 
 	network                  string
@@ -142,17 +144,25 @@ func (g *Gopher) Stop() {
 	connsUnix := g.connsUnix
 	g.mux.Unlock()
 
+	g.wgConn.Done()
 	for c := range conns {
 		if c != nil {
-			c.Close()
+			cc := c
+			g.atOnce(func() {
+				cc.Close()
+			})
 		}
 	}
 	for _, c := range connsUnix {
 		if c != nil {
-			c.Close()
+			cc := c
+			g.atOnce(func() {
+				cc.Close()
+			})
 		}
 	}
 
+	g.wgConn.Wait()
 	time.Sleep(time.Second / 5)
 
 	g.onStop()
@@ -183,7 +193,10 @@ func (g *Gopher) OnOpen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onOpen = h
+	g.onOpen = func(c *Conn) {
+		g.wgConn.Add(1)
+		h(c)
+	}
 }
 
 // OnClose registers callback for disconnected.
@@ -192,9 +205,10 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 		panic("invalid nil handler")
 	}
 	g.onClose = func(c *Conn, err error) {
-		g.atOnce(func() {
-			h(c, err)
-		})
+		// g.atOnce(func() {
+		defer g.wgConn.Done()
+		h(c, err)
+		// })
 	}
 }
 
@@ -429,6 +443,7 @@ func (g *Gopher) PollerBuffer(c *Conn) []byte {
 }
 
 func (g *Gopher) initHandlers() {
+	g.wgConn.Add(1)
 	g.OnOpen(func(c *Conn) {})
 	g.OnClose(func(c *Conn, err error) {})
 	// g.OnRead(func(c *Conn, b []byte) ([]byte, error) {

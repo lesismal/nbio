@@ -192,8 +192,10 @@ func (p *poller) readWriteLoop() {
 								if errors.Is(err, syscall.EAGAIN) {
 									break
 								}
-								if err != nil || n == 0 {
+								if err != nil {
 									c.closeWithError(err)
+								} else if n == 0 {
+									c.closeWithError(io.EOF)
 								}
 								if n < len(buffer) {
 									break
