@@ -6,6 +6,7 @@ package nbio
 
 import (
 	"container/heap"
+	"context"
 	"net"
 	"runtime"
 	"sync"
@@ -132,7 +133,7 @@ type Gopher struct {
 	Execute func(f func())
 }
 
-// Stop pollers.
+// Stop closes listeners/pollers/conns/timer.
 func (g *Gopher) Stop() {
 	for _, l := range g.listeners {
 		l.stop()
@@ -176,6 +177,22 @@ func (g *Gopher) Stop() {
 
 	g.Wait()
 	logging.Info("Gopher[%v] stop", g.Name)
+}
+
+// Shutdown stops Gopher gracefully with context.
+func (g *Gopher) Shutdown(ctx context.Context) error {
+	ch := make(chan struct{})
+	go func() {
+		g.Stop()
+		close(ch)
+	}()
+
+	select {
+	case <-ch:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	return nil
 }
 
 // AddConn adds conn to a poller.
