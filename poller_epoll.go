@@ -28,13 +28,9 @@ const (
 )
 
 const (
-	epollEventsRead      = syscall.EPOLLPRI | syscall.EPOLLIN
-	epollEventsWrite     = syscall.EPOLLOUT
-	epollEventsReadWrite = syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT
-	epollEventsError     = syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP
-
-	epollEventsReadET      = syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET
-	epollEventsReadWriteET = syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET
+	epollEventsRead  = syscall.EPOLLPRI | syscall.EPOLLIN
+	epollEventsWrite = syscall.EPOLLOUT
+	epollEventsError = syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP
 )
 
 type poller struct {
@@ -194,8 +190,6 @@ func (p *poller) readWriteLoop() {
 								}
 								if err != nil {
 									c.closeWithError(err)
-								} else if n == 0 {
-									c.closeWithError(io.EOF)
 								}
 								if n < len(buffer) {
 									break
@@ -228,9 +222,9 @@ func (p *poller) stop() {
 func (p *poller) addRead(fd int) error {
 	switch p.g.epollMod {
 	case EPOLLET:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: epollEventsReadET})
+		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET})
 	default:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: epollEventsRead})
+		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN})
 	}
 }
 
@@ -241,9 +235,9 @@ func (p *poller) addRead(fd int) error {
 func (p *poller) modWrite(fd int) error {
 	switch p.g.epollMod {
 	case EPOLLET:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: epollEventsReadWriteET})
+		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET})
 	default:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: epollEventsReadWrite})
+		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT})
 	}
 }
 
