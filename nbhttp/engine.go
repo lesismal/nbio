@@ -391,9 +391,9 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 	}
 
 Exit:
-	e.Stop()
+	err := e.Shutdown(ctx)
 	logging.Info("Gopher[%v] shutdown", e.Gopher.Name)
-	return nil
+	return err
 }
 
 // InitTLSBuffers .
