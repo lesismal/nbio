@@ -79,7 +79,7 @@ type Config struct {
 	LockPoller bool
 
 	// EpollMod sets the epoll mod, EPOLLLT by default.
-	EpollMod int
+	EpollMod uint32
 }
 
 // Gopher is a manager of poller.
@@ -100,7 +100,7 @@ type Gopher struct {
 	maxWriteBufferSize       int
 	maxReadTimesPerEventLoop int
 	minConnCacheSize         int
-	epollMod                 int
+	epollMod                 uint32
 	lockListener             bool
 	lockPoller               bool
 
