@@ -112,13 +112,23 @@ func (p *ServerProcessor) OnMethod(method string) {
 }
 
 // OnURL .
-func (p *ServerProcessor) OnURL(uri string) error {
-	u, err := url.ParseRequestURI(uri)
+func (p *ServerProcessor) OnURL(rawurl string) error {
+	p.request.RequestURI = rawurl
+
+	justAuthority := p.request.Method == "CONNECT" && !strings.HasPrefix(rawurl, "/")
+	if justAuthority {
+		rawurl = "http://" + rawurl
+	}
+
+	u, err := url.ParseRequestURI(rawurl)
 	if err != nil {
 		return err
 	}
+	if justAuthority {
+		u.Scheme = ""
+	}
+
 	p.request.URL = u
-	p.request.RequestURI = uri
 	return nil
 }
 
