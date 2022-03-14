@@ -10,7 +10,6 @@ package nbio
 import (
 	"runtime"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/lesismal/nbio/logging"
@@ -33,10 +32,6 @@ func (g *Gopher) Start() error {
 	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i], err = newPoller(g, false, i)
 		if err != nil {
-			for j := 0; j < len(g.lfds); j++ {
-				syscall.Close(g.lfds[j])
-			}
-
 			for j := 0; j < len(g.listeners); j++ {
 				g.listeners[j].stop()
 			}
@@ -78,42 +73,31 @@ func NewGopher(conf Config) *Gopher {
 	if conf.NPoller <= 0 {
 		conf.NPoller = cpuNum
 	}
-	if len(conf.Addrs) > 0 && conf.NListener <= 0 {
-		conf.NListener = 1
-	}
-	if conf.Backlog <= 0 {
-		conf.Backlog = 1024 * 64
-	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
 	}
-	if conf.MinConnCacheSize == 0 {
-		conf.MinConnCacheSize = DefaultMinConnCacheSize
-	}
-	if conf.MaxReadTimesPerEventLoop <= 0 {
-		conf.MaxReadTimesPerEventLoop = DefaultMaxReadTimesPerEventLoop
+	if conf.MaxConnReadTimesPerEventLoop <= 0 {
+		conf.MaxConnReadTimesPerEventLoop = DefaultMaxConnReadTimesPerEventLoop
 	}
 
 	g := &Gopher{
-		Name:                     conf.Name,
-		network:                  conf.Network,
-		addrs:                    conf.Addrs,
-		pollerNum:                conf.NPoller,
-		backlogSize:              conf.Backlog,
-		readBufferSize:           conf.ReadBufferSize,
-		maxWriteBufferSize:       conf.MaxWriteBufferSize,
-		maxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
-		minConnCacheSize:         conf.MinConnCacheSize,
-		epollMod:                 conf.EpollMod,
-		lockListener:             conf.LockListener,
-		lockPoller:               conf.LockPoller,
-		listeners:                make([]*poller, len(conf.Addrs)),
-		pollers:                  make([]*poller, conf.NPoller),
-		connsUnix:                make([]*Conn, MaxOpenFiles),
-		callings:                 []func(){},
-		chCalling:                make(chan struct{}, 1),
-		trigger:                  time.NewTimer(timeForever),
-		chTimer:                  make(chan struct{}),
+		Name:                         conf.Name,
+		network:                      conf.Network,
+		addrs:                        conf.Addrs,
+		pollerNum:                    conf.NPoller,
+		readBufferSize:               conf.ReadBufferSize,
+		maxWriteBufferSize:           conf.MaxWriteBufferSize,
+		maxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
+		epollMod:                     conf.EpollMod,
+		lockListener:                 conf.LockListener,
+		lockPoller:                   conf.LockPoller,
+		listeners:                    make([]*poller, len(conf.Addrs)),
+		pollers:                      make([]*poller, conf.NPoller),
+		connsUnix:                    make([]*Conn, MaxOpenFiles),
+		callings:                     []func(){},
+		chCalling:                    make(chan struct{}, 1),
+		trigger:                      time.NewTimer(timeForever),
+		chTimer:                      make(chan struct{}),
 	}
 
 	g.initHandlers()
