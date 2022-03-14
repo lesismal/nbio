@@ -88,7 +88,6 @@ type Gopher struct {
 	readBufferSize               int
 	maxWriteBufferSize           int
 	maxConnReadTimesPerEventLoop int
-	minConnCacheSize             int
 	epollMod                     uint32
 	lockListener                 bool
 	lockPoller                   bool
