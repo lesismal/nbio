@@ -94,9 +94,6 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
-	// NListener represents poller goroutine num, it's set to runtime.NumCPU() by default.
-	NListener int
-
 	// NParser represents parser goroutine num, it's set to NPoller by default.
 	NParser int
 
@@ -135,8 +132,8 @@ type Config struct {
 	// ReleaseWebsocketPayload automatically release data buffer after function each call to websocket OnMessage and OnDataFrame
 	ReleaseWebsocketPayload bool
 
-	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
-	MaxReadTimesPerEventLoop int
+	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd
+	MaxConnReadTimesPerEventLoop int
 
 	Handler http.Handler
 
@@ -638,10 +635,9 @@ func NewEngine(conf Config) *Engine {
 		Name:                     conf.Name,
 		Network:                  conf.Network,
 		NPoller:                  conf.NPoller,
-		NListener:                conf.NListener,
 		ReadBufferSize:           conf.ReadBufferSize,
 		MaxWriteBufferSize:       conf.MaxWriteBufferSize,
-		MaxReadTimesPerEventLoop: conf.MaxReadTimesPerEventLoop,
+		MaxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
 		LockPoller:               conf.LockPoller,
 		LockListener:             conf.LockListener,
 	}

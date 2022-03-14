@@ -23,16 +23,13 @@ const (
 	// DefaultMaxWriteBufferSize .
 	DefaultMaxWriteBufferSize = 1024 * 1024
 
-	// DefaultMaxReadTimesPerEventLoop .
-	DefaultMaxReadTimesPerEventLoop = 3
-
-	// DefaultMinConnCacheSize .
-	DefaultMinConnCacheSize = 1024 * 2
+	// DefaultMaxConnReadTimesPerEventLoop .
+	DefaultMaxConnReadTimesPerEventLoop = 3
 )
 
 var (
 	// MaxOpenFiles .
-	MaxOpenFiles = 1024 * 1024
+	MaxOpenFiles = 1024 * 1024 * 2
 )
 
 // Config Of Gopher.
@@ -52,25 +49,16 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
-	// NListener represents poller goroutine num, it's set to runtime.NumCPU() by default.
-	NListener int
-
-	// Backlog represents backlog arg for syscall.Listen
-	Backlog int
-
 	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
 	ReadBufferSize int
-
-	// MinConnCacheSize represents application layer's Conn write cache buffer size when the kernel sendQ is full
-	MinConnCacheSize int
 
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
 	// if the connection's Send-Q is full and the data cached by nbio is
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize int
 
-	// MaxReadTimesPerEventLoop represents max read times in one poller loop for one fd
-	MaxReadTimesPerEventLoop int
+	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd
+	MaxConnReadTimesPerEventLoop int
 
 	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
 	LockListener bool
@@ -85,26 +73,24 @@ type Config struct {
 // Gopher is a manager of poller.
 type Gopher struct {
 	sync.WaitGroup
-	mux  sync.Mutex
-	tmux sync.Mutex
-
-	wgConn sync.WaitGroup
 
 	Name string
 
-	network                  string
-	addrs                    []string
-	pollerNum                int
-	backlogSize              int
-	readBufferSize           int
-	maxWriteBufferSize       int
-	maxReadTimesPerEventLoop int
-	minConnCacheSize         int
-	epollMod                 uint32
-	lockListener             bool
-	lockPoller               bool
+	Execute func(f func())
 
-	lfds []int
+	mux sync.Mutex
+
+	wgConn sync.WaitGroup
+
+	network                      string
+	addrs                        []string
+	pollerNum                    int
+	readBufferSize               int
+	maxWriteBufferSize           int
+	maxConnReadTimesPerEventLoop int
+	epollMod                     uint32
+	lockListener                 bool
+	lockPoller                   bool
 
 	connsStd  map[*Conn]struct{}
 	connsUnix []*Conn
@@ -129,8 +115,6 @@ type Gopher struct {
 	timers    timerHeap
 	trigger   *time.Timer
 	chTimer   chan struct{}
-
-	Execute func(f func())
 }
 
 // Stop closes listeners/pollers/conns/timer.
@@ -318,9 +302,9 @@ func (g *Gopher) AfterFunc(timeout time.Duration, f func()) *Timer {
 
 func (g *Gopher) atOnce(f func()) {
 	if f != nil {
-		g.tmux.Lock()
+		g.mux.Lock()
 		g.callings = append(g.callings, f)
-		g.tmux.Unlock()
+		g.mux.Unlock()
 		select {
 		case g.chCalling <- struct{}{}:
 		default:
@@ -329,8 +313,8 @@ func (g *Gopher) atOnce(f func()) {
 }
 
 func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
-	g.tmux.Lock()
-	defer g.tmux.Unlock()
+	g.mux.Lock()
+	defer g.mux.Unlock()
 
 	now := time.Now()
 	it := &htimer{
@@ -348,8 +332,8 @@ func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
 }
 
 func (g *Gopher) removeTimer(it *htimer) {
-	g.tmux.Lock()
-	defer g.tmux.Unlock()
+	g.mux.Lock()
+	defer g.mux.Unlock()
 
 	index := it.index
 	if index < 0 || index >= len(g.timers) {
@@ -371,8 +355,8 @@ func (g *Gopher) removeTimer(it *htimer) {
 
 // ResetTimer removes a timer.
 func (g *Gopher) resetTimer(it *htimer) {
-	g.tmux.Lock()
-	defer g.tmux.Unlock()
+	g.mux.Lock()
+	defer g.mux.Unlock()
 
 	index := it.index
 	if index < 0 || index >= len(g.timers) {
@@ -395,15 +379,15 @@ func (g *Gopher) timerLoop() {
 		select {
 		case <-g.chCalling:
 			for {
-				g.tmux.Lock()
+				g.mux.Lock()
 				if len(g.callings) == 0 {
 					g.callings = nil
-					g.tmux.Unlock()
+					g.mux.Unlock()
 					break
 				}
 				f := g.callings[0]
 				g.callings = g.callings[1:]
-				g.tmux.Unlock()
+				g.mux.Unlock()
 				func() {
 					defer func() {
 						err := recover()
@@ -419,17 +403,17 @@ func (g *Gopher) timerLoop() {
 			}
 		case <-g.trigger.C:
 			for {
-				g.tmux.Lock()
+				g.mux.Lock()
 				if g.timers.Len() == 0 {
 					g.trigger.Reset(timeForever)
-					g.tmux.Unlock()
+					g.mux.Unlock()
 					break
 				}
 				now := time.Now()
 				it := g.timers[0]
 				if now.After(it.expire) {
 					heap.Remove(&g.timers, it.index)
-					g.tmux.Unlock()
+					g.mux.Unlock()
 					func() {
 						defer func() {
 							err := recover()
@@ -444,7 +428,7 @@ func (g *Gopher) timerLoop() {
 					}()
 				} else {
 					g.trigger.Reset(it.expire.Sub(now))
-					g.tmux.Unlock()
+					g.mux.Unlock()
 					break
 				}
 			}

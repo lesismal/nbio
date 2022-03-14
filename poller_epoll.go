@@ -139,7 +139,7 @@ func (p *poller) readWriteLoop() {
 	events := make([]syscall.EpollEvent, 1024)
 
 	if p.g.onRead == nil && p.g.epollMod == EPOLLET {
-		p.g.maxReadTimesPerEventLoop = 1<<31 - 1
+		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
 	p.shutdown = false
@@ -175,7 +175,7 @@ func (p *poller) readWriteLoop() {
 
 					if ev.Events&epollEventsRead != 0 {
 						if p.g.onRead == nil {
-							for i := 0; i < p.g.maxReadTimesPerEventLoop; i++ {
+							for i := 0; i < p.g.maxConnReadTimesPerEventLoop; i++ {
 								buffer := p.g.borrow(c)
 								n, err := c.Read(buffer)
 								if n > 0 {
