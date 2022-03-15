@@ -388,7 +388,7 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 	}
 
 Exit:
-	err := e.Shutdown(ctx)
+	err := e.Gopher.Shutdown(ctx)
 	logging.Info("Gopher[%v] shutdown", e.Gopher.Name)
 	return err
 }
@@ -632,14 +632,14 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	gopherConf := nbio.Config{
-		Name:                     conf.Name,
-		Network:                  conf.Network,
-		NPoller:                  conf.NPoller,
-		ReadBufferSize:           conf.ReadBufferSize,
-		MaxWriteBufferSize:       conf.MaxWriteBufferSize,
+		Name:                         conf.Name,
+		Network:                      conf.Network,
+		NPoller:                      conf.NPoller,
+		ReadBufferSize:               conf.ReadBufferSize,
+		MaxWriteBufferSize:           conf.MaxWriteBufferSize,
 		MaxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
-		LockPoller:               conf.LockPoller,
-		LockListener:             conf.LockListener,
+		LockPoller:                   conf.LockPoller,
+		LockListener:                 conf.LockListener,
 	}
 	g := nbio.NewGopher(gopherConf)
 	g.Execute = serverExecutor
