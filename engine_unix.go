@@ -16,7 +16,7 @@ import (
 )
 
 // Start init and start pollers.
-func (g *Gopher) Start() error {
+func (g *Engine) Start() error {
 	var err error
 
 	for i := 0; i < len(g.addrs); i++ {
@@ -57,15 +57,15 @@ func (g *Gopher) Start() error {
 	go g.timerLoop()
 
 	if len(g.addrs) == 0 {
-		logging.Info("Gopher[%v] start", g.Name)
+		logging.Info("NBIO[%v] start", g.Name)
 	} else {
-		logging.Info("Gopher[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
+		logging.Info("NBIO[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
 }
 
-// NewGopher is a factory impl.
-func NewGopher(conf Config) *Gopher {
+// NewEngine is a factory impl.
+func NewEngine(conf Config) *Engine {
 	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
 		conf.Name = "NB"
@@ -80,7 +80,7 @@ func NewGopher(conf Config) *Gopher {
 		conf.MaxConnReadTimesPerEventLoop = DefaultMaxConnReadTimesPerEventLoop
 	}
 
-	g := &Gopher{
+	g := &Engine{
 		Name:                         conf.Name,
 		network:                      conf.Network,
 		addrs:                        conf.Addrs,

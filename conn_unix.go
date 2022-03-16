@@ -21,7 +21,7 @@ import (
 type Conn struct {
 	mux sync.Mutex
 
-	g *Gopher
+	g *Engine
 
 	fd int
 
@@ -61,7 +61,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 		c.mux.Unlock()
 		return 0, errClosed
 	}
-	
+
 	n, err := syscall.Read(c.fd, b)
 	c.mux.Unlock()
 	if err == nil {

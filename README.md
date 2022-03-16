@@ -34,10 +34,10 @@
   - [Installation](#installation)
   - [Quick Start](#quick-start)
   - [API Examples](#api-examples)
-    - [New Gopher For Server-Side](#new-gopher-for-server-side)
-    - [New Gopher For Client-Side](#new-gopher-for-client-side)
-    - [Start Gopher](#start-gopher)
-    - [Custom Other Config For Gopher](#custom-other-config-for-gopher)
+    - [New Engine For Server-Side](#new-gopher-for-server-side)
+    - [New Engine For Client-Side](#new-gopher-for-client-side)
+    - [Start Engine](#start-gopher)
+    - [Custom Other Config For Engine](#custom-other-config-for-gopher)
     - [SetDeadline/SetReadDeadline/SetWriteDeadline](#setdeadlinesetreaddeadlinesetwritedeadline)
     - [Bind User Session With Conn](#bind-user-session-with-conn)
     - [Writev / Batch Write](#writev--batch-write)
@@ -95,7 +95,7 @@ import "github.com/lesismal/nbio"
 ```go
 import "github.com/lesismal/nbio"
 
-g := nbio.NewGopher(nbio.Config{
+g := nbio.NewEngine(nbio.Config{
     Network: "tcp",
     Addrs:   []string{"localhost:8888"},
 })
@@ -117,7 +117,7 @@ if err != nil {
 ```go
 import "github.com/lesismal/nbio"
 
-g := nbio.NewGopher(nbio.Config{})
+g := nbio.NewEngine(nbio.Config{})
 
 g.OnData(func(c *nbio.Conn, data []byte) {
     // ...
@@ -142,20 +142,20 @@ c.Write(buf)
 
 ## API Examples
 
-### New Gopher For Server-Side
+### New Engine For Server-Side
 ```golang
-g := nbio.NewGopher(nbio.Config{
+g := nbio.NewEngine(nbio.Config{
     Network: "tcp",
     Addrs:   []string{"localhost:8888"},
 })
 ``` 
 
-### New Gopher For Client-Side
+### New Engine For Client-Side
 ```golang
-g := nbio.NewGopher(nbio.Config{})
+g := nbio.NewEngine(nbio.Config{})
 ``` 
 
-### Start Gopher
+### Start Engine
 ```golang
 err := g.Start()
 if err != nil {
@@ -164,7 +164,7 @@ if err != nil {
 defer g.Stop()
 ```
 
-### Custom Other Config For Gopher
+### Custom Other Config For Engine
 ```golang
 conf := nbio.Config struct {
     // Name describes your gopher name for logging, it's set to "NB" by default

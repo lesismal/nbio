@@ -32,7 +32,7 @@ var (
 	MaxOpenFiles = 1024 * 1024 * 2
 )
 
-// Config Of Gopher.
+// Config Of Engine.
 type Config struct {
 	// Name describes your gopher name for logging, it's set to "NB" by default.
 	Name string
@@ -43,7 +43,7 @@ type Config struct {
 	Network string
 
 	// Addrs is the listening addr list for a nbio server.
-	// if it is empty, no listener created, then the Gopher is used for client by default.
+	// if it is empty, no listener created, then the Engine is used for client by default.
 	Addrs []string
 
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
@@ -70,8 +70,15 @@ type Config struct {
 	EpollMod uint32
 }
 
-// Gopher is a manager of poller.
-type Gopher struct {
+// Gopher keeps old type to compatible with new name Engine.
+type Gopher = Engine
+
+func NewGopther(conf Config) *Gopher {
+	return NewEngine(conf)
+}
+
+// Engine is a manager of poller.
+type Engine struct {
 	sync.WaitGroup
 
 	Name string
@@ -118,7 +125,7 @@ type Gopher struct {
 }
 
 // Stop closes listeners/pollers/conns/timer.
-func (g *Gopher) Stop() {
+func (g *Engine) Stop() {
 	for _, l := range g.listeners {
 		l.stop()
 	}
@@ -160,11 +167,11 @@ func (g *Gopher) Stop() {
 	}
 
 	g.Wait()
-	logging.Info("Gopher[%v] stop", g.Name)
+	logging.Info("NBIO[%v] stop", g.Name)
 }
 
-// Shutdown stops Gopher gracefully with context.
-func (g *Gopher) Shutdown(ctx context.Context) error {
+// Shutdown stops Engine gracefully with context.
+func (g *Engine) Shutdown(ctx context.Context) error {
 	ch := make(chan struct{})
 	go func() {
 		g.Stop()
@@ -180,7 +187,7 @@ func (g *Gopher) Shutdown(ctx context.Context) error {
 }
 
 // AddConn adds conn to a poller.
-func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
+func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	c, err := NBConn(conn)
 	if err != nil {
 		return nil, err
@@ -190,7 +197,7 @@ func (g *Gopher) AddConn(conn net.Conn) (*Conn, error) {
 }
 
 // OnOpen registers callback for new connection.
-func (g *Gopher) OnOpen(h func(c *Conn)) {
+func (g *Engine) OnOpen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -201,7 +208,7 @@ func (g *Gopher) OnOpen(h func(c *Conn)) {
 }
 
 // OnClose registers callback for disconnected.
-func (g *Gopher) OnClose(h func(c *Conn, err error)) {
+func (g *Engine) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -214,12 +221,12 @@ func (g *Gopher) OnClose(h func(c *Conn, err error)) {
 }
 
 // OnRead registers callback for reading event.
-func (g *Gopher) OnRead(h func(c *Conn)) {
+func (g *Engine) OnRead(h func(c *Conn)) {
 	g.onRead = h
 }
 
 // OnData registers callback for data.
-func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
+func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -227,7 +234,7 @@ func (g *Gopher) OnData(h func(c *Conn, data []byte)) {
 }
 
 // OnReadBufferAlloc registers callback for memory allocating.
-func (g *Gopher) OnReadBufferAlloc(h func(c *Conn) []byte) {
+func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -235,7 +242,7 @@ func (g *Gopher) OnReadBufferAlloc(h func(c *Conn) []byte) {
 }
 
 // OnReadBufferFree registers callback for memory release.
-func (g *Gopher) OnReadBufferFree(h func(c *Conn, b []byte)) {
+func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -243,7 +250,7 @@ func (g *Gopher) OnReadBufferFree(h func(c *Conn, b []byte)) {
 }
 
 // OnWriteBufferRelease registers callback for write buffer memory release.
-func (g *Gopher) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
+func (g *Engine) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -252,7 +259,7 @@ func (g *Gopher) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 
 // BeforeRead registers callback before syscall.Read
 // the handler would be called on windows.
-func (g *Gopher) BeforeRead(h func(c *Conn)) {
+func (g *Engine) BeforeRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -261,7 +268,7 @@ func (g *Gopher) BeforeRead(h func(c *Conn)) {
 
 // AfterRead registers callback after syscall.Read
 // the handler would be called on *nix.
-func (g *Gopher) AfterRead(h func(c *Conn)) {
+func (g *Engine) AfterRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -270,15 +277,15 @@ func (g *Gopher) AfterRead(h func(c *Conn)) {
 
 // BeforeWrite registers callback befor syscall.Write and syscall.Writev
 // the handler would be called on windows.
-func (g *Gopher) BeforeWrite(h func(c *Conn)) {
+func (g *Engine) BeforeWrite(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
 	g.beforeWrite = h
 }
 
-// OnStop registers callback before Gopher is stopped.
-func (g *Gopher) OnStop(h func()) {
+// OnStop registers callback before Engine is stopped.
+func (g *Engine) OnStop(h func()) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
@@ -286,7 +293,7 @@ func (g *Gopher) OnStop(h func()) {
 }
 
 // After used as time.After.
-func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
+func (g *Engine) After(timeout time.Duration) <-chan time.Time {
 	c := make(chan time.Time, 1)
 	g.afterFunc(timeout, func() {
 		c <- time.Now()
@@ -295,12 +302,12 @@ func (g *Gopher) After(timeout time.Duration) <-chan time.Time {
 }
 
 // AfterFunc used as time.AfterFunc.
-func (g *Gopher) AfterFunc(timeout time.Duration, f func()) *Timer {
+func (g *Engine) AfterFunc(timeout time.Duration, f func()) *Timer {
 	ht := g.afterFunc(timeout, f)
 	return &Timer{htimer: ht}
 }
 
-func (g *Gopher) atOnce(f func()) {
+func (g *Engine) atOnce(f func()) {
 	if f != nil {
 		g.mux.Lock()
 		g.callings = append(g.callings, f)
@@ -312,7 +319,7 @@ func (g *Gopher) atOnce(f func()) {
 	}
 }
 
-func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
+func (g *Engine) afterFunc(timeout time.Duration, f func()) *htimer {
 	g.mux.Lock()
 	defer g.mux.Unlock()
 
@@ -331,7 +338,7 @@ func (g *Gopher) afterFunc(timeout time.Duration, f func()) *htimer {
 	return it
 }
 
-func (g *Gopher) removeTimer(it *htimer) {
+func (g *Engine) removeTimer(it *htimer) {
 	g.mux.Lock()
 	defer g.mux.Unlock()
 
@@ -354,7 +361,7 @@ func (g *Gopher) removeTimer(it *htimer) {
 }
 
 // ResetTimer removes a timer.
-func (g *Gopher) resetTimer(it *htimer) {
+func (g *Engine) resetTimer(it *htimer) {
 	g.mux.Lock()
 	defer g.mux.Unlock()
 
@@ -371,10 +378,10 @@ func (g *Gopher) resetTimer(it *htimer) {
 	}
 }
 
-func (g *Gopher) timerLoop() {
+func (g *Engine) timerLoop() {
 	defer g.Done()
-	logging.Debug("Gopher[%v] timer start", g.Name)
-	defer logging.Debug("Gopher[%v] timer stopped", g.Name)
+	logging.Debug("NBIO[%v] timer start", g.Name)
+	defer logging.Debug("NBIO[%v] timer stopped", g.Name)
 	for {
 		select {
 		case <-g.chCalling:
@@ -395,7 +402,7 @@ func (g *Gopher) timerLoop() {
 							const size = 64 << 10
 							buf := make([]byte, size)
 							buf = buf[:runtime.Stack(buf, false)]
-							logging.Error("Gopher[%v] exec call failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
+							logging.Error("NBIO[%v] exec call failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
 						}
 					}()
 					f()
@@ -421,7 +428,7 @@ func (g *Gopher) timerLoop() {
 								const size = 64 << 10
 								buf := make([]byte, size)
 								buf = buf[:runtime.Stack(buf, false)]
-								logging.Error("Gopher[%v] exec timer failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
+								logging.Error("NBIO[%v] exec timer failed: %v\n%v\n", g.Name, err, *(*string)(unsafe.Pointer(&buf)))
 							}
 						}()
 						it.f()
@@ -439,11 +446,11 @@ func (g *Gopher) timerLoop() {
 }
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
-func (g *Gopher) PollerBuffer(c *Conn) []byte {
+func (g *Engine) PollerBuffer(c *Conn) []byte {
 	return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
 }
 
-func (g *Gopher) initHandlers() {
+func (g *Engine) initHandlers() {
 	g.wgConn.Add(1)
 	g.OnOpen(func(c *Conn) {})
 	g.OnClose(func(c *Conn, err error) {})
@@ -470,10 +477,10 @@ func (g *Gopher) initHandlers() {
 	}
 }
 
-func (g *Gopher) borrow(c *Conn) []byte {
+func (g *Engine) borrow(c *Conn) []byte {
 	return g.onReadBufferAlloc(c)
 }
 
-func (g *Gopher) payback(c *Conn, buffer []byte) {
+func (g *Engine) payback(c *Conn, buffer []byte) {
 	g.onReadBufferFree(c, buffer)
 }

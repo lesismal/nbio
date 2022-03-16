@@ -16,7 +16,7 @@ import (
 
 var addr = "127.0.0.1:8888"
 var testfile = "test_tmp.file"
-var gopher *Gopher
+var gopher *Engine
 
 func init() {
 	if err := ioutil.WriteFile(testfile, make([]byte, 1024*100), 0600); err != nil {
@@ -24,7 +24,7 @@ func init() {
 	}
 
 	addrs := []string{addr}
-	g := NewGopher(Config{
+	g := NewEngine(Config{
 		Network: "tcp",
 		Addrs:   addrs,
 	})
@@ -66,7 +66,7 @@ func TestEcho(t *testing.T) {
 	var msgSize = 1024
 	var total int64 = 0
 
-	g := NewGopher(Config{})
+	g := NewEngine(Config{})
 	err := g.Start()
 	if err != nil {
 		log.Panicf("Start failed: %v\n", err)
@@ -145,7 +145,7 @@ func TestSendfile(t *testing.T) {
 }
 
 func TestTimeout(t *testing.T) {
-	g := NewGopher(Config{})
+	g := NewEngine(Config{})
 	err := g.Start()
 	if err != nil {
 		log.Panicf("Start failed: %v\n", err)
@@ -198,7 +198,7 @@ func TestFuzz(t *testing.T) {
 	readed := 0
 	wg2 := sync.WaitGroup{}
 	wg2.Add(1)
-	g := NewGopher(Config{NPoller: 1})
+	g := NewEngine(Config{NPoller: 1})
 	g.OnData(func(c *Conn, data []byte) {
 		readed += len(data)
 		if readed == 4 {
@@ -233,7 +233,7 @@ func TestFuzz(t *testing.T) {
 		log.Panicf("Dial tcp4: %v", err)
 	}
 
-	gErr := NewGopher(Config{
+	gErr := NewEngine(Config{
 		Network: "tcp4",
 		Addrs:   []string{"127.0.0.1:8889", "127.0.0.1:8889"},
 	})
@@ -241,7 +241,7 @@ func TestFuzz(t *testing.T) {
 }
 
 func TestHeapTimer(t *testing.T) {
-	g := NewGopher(Config{})
+	g := NewEngine(Config{})
 	g.Start()
 	defer g.Stop()
 
@@ -253,7 +253,7 @@ func TestHeapTimer(t *testing.T) {
 	testHeapTimerExecManyRandtime(g)
 }
 
-func testHeapTimerNormal(g *Gopher, timeout time.Duration) {
+func testHeapTimerNormal(g *Engine, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
 	g.AfterFunc(timeout*5, func() {
@@ -290,13 +290,13 @@ func testHeapTimerNormal(g *Gopher, timeout time.Duration) {
 	}
 }
 
-func testHeapTimerExecPanic(g *Gopher, timeout time.Duration) {
+func testHeapTimerExecPanic(g *Engine, timeout time.Duration) {
 	g.afterFunc(timeout, func() {
 		panic("test")
 	})
 }
 
-func testHeapTimerNormalExecMany(g *Gopher, timeout time.Duration) {
+func testHeapTimerNormalExecMany(g *Engine, timeout time.Duration) {
 	ch4 := make(chan int, 5)
 	for i := 0; i < 5; i++ {
 		n := i + 1
@@ -319,7 +319,7 @@ func testHeapTimerNormalExecMany(g *Gopher, timeout time.Duration) {
 	}
 }
 
-func testHeapTimerExecManyRandtime(g *Gopher) {
+func testHeapTimerExecManyRandtime(g *Engine) {
 	its := make([]*htimer, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {
