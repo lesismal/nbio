@@ -679,8 +679,8 @@ func NewEngine(conf Config) *Engine {
 	// g.OnOpen(engine.ServerOnOpen)
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
-			parser := c.Session().(*Parser)
-			if parser != nil {
+			parser, ok := c.Session().(*Parser)
+			if ok && parser != nil {
 				parser.Close(err)
 			}
 			engine._onClose(c, err)
