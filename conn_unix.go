@@ -324,7 +324,7 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		return len(b), nil
 	}
-	c.writeBuffer = mempool.Append(c.writeBuffer, b)
+	c.writeBuffer = mempool.Append(c.writeBuffer, b...)
 
 	return len(b), nil
 }
@@ -398,8 +398,10 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 
 	if len(in) > 1 && size <= 65536 {
 		b := mempool.Malloc(size)
+		copied := 0
 		for _, v := range in {
 			copy(b[copied:], v)
+			copied += len(v)
 		}
 		n, err := c.write(b)
 		mempool.Free(b)
