@@ -23,7 +23,7 @@ type htimer struct {
 	index  int
 	expire time.Time
 	f      func()
-	parent *Gopher
+	parent *Engine
 }
 
 // cancel timer.

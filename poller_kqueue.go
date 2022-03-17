@@ -28,7 +28,7 @@ const (
 type poller struct {
 	mux sync.Mutex
 
-	g *Gopher
+	g *Engine
 
 	kfd   int
 	evtfd int
@@ -147,8 +147,8 @@ func (p *poller) start() {
 	}
 	defer p.g.Done()
 
-	logging.Debug("Poller[%v_%v_%v] start", p.g.Name, p.pollType, p.index)
-	defer logging.Debug("Poller[%v_%v_%v] stopped", p.g.Name, p.pollType, p.index)
+	logging.Debug("NBIO[%v][%v_%v] start", p.g.Name, p.pollType, p.index)
+	defer logging.Debug("NBIO[%v][%v_%v] stopped", p.g.Name, p.pollType, p.index)
 
 	if p.isListener {
 		p.acceptorLoop()
@@ -177,10 +177,10 @@ func (p *poller) acceptorLoop() {
 			o.addConn(c)
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				logging.Error("Poller[%v_%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
-				logging.Error("Poller[%v_%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+				logging.Error("NBIO[%v][%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 				break
 			}
 		}
@@ -218,7 +218,7 @@ func (p *poller) readWriteLoop() {
 }
 
 func (p *poller) stop() {
-	logging.Debug("Poller[%v_%v_%v] stop...", p.g.Name, p.pollType, p.index)
+	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	if p.listener != nil {
 		p.listener.Close()
@@ -226,7 +226,7 @@ func (p *poller) stop() {
 	p.trigger()
 }
 
-func newPoller(g *Gopher, isListener bool, index int) (*poller, error) {
+func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
 		if len(g.addrs) == 0 {
 			panic("invalid listener num")

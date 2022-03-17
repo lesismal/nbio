@@ -18,7 +18,7 @@ import (
 
 // Conn wraps net.Conn
 type Conn struct {
-	g *Gopher
+	g *Engine
 
 	hash int
 

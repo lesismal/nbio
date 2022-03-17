@@ -75,7 +75,7 @@ type Config struct {
 	TLSConfig *tls.Config
 
 	// Addrs is the non-tls listening addr list for an Engine.
-	// if it is empty, no listener created, then the Gopher is used for client by default.
+	// if it is empty, no listener created, then the Engine is used for client by default.
 	Addrs []string
 
 	// AddrsTLS is the tls listening addr list for an Engine.
@@ -153,7 +153,7 @@ type Config struct {
 
 // Engine .
 type Engine struct {
-	*nbio.Gopher
+	*nbio.Engine
 	*Config
 
 	MaxLoad                      int
@@ -191,7 +191,7 @@ func (e *Engine) OnClose(h func(c *nbio.Conn, err error)) {
 	e._onClose = h
 }
 
-// OnStop registers callback before Gopher is stopped.
+// OnStop registers callback before Engine is stopped.
 func (e *Engine) OnStop(h func()) {
 	e._onStop = h
 }
@@ -326,13 +326,13 @@ func (e *Engine) stopListeners() {
 
 // Start .
 func (e *Engine) Start() error {
-	err := e.Gopher.Start()
+	err := e.Engine.Start()
 	if err != nil {
 		return err
 	}
 	err = e.startListeners()
 	if err != nil {
-		e.Gopher.Stop()
+		e.Engine.Stop()
 		return err
 	}
 	return err
@@ -341,7 +341,7 @@ func (e *Engine) Start() error {
 // Stop .
 func (e *Engine) Stop() {
 	e.stopListeners()
-	e.Gopher.Stop()
+	e.Engine.Stop()
 }
 
 // Shutdown .
@@ -388,8 +388,8 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 	}
 
 Exit:
-	err := e.Gopher.Shutdown(ctx)
-	logging.Info("Gopher[%v] shutdown", e.Gopher.Name)
+	err := e.Engine.Shutdown(ctx)
+	logging.Info("NBIO[%v] shutdown", e.Engine.Name)
 	return err
 }
 
@@ -641,7 +641,7 @@ func NewEngine(conf Config) *Engine {
 		LockPoller:                   conf.LockPoller,
 		LockListener:                 conf.LockListener,
 	}
-	g := nbio.NewGopher(gopherConf)
+	g := nbio.NewEngine(gopherConf)
 	g.Execute = serverExecutor
 
 	for _, addr := range conf.Addrs {
@@ -652,7 +652,7 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	engine := &Engine{
-		Gopher:                       g,
+		Engine:                       g,
 		Config:                       &conf,
 		_onOpen:                      func(c *nbio.Conn) {},
 		_onClose:                     func(c *nbio.Conn, err error) {},
