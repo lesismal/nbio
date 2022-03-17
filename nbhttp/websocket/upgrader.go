@@ -245,36 +245,36 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	parser.ConnState = state
 
 	buf := mempool.Malloc(1024)[0:0]
-	buf = append(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "...)
-	buf = append(buf, acceptKeyBytes(challengeKey)...)
-	buf = append(buf, "\r\n"...)
+	buf = mempool.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
+	buf = mempool.Append(buf, acceptKeyBytes(challengeKey)...)
+	buf = mempool.AppendString(buf, "\r\n")
 	if subprotocol != "" {
-		buf = append(buf, "Sec-WebSocket-Protocol: "...)
-		buf = append(buf, subprotocol...)
-		buf = append(buf, "\r\n"...)
+		buf = mempool.AppendString(buf, "Sec-WebSocket-Protocol: ")
+		buf = mempool.AppendString(buf, subprotocol)
+		buf = mempool.AppendString(buf, "\r\n")
 	}
 	if compress {
-		buf = append(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n"...)
+		buf = mempool.AppendString(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
 	}
 	for k, vs := range responseHeader {
 		if k == "Sec-Websocket-Protocol" {
 			continue
 		}
 		for _, v := range vs {
-			buf = append(buf, k...)
-			buf = append(buf, ": "...)
+			buf = mempool.AppendString(buf, k)
+			buf = mempool.AppendString(buf, ": ")
 			for i := 0; i < len(v); i++ {
 				b := v[i]
 				if b <= 31 {
 					// prevent response splitting.
 					b = ' '
 				}
-				buf = append(buf, b)
+				buf = mempool.Append(buf, b)
 			}
-			buf = append(buf, "\r\n"...)
+			buf = mempool.AppendString(buf, "\r\n")
 		}
 	}
-	buf = append(buf, "\r\n"...)
+	buf = mempool.AppendString(buf, "\r\n")
 
 	if u.HandshakeTimeout > 0 {
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
@@ -288,7 +288,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		u.openHandler(state.conn)
 	}
 
-	if _, err = conn.Write(buf); err != nil {
+	_, err = conn.Write(buf)
+	mempool.Free(buf)
+	if err != nil {
 		conn.Close()
 		return nil, err
 	}
@@ -337,7 +339,7 @@ func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
 	if bufLen == 0 {
 		u.buffer = data
 	} else {
-		u.buffer = append(u.buffer, data...)
+		u.buffer = mempool.Append(u.buffer, data...)
 		oldBuffer = u.buffer
 	}
 
@@ -374,18 +376,19 @@ func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
 			}
 			if bl > 0 && u.common.messageHandler != nil {
 				if u.message == nil {
-					u.message = u.Engine.BodyAllocator.Malloc(len(body))
 					if u.isMessageTooLarge(len(body)) {
 						err = ErrMessageTooLarge
 						break
 					}
+					u.message = u.Engine.BodyAllocator.Malloc(len(body))
 					copy(u.message, body)
 				} else {
 					if u.isMessageTooLarge(len(u.message) + len(body)) {
 						err = ErrMessageTooLarge
 						break
 					}
-					u.message = append(u.message, body...)
+					u.message = u.Engine.BodyAllocator.Realloc(u.message, len(u.message)+len(body))
+					copy(u.message[len(u.message)-len(body):], body)
 				}
 			}
 			if fin {
