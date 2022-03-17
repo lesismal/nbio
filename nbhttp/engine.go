@@ -680,10 +680,9 @@ func NewEngine(conf Config) *Engine {
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
 			parser := c.Session().(*Parser)
-			if parser == nil {
-				logging.Error("nil parser")
+			if parser != nil {
+				parser.Close(err)
 			}
-			parser.Close(err)
 			engine._onClose(c, err)
 			engine.mux.Lock()
 			delete(engine.conns, c)
