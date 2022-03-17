@@ -73,7 +73,7 @@ type Config struct {
 // Gopher keeps old type to compatible with new name Engine.
 type Gopher = Engine
 
-func NewGopther(conf Config) *Gopher {
+func NewGopher(conf Config) *Gopher {
 	return NewEngine(conf)
 }
 
