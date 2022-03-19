@@ -450,6 +450,7 @@ func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
 func (u *connState) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
 		u.conn.onClose(u.conn, err)
+		u.conn.Close()
 	}
 	if len(u.buffer) > 0 {
 		mempool.Free(u.buffer)
