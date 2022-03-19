@@ -52,7 +52,7 @@ func (br *BodyReader) Append(data []byte) {
 			br.buffer = mempool.Malloc(len(data))
 			copy(br.buffer, data)
 		} else {
-			br.buffer = append(br.buffer, data...)
+			br.buffer = mempool.Append(br.buffer, data...)
 		}
 	}
 }

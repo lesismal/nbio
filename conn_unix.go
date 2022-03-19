@@ -73,7 +73,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // Write implements Write.
 func (c *Conn) Write(b []byte) (int, error) {
-	defer c.g.onWriteBufferFree(c, b)
+	// defer c.g.onWriteBufferFree(c, b)
 
 	c.mux.Lock()
 	if c.closed {
@@ -106,11 +106,11 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Writev implements Writev.
 func (c *Conn) Writev(in [][]byte) (int, error) {
-	defer func() {
-		for _, v := range in {
-			c.g.onWriteBufferFree(c, v)
-		}
-	}()
+	// defer func() {
+	// 	for _, v := range in {
+	// 		c.g.onWriteBufferFree(c, v)
+	// 	}
+	// }()
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -324,7 +324,7 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		return len(b), nil
 	}
-	c.writeBuffer = append(c.writeBuffer, b...)
+	c.writeBuffer = mempool.Append(c.writeBuffer, b...)
 
 	return len(b), nil
 }
@@ -362,6 +362,7 @@ func (c *Conn) flush() error {
 		}
 		// c.modWrite()
 	} else {
+		mempool.Free(old)
 		c.writeBuffer = nil
 		if c.wTimer != nil {
 			c.wTimer.Stop()
@@ -390,7 +391,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	}
 	if len(c.writeBuffer) > 0 {
 		for _, v := range in {
-			c.writeBuffer = append(c.writeBuffer, v...)
+			c.writeBuffer = mempool.Append(c.writeBuffer, v...)
 		}
 		return size, nil
 	}
@@ -402,7 +403,9 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 			copy(b[copied:], v)
 			copied += len(v)
 		}
-		return c.write(b)
+		n, err := c.write(b)
+		mempool.Free(b)
+		return n, err
 	}
 
 	nwrite := 0

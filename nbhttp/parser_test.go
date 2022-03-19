@@ -135,11 +135,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 			nRequest++
 		})
 	}
-	svr := &Server{
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
-	}
+	svr := &Server{}
 	parser = NewParser(processor, isClient, maxReadSize, nil)
 	parser.Engine = svr.Engine
 	tBegin := time.Now()
@@ -169,11 +165,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 }
 
 func newParser(isClient bool) *Parser {
-	svr := &Server{
-		// Malloc:  mempool.Malloc,
-		// Realloc: mempool.Realloc,
-		// Free:    mempool.Free,
-	}
+	svr := &Server{}
 	maxReadSize := 1024 * 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response, error) {})

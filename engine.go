@@ -111,11 +111,11 @@ type Engine struct {
 	onData            func(c *Conn, data []byte)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
-	onWriteBufferFree func(c *Conn, buffer []byte)
-	beforeRead        func(c *Conn)
-	afterRead         func(c *Conn)
-	beforeWrite       func(c *Conn)
-	onStop            func()
+	// onWriteBufferFree func(c *Conn, buffer []byte)
+	beforeRead  func(c *Conn)
+	afterRead   func(c *Conn)
+	beforeWrite func(c *Conn)
+	onStop      func()
 
 	callings  []func()
 	chCalling chan struct{}
@@ -250,12 +250,12 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 }
 
 // OnWriteBufferRelease registers callback for write buffer memory release.
-func (g *Engine) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.onWriteBufferFree = h
-}
+// func (g *Engine) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.onWriteBufferFree = h
+// }
 
 // BeforeRead registers callback before syscall.Read
 // the handler would be called on windows.
@@ -464,7 +464,7 @@ func (g *Engine) initHandlers() {
 	g.OnData(func(c *Conn, data []byte) {})
 	g.OnReadBufferAlloc(g.PollerBuffer)
 	g.OnReadBufferFree(func(c *Conn, buffer []byte) {})
-	g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
+	// g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
 	g.BeforeRead(func(c *Conn) {})
 	g.AfterRead(func(c *Conn) {})
 	g.BeforeWrite(func(c *Conn) {})

@@ -15,6 +15,8 @@ const maxAppendSize = 1024 * 1024 * 4
 type Allocator interface {
 	Malloc(size int) []byte
 	Realloc(buf []byte, size int) []byte
+	Append(buf []byte, more ...byte) []byte
+	AppendString(buf []byte, more string) []byte
 	Free(buf []byte)
 }
 
@@ -23,11 +25,10 @@ var DefaultMemPool = New(64)
 
 // MemPool .
 type MemPool struct {
-	minSize int
-	pool    sync.Pool
-
 	Debug       bool
 	mux         sync.Mutex
+	pool        sync.Pool
+	minSize     int
 	allocStacks map[*byte]string
 	freeStacks  map[*byte]string
 }
@@ -100,6 +101,16 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 	return (*pbuf)[:size]
 }
 
+// Append .
+func (mp *MemPool) Append(buf []byte, more ...byte) []byte {
+	return append(buf, more...)
+}
+
+// AppendString .
+func (mp *MemPool) AppendString(buf []byte, more string) []byte {
+	return append(buf, more...)
+}
+
 // Free .
 func (mp *MemPool) Free(buf []byte) {
 	if cap(buf) < mp.minSize {
@@ -163,6 +174,16 @@ func Malloc(size int) []byte {
 // Realloc exports default package method.
 func Realloc(buf []byte, size int) []byte {
 	return DefaultMemPool.Realloc(buf, size)
+}
+
+// Append exports default package method.
+func Append(buf []byte, more ...byte) []byte {
+	return DefaultMemPool.Append(buf, more...)
+}
+
+// AppendString exports default package method.
+func AppendString(buf []byte, more string) []byte {
+	return DefaultMemPool.AppendString(buf, more)
 }
 
 // Free exports default package method.
