@@ -159,7 +159,6 @@ type Engine struct {
 	MaxLoad                      int
 	MaxWebsocketFramePayloadSize int
 	ReleaseWebsocketPayload      bool
-	BodyAllocator                mempool.Allocator
 	CheckUtf8                    func(data []byte) bool
 
 	listeners []net.Listener
@@ -581,6 +580,9 @@ func NewEngine(conf Config) *Engine {
 	if conf.MaxWebsocketFramePayloadSize <= 0 {
 		conf.MaxWebsocketFramePayloadSize = DefaultMaxWebsocketFramePayloadSize
 	}
+	if conf.TLSAllocator == nil {
+		conf.TLSAllocator = mempool.DefaultMemPool
+	}
 	if conf.BodyAllocator == nil {
 		conf.BodyAllocator = mempool.DefaultMemPool
 	}
@@ -667,8 +669,6 @@ func NewEngine(conf Config) *Engine {
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
 		Cancel:       cancel,
-
-		BodyAllocator: conf.BodyAllocator,
 	}
 
 	shouldSupportTLS := !conf.SupportServerOnly || len(conf.AddrsTLS) > 0
