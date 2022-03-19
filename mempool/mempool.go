@@ -67,7 +67,7 @@ func (mp *MemPool) Malloc(size int) []byte {
 	}
 
 	if mp.Debug {
-		mp.saveAllocStack(*pbuf)
+		mp.saveAllocStack()
 	}
 
 	return (*pbuf)[:size]
@@ -96,7 +96,7 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 	copy((*pbuf)[:len(buf)], buf)
 
 	if mp.Debug {
-		mp.saveAllocStack(*pbuf)
+		mp.saveAllocStack()
 	}
 	return (*pbuf)[:size]
 }
@@ -114,7 +114,7 @@ func (mp *MemPool) AppendString(buf []byte, more string) []byte {
 // Free .
 func (mp *MemPool) Free(buf []byte) {
 	if mp.Debug {
-		mp.saveFreeStack(buf)
+		mp.saveFreeStack()
 	}
 
 	if cap(buf) < mp.minSize {
@@ -124,14 +124,14 @@ func (mp *MemPool) Free(buf []byte) {
 	mp.pool.Put(&buf)
 }
 
-func (mp *MemPool) saveFreeStack(buf []byte) {
+func (mp *MemPool) saveFreeStack() {
 	mp.mux.Lock()
 	defer mp.mux.Unlock()
 	s := getStack()
 	mp.freeStacks[s] = mp.freeStacks[s] + 1
 }
 
-func (mp *MemPool) saveAllocStack(buf []byte) {
+func (mp *MemPool) saveAllocStack() {
 	mp.mux.Lock()
 	defer mp.mux.Unlock()
 	s := getStack()
