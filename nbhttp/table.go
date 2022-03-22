@@ -16,6 +16,7 @@ var (
 		"DELETE":  true,
 		"TRACE":   true,
 		"CONNECT": true,
+		"PATCH":   true, // RFC 5789
 
 		// http 2.0
 		"PRI": true,
