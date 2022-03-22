@@ -15,6 +15,8 @@ const maxAppendSize = 1024 * 1024 * 4
 type Allocator interface {
 	Malloc(size int) []byte
 	Realloc(buf []byte, size int) []byte
+	Append(buf []byte, more ...byte) []byte
+	AppendString(buf []byte, more string) []byte
 	Free(buf []byte)
 }
 
@@ -23,13 +25,12 @@ var DefaultMemPool = New(64)
 
 // MemPool .
 type MemPool struct {
-	minSize int
-	pool    sync.Pool
-
 	Debug       bool
 	mux         sync.Mutex
-	allocStacks map[*byte]string
-	freeStacks  map[*byte]string
+	pool        sync.Pool
+	minSize     int
+	allocStacks map[string]int
+	freeStacks  map[string]int
 }
 
 // New .
@@ -39,8 +40,8 @@ func New(minSize int) Allocator {
 	}
 	mp := &MemPool{
 		minSize:     minSize,
-		allocStacks: map[*byte]string{},
-		freeStacks:  map[*byte]string{},
+		allocStacks: map[string]int{},
+		freeStacks:  map[string]int{},
 		// Debug:       true,
 	}
 	mp.pool.New = func() interface{} {
@@ -66,7 +67,7 @@ func (mp *MemPool) Malloc(size int) []byte {
 	}
 
 	if mp.Debug {
-		mp.saveAllocStack(*pbuf)
+		mp.saveAllocStack()
 	}
 
 	return (*pbuf)[:size]
@@ -95,42 +96,72 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 	copy((*pbuf)[:len(buf)], buf)
 
 	if mp.Debug {
-		mp.saveAllocStack(*pbuf)
+		mp.saveAllocStack()
 	}
 	return (*pbuf)[:size]
 }
 
+// Append .
+func (mp *MemPool) Append(buf []byte, more ...byte) []byte {
+	return append(buf, more...)
+}
+
+// AppendString .
+func (mp *MemPool) AppendString(buf []byte, more string) []byte {
+	return append(buf, more...)
+}
+
 // Free .
 func (mp *MemPool) Free(buf []byte) {
+	if mp.Debug {
+		mp.saveFreeStack()
+	}
+
 	if cap(buf) < mp.minSize {
 		return
 	}
-	if mp.Debug {
-		mp.saveFreeStack(buf)
-	}
+
 	mp.pool.Put(&buf)
 }
 
-func (mp *MemPool) saveFreeStack(buf []byte) {
-	p := &(buf[:1][0])
+func (mp *MemPool) saveFreeStack() {
 	mp.mux.Lock()
 	defer mp.mux.Unlock()
-	s, ok := mp.freeStacks[p]
-	if ok {
-		allocStack := mp.allocStacks[p]
-		err := fmt.Errorf("\nbuffer exists: %p\nprevious allocation:\n%v\nprevious free:\n%v\ncurrent free:\n%v", p, allocStack, s, getStack())
-		panic(err)
-	}
-	mp.freeStacks[p] = getStack()
-	delete(mp.allocStacks, p)
+	s := getStack()
+	mp.freeStacks[s] = mp.freeStacks[s] + 1
 }
 
-func (mp *MemPool) saveAllocStack(buf []byte) {
-	p := &(buf[:1][0])
+func (mp *MemPool) saveAllocStack() {
 	mp.mux.Lock()
 	defer mp.mux.Unlock()
-	delete(mp.freeStacks, p)
-	mp.allocStacks[p] = getStack()
+	s := getStack()
+	mp.allocStacks[s] = mp.allocStacks[s] + 1
+}
+
+func (mp *MemPool) LogDebugInfo() {
+	mp.mux.Lock()
+	defer mp.mux.Unlock()
+	totalAlloc := 0
+	totalFree := 0
+	fmt.Println("*********************************************************")
+	fmt.Println("Alloc")
+	for s, n := range mp.allocStacks {
+		fmt.Println("num:", n)
+		fmt.Println("stack:\n", s)
+		totalAlloc += n
+		fmt.Println("*********************************************************")
+	}
+	fmt.Println("---------------------------------------------------------")
+	fmt.Println("Free")
+	for s, n := range mp.freeStacks {
+		fmt.Println("num:", n)
+		fmt.Println("stack:\n", s)
+		totalFree += n
+		fmt.Println("---------------------------------------------------------")
+	}
+	fmt.Println("totalAlloc:", totalAlloc)
+	fmt.Println("totalFree:", totalFree)
+	fmt.Println("*********************************************************")
 }
 
 // NativeAllocator definition.
@@ -165,9 +196,35 @@ func Realloc(buf []byte, size int) []byte {
 	return DefaultMemPool.Realloc(buf, size)
 }
 
+// Append exports default package method.
+func Append(buf []byte, more ...byte) []byte {
+	return DefaultMemPool.Append(buf, more...)
+}
+
+// AppendString exports default package method.
+func AppendString(buf []byte, more string) []byte {
+	return DefaultMemPool.AppendString(buf, more)
+}
+
 // Free exports default package method.
 func Free(buf []byte) {
 	DefaultMemPool.Free(buf)
+}
+
+// SetDebug .
+func SetDebug(enable bool) {
+	mp, ok := DefaultMemPool.(*MemPool)
+	if ok {
+		mp.Debug = enable
+	}
+}
+
+// LogDebugInfo .
+func LogDebugInfo() {
+	mp, ok := DefaultMemPool.(*MemPool)
+	if ok {
+		mp.LogDebugInfo()
+	}
 }
 
 func getStack() string {
