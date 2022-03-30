@@ -484,19 +484,26 @@ func (u *connState) handleMessage(p *nbhttp.Parser, opcode MessageType, body []b
 		return
 	}
 
-	p.Execute(func() {
+	if !p.Execute(func() {
 		u.common.handleWsMessage(u.conn, opcode, body)
-	})
-
+	}) {
+		if len(body) > 0 {
+			u.Engine.BodyAllocator.Free(body)
+		}
+	}
 }
 
 func (u *connState) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
-	p.Execute(func() {
+	if !p.Execute(func() {
 		u.common.handleWsMessage(u.conn, opcode, body)
 		if len(body) > 0 && u.Engine.ReleaseWebsocketPayload {
 			u.Engine.BodyAllocator.Free(body)
 		}
-	})
+	}) {
+		if len(body) > 0 {
+			u.Engine.BodyAllocator.Free(body)
+		}
+	}
 }
 
 func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
