@@ -160,59 +160,7 @@ func (mp *MemPool) reallocDebug(buf []byte, size int) []byte {
 
 // Append .
 func (mp *MemPool) Append(buf []byte, more ...byte) []byte {
-	if !mp.Debug {
-		bl := len(buf)
-		total := bl + len(more)
-		if bl < mp.bigSize && total >= mp.bigSize {
-			pbuf := mp.bigPool.Get().(*[]byte)
-			need := total - cap(*pbuf)
-			if need > 0 {
-				*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-			}
-			*pbuf = (*pbuf)[:total]
-			copy(*pbuf, buf)
-			copy((*pbuf)[bl:], more)
-			mp.Free(buf)
-			return *pbuf
-		}
-		return append(buf, more...)
-	}
-	return mp.appendDebug(buf, more...)
-}
-
-func (mp *MemPool) appendDebug(buf []byte, more ...byte) []byte {
-	if cap(buf) == 0 {
-		panic("append zero cap buf")
-	}
-	bl := len(buf)
-	total := bl + len(more)
-	if bl < mp.bigSize && total >= mp.bigSize {
-		pbuf := mp.bigPool.Get().(*[]byte)
-		need := total - cap(*pbuf)
-		if need > 0 {
-			*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, need)...)
-		}
-		*pbuf = (*pbuf)[:total]
-		copy(*pbuf, buf)
-		copy((*pbuf)[bl:], more)
-		mp.Free(buf)
-		ptr := getBufferPtr(*pbuf)
-		mp.mux.Lock()
-		defer mp.mux.Unlock()
-		mp.addAllocStack(ptr)
-		return *pbuf
-	}
-
-	oldPtr := getBufferPtr(buf)
-	buf = append(buf, more...)
-	newPtr := getBufferPtr(buf)
-	if newPtr != oldPtr {
-		mp.mux.Lock()
-		defer mp.mux.Unlock()
-		mp.deleteAllocStack(oldPtr)
-		mp.addAllocStack(newPtr)
-	}
-	return buf
+	return mp.AppendString(buf, *(*string)(unsafe.Pointer(&more)))
 }
 
 // AppendString .

@@ -27,30 +27,9 @@ const (
 	MaxInt = int64(int(MaxUint >> 1))
 )
 
-var emptyParsingFields = parsingFields{}
-
-type parsingFields struct {
-	proto string
-
-	statusCode int
-	status     string
-
-	headerKey   string
-	headerValue string
-
-	header  http.Header
-	trailer http.Header
-
-	contentLength int
-	chunkSize     int
-	chunked       bool
-	headerExists  bool
-}
-
 // Parser .
 type Parser struct {
 	mux sync.Mutex
-	parsingFields
 
 	cache []byte
 
@@ -72,6 +51,19 @@ type Parser struct {
 	Conn net.Conn
 
 	Execute func(f func()) bool
+
+	// http fields
+	proto         string
+	statusCode    int
+	status        string
+	headerKey     string
+	headerValue   string
+	header        http.Header
+	trailer       http.Header
+	contentLength int
+	chunkSize     int
+	chunked       bool
+	headerExists  bool
 }
 
 func (p *Parser) nextState(state int8) {
@@ -767,7 +759,9 @@ func (p *Parser) parseTrailer() error {
 
 func (p *Parser) handleMessage() {
 	p.Processor.OnComplete(p)
-	p.parsingFields = emptyParsingFields
+	p.chunked = false
+	p.header = nil
+	p.trailer = nil
 
 	if !p.isClient {
 		p.nextState(stateMethodBefore)
