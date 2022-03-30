@@ -216,6 +216,14 @@ func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 	}
 }
 
+func (e *Engine) closeAllConns() {
+	e.mux.Lock()
+	defer e.mux.Unlock()
+	for c := range e.conns {
+		c.Close()
+	}
+}
+
 func (e *Engine) startListeners() error {
 	for _, conf := range e.AddrConfigsTLS {
 		if conf.Addr != "" {
@@ -363,6 +371,7 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 	}
 
 	chCloseQueue := make(chan *nbio.Conn, 1024)
+	defer e.closeAllConns()
 	defer close(chCloseQueue)
 
 	go func() {
@@ -694,9 +703,9 @@ func NewEngine(conf Config) *Engine {
 			c.DataHandler(c, data)
 		}
 	})
-	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-		mempool.Free(buffer)
-	})
+	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+	// 	mempool.Free(buffer)
+	// })
 	g.OnStop(func() {
 		engine._onStop()
 		g.Execute = func(f func()) {}

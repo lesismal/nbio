@@ -1,7 +1,7 @@
 github.com/OneOfOne/xxhash v1.2.2/go.mod h1:HSdplMjZKSmBqAxg5vPj2TmRDmfkzw+cTzAElWljhcU=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
-github.com/lesismal/llib v1.1.5 h1:oq/7BpnKRkMf9YwJhSxx7E0UIXc/2QDsbvqIFeVJ0vk=
-github.com/lesismal/llib v1.1.5/go.mod h1:3vmCrIMrpkaoA3bDu/sI+J7EyEUMPbOvmAxb7PlzilM=
+github.com/lesismal/llib v1.1.6 h1:/mtiOFShydKSEsO/cajK8benGD1OHgP51GrBni7rGEY=
+github.com/lesismal/llib v1.1.6/go.mod h1:3vmCrIMrpkaoA3bDu/sI+J7EyEUMPbOvmAxb7PlzilM=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 golang.org/x/crypto v0.0.0-20210513122933-cd7d49e622d5 h1:N6Jp/LCiEoIBX56BZSR2bepK5GtbSC2DDOYT742mMfE=
 golang.org/x/crypto v0.0.0-20210513122933-cd7d49e622d5/go.mod h1:P+XmwS30IXTQdn5tA2iutPOUgjI07+tq3H3K9MVA1s8=

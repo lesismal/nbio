@@ -33,22 +33,6 @@ type Parser struct {
 
 	cache []byte
 
-	proto string
-
-	statusCode int
-	status     string
-
-	headerKey   string
-	headerValue string
-
-	header  http.Header
-	trailer http.Header
-
-	contentLength int
-	chunkSize     int
-	chunked       bool
-	headerExists  bool
-
 	state    int8
 	isClient bool
 
@@ -66,7 +50,20 @@ type Parser struct {
 
 	Conn net.Conn
 
-	Execute func(f func())
+	Execute func(f func()) bool
+
+	// http fields
+	proto         string
+	statusCode    int
+	status        string
+	headerKey     string
+	headerValue   string
+	header        http.Header
+	trailer       http.Header
+	contentLength int
+	chunkSize     int
+	chunked       bool
+	headerExists  bool
 }
 
 func (p *Parser) nextState(state int8) {
@@ -143,7 +140,7 @@ func (p *Parser) Read(data []byte) error {
 		if offset+len(data) > p.readLimit {
 			return ErrTooLong
 		}
-		p.cache = append(p.cache, data...)
+		p.cache = mempool.Append(p.cache, data...)
 		data = p.cache
 	}
 
@@ -339,6 +336,7 @@ UPGRADER:
 				if err != nil {
 					return err
 				}
+
 				p.Processor.OnContentLength(p.contentLength)
 				err = p.parseTrailer()
 				if err != nil {
@@ -761,7 +759,9 @@ func (p *Parser) parseTrailer() error {
 
 func (p *Parser) handleMessage() {
 	p.Processor.OnComplete(p)
+	p.chunked = false
 	p.header = nil
+	p.trailer = nil
 
 	if !p.isClient {
 		p.nextState(stateMethodBefore)
@@ -771,7 +771,7 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser .
-func NewParser(processor Processor, isClient bool, readLimit int, executor func(f func())) *Parser {
+func NewParser(processor Processor, isClient bool, readLimit int, executor func(f func()) bool) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
 	}
@@ -783,8 +783,9 @@ func NewParser(processor Processor, isClient bool, readLimit int, executor func(
 		readLimit = DefaultHTTPReadLimit
 	}
 	if executor == nil {
-		executor = func(f func()) {
+		executor = func(f func()) bool {
 			f()
+			return true
 		}
 	}
 	p := &Parser{
