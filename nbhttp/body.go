@@ -52,7 +52,7 @@ func (br *BodyReader) Append(data []byte) {
 			br.buffer = mempool.Malloc(len(data))
 			copy(br.buffer, data)
 		} else {
-			br.buffer = append(br.buffer, data...)
+			br.buffer = mempool.Append(br.buffer, data...)
 		}
 	}
 }
@@ -76,15 +76,12 @@ func (br *BodyReader) TakeOver() []byte {
 
 // Close implements io. Closer.
 func (br *BodyReader) Close() error {
-	return nil
-}
-
-func (br *BodyReader) close() {
 	if br.buffer != nil {
 		mempool.Free(br.buffer)
 		br.buffer = nil
 		br.index = 0
 	}
+	return nil
 }
 
 // NewBodyReader creates a BodyReader.

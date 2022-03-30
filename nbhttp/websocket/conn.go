@@ -148,6 +148,8 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	compress := c.enableWriteCompression && (messageType == TextMessage || messageType == BinaryMessage)
 	if compress {
 		compress = true
+		// if user customize mempool, they should promise it's safe to mempool.Free a buffer which is not from their mempool.Malloc
+		// or we need to implement a writebuffer that use mempool.Realloc to grow or append the buffer
 		w := &writeBuffer{
 			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
 		}
@@ -269,6 +271,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	}
 
 	_, err := c.Conn.Write(buf)
+	mempool.Free(buf)
 	return err
 }
 

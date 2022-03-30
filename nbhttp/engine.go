@@ -694,9 +694,9 @@ func NewEngine(conf Config) *Engine {
 			c.DataHandler(c, data)
 		}
 	})
-	g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-		mempool.Free(buffer)
-	})
+	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
+	// 	mempool.Free(buffer)
+	// })
 	g.OnStop(func() {
 		engine._onStop()
 		g.Execute = func(f func()) {}

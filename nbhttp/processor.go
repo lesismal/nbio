@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	emptyRequest  = http.Request{}
-	emptyResponse = Response{}
+	emptyRequest        = http.Request{}
+	emptyResponse       = Response{}
+	emptyClientResponse = http.Response{}
 
 	requestPool = sync.Pool{
 		New: func() interface{} {
@@ -30,13 +31,19 @@ var (
 			return &Response{}
 		},
 	}
+
+	clientResponsePool = sync.Pool{
+		New: func() interface{} {
+			return &http.Response{}
+		},
+	}
 )
 
 func releaseRequest(req *http.Request) {
 	if req != nil {
 		if req.Body != nil {
 			br := req.Body.(*BodyReader)
-			br.close()
+			br.Close()
 			bodyReaderPool.Put(br)
 		}
 		// fast gc for fields
@@ -49,6 +56,18 @@ func releaseResponse(res *Response) {
 	if res != nil {
 		*res = emptyResponse
 		responsePool.Put(res)
+	}
+}
+
+func releaseClientResponse(res *http.Response) {
+	if res != nil {
+		if res.Body != nil {
+			br := res.Body.(*BodyReader)
+			br.Close()
+			bodyReaderPool.Put(br)
+		}
+		*res = emptyClientResponse
+		clientResponsePool.Put(res)
 	}
 }
 
@@ -235,10 +254,12 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	response := NewResponse(p.parser, request, p.enableSendfile)
-	parser.Execute(func() {
+	if !parser.Execute(func() {
 		p.handler.ServeHTTP(response, request)
 		p.flushResponse(response)
-	})
+	}) {
+		releaseRequest(request)
+	}
 }
 
 func (p *ServerProcessor) flushResponse(res *Response) {
@@ -266,7 +287,10 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 
 // Close .
 func (p *ServerProcessor) Close(parser *Parser, err error) {
-
+	if p.request != nil {
+		releaseRequest(p.request)
+		p.request = nil
+	}
 }
 
 // NewServerProcessor .
@@ -326,7 +350,7 @@ func (p *ClientProcessor) OnProto(proto string) error {
 		// 	Proto:  proto,
 		// 	Header: http.Header{},
 		// }
-		p.response = &http.Response{}
+		p.response = clientResponsePool.Get().(*http.Response)
 		p.response.Proto = proto
 		p.response.Header = http.Header{}
 	} else {
@@ -374,13 +398,19 @@ func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 func (p *ClientProcessor) OnComplete(parser *Parser) {
 	res := p.response
 	p.response = nil
-	parser.Execute(func() {
+	if !parser.Execute(func() {
 		p.handler(res, nil)
-	})
+		releaseClientResponse(res)
+	}) {
+		releaseClientResponse(res)
+	}
 }
 
 // Close .
 func (p *ClientProcessor) Close(parser *Parser, err error) {
+	if p.response != nil {
+		releaseClientResponse(p.response)
+	}
 	p.conn.CloseWithError(err)
 }
 

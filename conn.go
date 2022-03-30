@@ -60,11 +60,11 @@ func (c *Conn) ExecuteLen() int {
 }
 
 // Execute .
-func (c *Conn) Execute(f func()) {
+func (c *Conn) Execute(f func()) bool {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		return
+		return false
 	}
 
 	isHead := (len(c.execList) == 0)
@@ -99,6 +99,8 @@ func (c *Conn) Execute(f func()) {
 			}
 		})
 	}
+
+	return true
 }
 
 // MustExecute .
