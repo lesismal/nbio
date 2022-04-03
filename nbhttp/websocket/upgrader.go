@@ -663,21 +663,22 @@ func checkSameOrigin(r *http.Request) bool {
 func headerContains(header http.Header, name string, value string) bool {
 	var t string
 	values := header[name]
+headers:
 	for _, s := range values {
 		for {
 			t, s = nextToken(skipSpace(s))
 			if t == "" {
-				continue
+				continue headers
 			}
 			s = skipSpace(s)
 			if s != "" && s[0] != ',' {
-				continue
+				continue headers
 			}
 			if equalASCIIFold(t, value) {
 				return true
 			}
 			if s == "" {
-				continue
+				continue headers
 			}
 			s = s[1:]
 		}
