@@ -25,6 +25,13 @@ const (
 	EPOLLET = 1
 )
 
+const (
+	// for build
+	IPPROTO_TCP   = 0
+	TCP_KEEPINTVL = 0
+	TCP_KEEPIDLE  = 0
+)
+
 type poller struct {
 	mux sync.Mutex
 
