@@ -10,6 +10,7 @@ package nbio
 import (
 	"errors"
 	"net"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
