@@ -33,6 +33,12 @@ const (
 	epollEventsError = syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP
 )
 
+const (
+	IPPROTO_TCP   = syscall.IPPROTO_TCP
+	TCP_KEEPINTVL = syscall.TCP_KEEPINTVL
+	TCP_KEEPIDLE  = syscall.TCP_KEEPIDLE
+)
+
 type poller struct {
 	g *Engine
 

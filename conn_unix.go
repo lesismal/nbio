@@ -260,10 +260,10 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	if runtime.GOOS == "linux" {
 		d += (time.Second - time.Nanosecond)
 		secs := int(d.Seconds())
-		if err := syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, secs); err != nil {
+		if err := syscall.SetsockoptInt(c.fd, IPPROTO_TCP, TCP_KEEPINTVL, secs); err != nil {
 			return err
 		}
-		return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
+		return syscall.SetsockoptInt(c.fd, IPPROTO_TCP, TCP_KEEPIDLE, secs)
 	}
 	return errors.New("not supported")
 }
