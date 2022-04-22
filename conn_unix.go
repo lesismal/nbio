@@ -256,13 +256,12 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 
 // SetKeepAlivePeriod implements SetKeepAlivePeriod.
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
-	return errors.New("not supported")
-	// d += (time.Second - time.Nanosecond)
-	// secs := int(d.Seconds())
-	// if err := syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, secs); err != nil {
-	// 	return err
-	// }
-	// return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
+	d += (time.Second - time.Nanosecond)
+	secs := int(d.Seconds())
+	if err := syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL, secs); err != nil {
+		return err
+	}
+	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_KEEPIDLE, secs)
 }
 
 // SetLinger implements SetLinger.
