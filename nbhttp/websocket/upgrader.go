@@ -33,6 +33,7 @@ type Upgrader struct {
 	// MessageLengthLimit is the maximum length of websocket message. 0 for unlimited.
 	MessageLengthLimit int64
 	HandshakeTimeout   time.Duration
+	KeepaliveTime      time.Duration
 
 	enableCompression      bool
 	enableWriteCompression bool
@@ -131,6 +132,9 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 				}
 			}
 			h(c, messageType, data)
+			if u.KeepaliveTime > 0 {
+				c.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
+			}
 		}
 	}
 }
@@ -298,6 +302,12 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	state.conn.OnClose(u.onClose)
+
+	if u.KeepaliveTime <= 0 {
+		conn.SetReadDeadline(time.Time{})
+	} else {
+		conn.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
+	}
 
 	return state.conn, nil
 }
