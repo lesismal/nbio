@@ -23,7 +23,7 @@ import (
 	"github.com/lesismal/nbio/taskpool"
 )
 
-var (
+const (
 	// DefaultMaxLoad .
 	DefaultMaxLoad = 1024 * 1024
 
