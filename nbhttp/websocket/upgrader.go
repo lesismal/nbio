@@ -69,7 +69,9 @@ func (u *connState) CompressionEnabled() bool {
 
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
-	u := &Upgrader{}
+	u := &Upgrader{
+		KeepaliveTime: nbhttp.DefaultKeepaliveTime,
+	}
 	u.pingMessageHandler = func(c *Conn, data string) {
 		if len(data) > 125 {
 			c.Close()
