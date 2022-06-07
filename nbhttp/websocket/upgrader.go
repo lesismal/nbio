@@ -290,10 +290,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	state.Engine = parser.Engine
 	state.conn.Engine = parser.Engine
 
-	if u.openHandler != nil {
-		u.openHandler(state.conn)
-	}
-
 	_, err = conn.Write(buf)
 	mempool.Free(buf)
 	if err != nil {
@@ -301,13 +297,17 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
-	state.conn.OnClose(u.onClose)
-
 	if u.KeepaliveTime <= 0 {
 		conn.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
 	} else {
 		conn.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
 	}
+
+	if u.openHandler != nil {
+		u.openHandler(state.conn)
+	}
+
+	state.conn.OnClose(u.onClose)
 
 	return state.conn, nil
 }
