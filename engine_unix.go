@@ -42,19 +42,14 @@ func (g *Engine) Start() error {
 			return err
 		}
 	}
-
-	for i := 0; i < g.pollerNum; i++ {
-		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
-		g.Add(1)
-		go g.pollers[i].start()
-	}
+	coherePollerRun(g)
 	for _, l := range g.listeners {
 		g.Add(1)
 		go l.start()
 	}
 
 	g.Add(1)
-	go g.timerLoop()
+	g.startTimerLoop()
 
 	if len(g.addrs) == 0 {
 		logging.Info("NBIO[%v] start", g.Name)
@@ -62,6 +57,10 @@ func (g *Engine) Start() error {
 		logging.Info("NBIO[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
+}
+
+func (g *Engine) startTimerLoop() {
+	go g.timerLoop()
 }
 
 // NewEngine is a factory impl.

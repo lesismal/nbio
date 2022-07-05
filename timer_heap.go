@@ -52,6 +52,8 @@ func (h *timerHeap) Push(x interface{}) {
 	n := len(*h)
 	(*h)[n-1].index = n - 1
 }
+
+//go:norace
 func (h *timerHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
