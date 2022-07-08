@@ -42,12 +42,7 @@ func (g *Engine) Start() error {
 			return err
 		}
 	}
-
-	for i := 0; i < g.pollerNum; i++ {
-		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
-		g.Add(1)
-		go g.pollers[i].start()
-	}
+	coherePollerRun(g)
 	for _, l := range g.listeners {
 		g.Add(1)
 		go l.start()
