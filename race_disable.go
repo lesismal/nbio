@@ -36,3 +36,18 @@ func cohereGetConn(p *poller, fd int) *Conn {
 func cohereAddConn(p *poller, fd int, c *Conn) {
 	p.g.connsUnix[fd] = c
 }
+
+//go:norace
+func cohereLenTimers(ts timerHeap) int {
+	return ts.Len()
+}
+
+//go:norace
+func cohereModifyLittleHeap(ts timerHeap, start, end int) timerHeap {
+	return ts[start:end]
+}
+
+//go:norace
+func cohereUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
+	*ptr = ts
+}

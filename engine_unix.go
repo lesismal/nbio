@@ -49,7 +49,7 @@ func (g *Engine) Start() error {
 	}
 
 	g.Add(1)
-	g.startTimerLoop()
+	go g.timerLoop()
 
 	if len(g.addrs) == 0 {
 		logging.Info("NBIO[%v] start", g.Name)
@@ -57,10 +57,6 @@ func (g *Engine) Start() error {
 		logging.Info("NBIO[%v] start listen on: [\"%v\"]", g.Name, strings.Join(g.addrs, `", "`))
 	}
 	return nil
-}
-
-func (g *Engine) startTimerLoop() {
-	go g.timerLoop()
 }
 
 // NewEngine is a factory impl.

@@ -53,12 +53,12 @@ func (h *timerHeap) Push(x interface{}) {
 	(*h)[n-1].index = n - 1
 }
 
-//go:norace
 func (h *timerHeap) Pop() interface{} {
 	old := *h
 	n := len(old)
 	x := old[n-1]
 	old[n-1] = nil // avoid memory leak
-	*h = old[0 : n-1]
+	// equal *h = old[0 : n-1]
+	cohereUpdateLittleHeap(h, cohereModifyLittleHeap(old, 0, n-1))
 	return x
 }
