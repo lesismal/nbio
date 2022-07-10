@@ -72,7 +72,7 @@ func (p *poller) deleteConn(c *Conn) {
 		return
 	}
 	fd := c.fd
-	cohereDeleteConnElem(p, fd, c)
+	cohereDeleteConnElemOnPoller(p, fd, c)
 	p.g.onClose(c, c.closeErr)
 }
 

@@ -192,7 +192,8 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
+	// equal g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
+	cohereAddConnOnEngine(g, c)
 	return c, nil
 }
 
@@ -447,7 +448,8 @@ func (g *Engine) timerLoop() {
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
 func (g *Engine) PollerBuffer(c *Conn) []byte {
-	return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
+	// equal return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
+	return cohereGetReadBufferFromPoller(g, c)
 }
 
 func (g *Engine) initHandlers() {
