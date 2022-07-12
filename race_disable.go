@@ -10,6 +10,14 @@ func coherePollerRun(g *Engine) {
 }
 
 //go:norace
+func cohereListenerRun(g *Engine) {
+	for _, l := range g.listeners {
+		g.Add(1)
+		go l.start()
+	}
+}
+
+//go:norace
 // equal (*poller).shutdown = b
 func cohereSetShutdown(p *poller, b bool) {
 	p.shutdown = b
@@ -38,6 +46,17 @@ func cohereGetConnOnPoller(p *poller, fd int) *Conn {
 }
 
 //go:norace
+// equal return g.pollers[index]
+func cohereGetPollerOnEngine(g *Engine, index int) *poller {
+	return g.pollers[index]
+}
+
+//go:norace
+func cohereGetFdOnConn(c *Conn) int {
+	return c.fd
+}
+
+//go:norace
 // equal (*poller).(*Engine).connsUnix[fd] = c
 func cohereAddConnOnPoller(p *poller, fd int, c *Conn) {
 	p.g.connsUnix[fd] = c
@@ -62,13 +81,21 @@ func cohereUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
 }
 
 //go:norace
-// equal return (*Engine).([]*poller)[c.Hash()%(*Engine).pollerNum].ReadBuffer
-func cohereGetReadBufferFromPoller(g *Engine, c *Conn) []byte {
-	return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
+// equal return (*Engine).([]*poller)[index].ReadBuffer
+func cohereGetReadBufferFromPoller(g *Engine, index int) []byte {
+	return g.pollers[index].ReadBuffer
 }
 
 //go:norace
-// equal (*Engine).([]*poller)[(*Conn).Hash() % (*Engine).pollerNum].addConn(c)
-func cohereAddConnOnEngine(g *Engine, c *Conn) {
-	g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
+func cohereConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
+	p := g.pollers[index]
+	switch op {
+	case "deleteConn":
+		p.deleteConn(c)
+	case "addConn":
+		p.addConn(c)
+	case "modWrite":
+		p.modWrite(c.fd)
+	}
+	return
 }

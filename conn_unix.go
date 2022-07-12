@@ -51,7 +51,7 @@ type Conn struct {
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
-	return c.fd
+	return cohereGetFdOnConn(c)
 }
 
 // Read implements Read.
@@ -289,14 +289,16 @@ func (c *Conn) SetSession(session interface{}) {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		c.g.pollers[c.Hash()%len(c.g.pollers)].modWrite(c.fd)
+		//equal c.g.pollers[c.Hash()%len(c.g.pollers)].modWrite(c.fd)
+		cohereConnOpOnEngine(c.g, c.Hash()%len(c.g.pollers), "modWrite", c)
 	}
 }
 
 func (c *Conn) resetRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
-		p := c.g.pollers[c.Hash()%len(c.g.pollers)]
+		// equal p := c.g.pollers[c.Hash()%len(c.g.pollers)]
+		p := cohereGetPollerOnEngine(c.g, c.Hash()%len(c.g.pollers))
 		p.deleteEvent(c.fd)
 		p.addRead(c.fd)
 	}
@@ -464,7 +466,8 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	if c.g != nil {
-		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+		// equal c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+		cohereConnOpOnEngine(c.g, c.Hash()%len(c.g.pollers), "deleteConn", c)
 	}
 
 	return syscall.Close(c.fd)
