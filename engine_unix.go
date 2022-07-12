@@ -43,10 +43,7 @@ func (g *Engine) Start() error {
 		}
 	}
 	coherePollerRun(g)
-	for _, l := range g.listeners {
-		g.Add(1)
-		go l.start()
-	}
+	cohereListenerRun(g)
 
 	g.Add(1)
 	go g.timerLoop()
