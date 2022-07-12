@@ -51,6 +51,7 @@ type Conn struct {
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
+	// equal return c.fd
 	return cohereGetFdOnConn(c)
 }
 

@@ -30,16 +30,6 @@ func cohereLoadShutdown(p *poller) bool {
 }
 
 //go:norace
-//	equal if (*Conn) == (*poller).(*Engine).connsUnix[fd]
-//	Is true equal (*poller).(*Engine).connsUnix[fd] = nil;(*poller).deleteEvent(fd)
-func cohereDeleteConnElemOnPoller(p *poller, fd int, c *Conn) {
-	if c == p.g.connsUnix[fd] {
-		p.g.connsUnix[fd] = nil
-		p.deleteEvent(fd)
-	}
-}
-
-//go:norace
 // equal return (*poller).(*Engine).connsUnix[fd]
 func cohereGetConnOnPoller(p *poller, fd int) *Conn {
 	return p.g.connsUnix[fd]
@@ -49,11 +39,6 @@ func cohereGetConnOnPoller(p *poller, fd int) *Conn {
 // equal return g.pollers[index]
 func cohereGetPollerOnEngine(g *Engine, index int) *poller {
 	return g.pollers[index]
-}
-
-//go:norace
-func cohereGetFdOnConn(c *Conn) int {
-	return c.fd
 }
 
 //go:norace
@@ -84,18 +69,4 @@ func cohereUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
 // equal return (*Engine).([]*poller)[index].ReadBuffer
 func cohereGetReadBufferFromPoller(g *Engine, index int) []byte {
 	return g.pollers[index].ReadBuffer
-}
-
-//go:norace
-func cohereConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
-	p := g.pollers[index]
-	switch op {
-	case "deleteConn":
-		p.deleteConn(c)
-	case "addConn":
-		p.addConn(c)
-	case "modWrite":
-		p.modWrite(c.fd)
-	}
-	return
 }
