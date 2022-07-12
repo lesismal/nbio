@@ -9,14 +9,14 @@ import (
 
 func TestMemPool(t *testing.T) {
 	pool := New(64, 64*1024)
-	for i := 0; i < 128; i++ {
+	for i := 0; i < 64; i++ {
 		buf := pool.Malloc(i)
 		if len(buf) != i {
 			t.Fatalf("invalid length: %v != %v", len(buf), i)
 		}
 		pool.Free(buf)
 	}
-	for i := 1024 * 1024; i < 1024*1024*128; i += 1024 * 1024 {
+	for i := 1024 * 1024; i < 1024*1024*64; i += 1024 * 1024 {
 		buf := pool.Malloc(i)
 		if len(buf) != i {
 			t.Fatalf("invalid length: %v != %v", len(buf), i)
@@ -25,7 +25,7 @@ func TestMemPool(t *testing.T) {
 	}
 
 	buf := pool.Malloc(0)
-	for i := 1; i < 128; i++ {
+	for i := 1; i < 64; i++ {
 		buf = pool.Realloc(buf, i)
 		if len(buf) != i {
 			t.Fatalf("invalid length: %v != %v", len(buf), i)
