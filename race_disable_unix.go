@@ -21,9 +21,10 @@ func noRaceGetFdOnConn(c *Conn) int {
 	return c.fd
 }
 
+//	equal
+//		if (*Conn) == (*poller).(*Engine).connsUnix[fd]
+//		Is true equal (*poller).(*Engine).connsUnix[fd] = nil;(*poller).deleteEvent(fd)
 //go:norace
-//	equal if (*Conn) == (*poller).(*Engine).connsUnix[fd]
-//	Is true equal (*poller).(*Engine).connsUnix[fd] = nil;(*poller).deleteEvent(fd)
 func noRaceDeleteConnElemOnPoller(p *poller, fd int, c *Conn) {
 	if c == p.g.connsUnix[fd] {
 		p.g.connsUnix[fd] = nil

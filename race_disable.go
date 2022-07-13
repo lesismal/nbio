@@ -17,56 +17,56 @@ func noRaceListenerRun(g *Engine) {
 	}
 }
 
-//go:norace
 // equal (*poller).shutdown = b
+//go:norace
 func noRaceSetShutdown(p *poller, b bool) {
 	p.shutdown = b
 }
 
-//go:norace
 // equal returns (*poller).shutdown
+//go:norace
 func noRaceLoadShutdown(p *poller) bool {
 	return p.shutdown
 }
 
-//go:norace
 // equal return (*poller).(*Engine).connsUnix[fd]
+//go:norace
 func noRaceGetConnOnPoller(p *poller, fd int) *Conn {
 	return p.g.connsUnix[fd]
 }
 
-//go:norace
 // equal return g.pollers[index]
+//go:norace
 func noRaceGetPollerOnEngine(g *Engine, index int) *poller {
 	return g.pollers[index]
 }
 
-//go:norace
 // equal (*poller).(*Engine).connsUnix[fd] = c
+//go:norace
 func noRaceAddConnOnPoller(p *poller, fd int, c *Conn) {
 	p.g.connsUnix[fd] = c
 }
 
-//go:norace
 // equal return timerHeap.Len()
+//go:norace
 func noRaceLenTimers(ts timerHeap) int {
 	return ts.Len()
 }
 
-//go:norace
 // equal timerHeap[start:end]
+//go:norace
 func noRaceModifyLittleHeap(ts timerHeap, start, end int) timerHeap {
 	return ts[start:end]
 }
 
-//go:norace
 // equal *(*timerHeap) = ts
+//go:norace
 func noRaceUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
 	*ptr = ts
 }
 
-//go:norace
 // equal return (*Engine).([]*poller)[index].ReadBuffer
+//go:norace
 func noRaceGetReadBufferFromPoller(g *Engine, index int) []byte {
 	return g.pollers[index].ReadBuffer
 }
