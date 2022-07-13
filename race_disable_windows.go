@@ -4,7 +4,7 @@
 package nbio
 
 //go:norace
-func cohereConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
+func noRaceConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
 	p := g.pollers[index]
 	switch op {
 	case "deleteConn":

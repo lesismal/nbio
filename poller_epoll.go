@@ -61,11 +61,11 @@ func (p *poller) addConn(c *Conn) {
 	c.g = p.g
 	p.g.onOpen(c)
 	fd := c.fd
-	cohereAddConnOnPoller(p, fd, c)
+	noRaceAddConnOnPoller(p, fd, c)
 	err := p.addRead(fd)
 	if err != nil {
 		// equal p.g.connsUnix[fd] = nil
-		cohereAddConnOnPoller(p, fd, nil)
+		noRaceAddConnOnPoller(p, fd, nil)
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 		return
@@ -73,7 +73,7 @@ func (p *poller) addConn(c *Conn) {
 }
 
 func (p *poller) getConn(fd int) *Conn {
-	return cohereGetConnOnPoller(p, fd)
+	return noRaceGetConnOnPoller(p, fd)
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -81,7 +81,7 @@ func (p *poller) deleteConn(c *Conn) {
 		return
 	}
 	fd := c.fd
-	cohereDeleteConnElemOnPoller(p, fd, c)
+	noRaceDeleteConnElemOnPoller(p, fd, c)
 	p.g.onClose(c, c.closeErr)
 }
 
@@ -108,8 +108,8 @@ func (p *poller) acceptorLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	cohereSetShutdown(p, false)
-	for !cohereLoadShutdown(p) {
+	noRaceSetShutdown(p, false)
+	for !noRaceLoadShutdown(p) {
 		conn, err := p.listener.Accept()
 		if err == nil {
 			var c *Conn
@@ -121,7 +121,7 @@ func (p *poller) acceptorLoop() {
 			// equal
 			//	o := p.g.pollers[c.fd%len(p.g.pollers)]
 			//	o.addConn(c)
-			cohereConnOpOnEngine(p.g, c.fd%len(p.g.pollers), "addConn", c)
+			noRaceConnOpOnEngine(p.g, c.fd%len(p.g.pollers), "addConn", c)
 		} else {
 			var ne net.Error
 			if ok := errors.As(err, &ne); ok && ne.Temporary() {
@@ -148,9 +148,9 @@ func (p *poller) readWriteLoop() {
 		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
-	cohereSetShutdown(p, false)
+	noRaceSetShutdown(p, false)
 
-	for !cohereLoadShutdown(p) {
+	for !noRaceLoadShutdown(p) {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
 			return
@@ -216,7 +216,7 @@ func (p *poller) readWriteLoop() {
 
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
-	cohereSetShutdown(p, true)
+	noRaceSetShutdown(p, true)
 	if p.listener != nil {
 		p.listener.Close()
 	} else {

@@ -42,8 +42,8 @@ func (g *Engine) Start() error {
 			return err
 		}
 	}
-	coherePollerRun(g)
-	cohereListenerRun(g)
+	noRacePollerRun(g)
+	noRaceListenerRun(g)
 
 	g.Add(1)
 	go g.timerLoop()

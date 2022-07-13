@@ -4,7 +4,7 @@
 package nbio
 
 //go:norace
-func cohereConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
+func noRaceConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
 	p := g.pollers[index]
 	switch op {
 	case "deleteConn":
@@ -14,18 +14,17 @@ func cohereConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
 	case "modWrite":
 		p.modWrite(c.fd)
 	}
-	return
 }
 
 //go:norace
-func cohereGetFdOnConn(c *Conn) int {
+func noRaceGetFdOnConn(c *Conn) int {
 	return c.fd
 }
 
 //go:norace
 //	equal if (*Conn) == (*poller).(*Engine).connsUnix[fd]
 //	Is true equal (*poller).(*Engine).connsUnix[fd] = nil;(*poller).deleteEvent(fd)
-func cohereDeleteConnElemOnPoller(p *poller, fd int, c *Conn) {
+func noRaceDeleteConnElemOnPoller(p *poller, fd int, c *Conn) {
 	if c == p.g.connsUnix[fd] {
 		p.g.connsUnix[fd] = nil
 		p.deleteEvent(fd)
