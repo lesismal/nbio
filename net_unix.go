@@ -13,6 +13,7 @@ import (
 	"syscall"
 )
 
+//go:norace
 func dupStdConn(conn net.Conn) (*Conn, error) {
 	sc, ok := conn.(interface {
 		SyscallConn() (syscall.RawConn, error)

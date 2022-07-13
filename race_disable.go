@@ -1,12 +1,7 @@
 package nbio
 
 //go:norace
-func cohereSetShutdown(p *poller, b bool) {
-	p.shutdown = b
-}
-
-//go:norace
-func coherePollerRun(g *Engine) {
+func noRacePollerRun(g *Engine) {
 	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
 		g.Add(1)
@@ -15,39 +10,63 @@ func coherePollerRun(g *Engine) {
 }
 
 //go:norace
-func cohereLoadShutdown(p *poller) bool {
-	return p.shutdown
-}
-
-//go:norace
-func cohereDeleteConnElem(p *poller, fd int, c *Conn) {
-	if c == p.g.connsUnix[fd] {
-		p.g.connsUnix[fd] = nil
-		p.deleteEvent(fd)
+func noRaceListenerRun(g *Engine) {
+	for _, l := range g.listeners {
+		g.Add(1)
+		go l.start()
 	}
 }
 
+// equal (*poller).shutdown = b
 //go:norace
-func cohereGetConn(p *poller, fd int) *Conn {
+func noRaceSetShutdown(p *poller, b bool) {
+	p.shutdown = b
+}
+
+// equal returns (*poller).shutdown
+//go:norace
+func noRaceLoadShutdown(p *poller) bool {
+	return p.shutdown
+}
+
+// equal return (*poller).(*Engine).connsUnix[fd]
+//go:norace
+func noRaceGetConnOnPoller(p *poller, fd int) *Conn {
 	return p.g.connsUnix[fd]
 }
 
+// equal return g.pollers[index]
 //go:norace
-func cohereAddConn(p *poller, fd int, c *Conn) {
+func noRaceGetPollerOnEngine(g *Engine, index int) *poller {
+	return g.pollers[index]
+}
+
+// equal (*poller).(*Engine).connsUnix[fd] = c
+//go:norace
+func noRaceAddConnOnPoller(p *poller, fd int, c *Conn) {
 	p.g.connsUnix[fd] = c
 }
 
+// equal return timerHeap.Len()
 //go:norace
-func cohereLenTimers(ts timerHeap) int {
+func noRaceLenTimers(ts timerHeap) int {
 	return ts.Len()
 }
 
+// equal timerHeap[start:end]
 //go:norace
-func cohereModifyLittleHeap(ts timerHeap, start, end int) timerHeap {
+func noRaceModifyLittleHeap(ts timerHeap, start, end int) timerHeap {
 	return ts[start:end]
 }
 
+// equal *(*timerHeap) = ts
 //go:norace
-func cohereUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
+func noRaceUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
 	*ptr = ts
+}
+
+// equal return (*Engine).([]*poller)[index].ReadBuffer
+//go:norace
+func noRaceGetReadBufferFromPoller(g *Engine, index int) []byte {
+	return g.pollers[index].ReadBuffer
 }

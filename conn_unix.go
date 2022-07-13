@@ -51,7 +51,8 @@ type Conn struct {
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
-	return c.fd
+	// equal return c.fd
+	return noRaceGetFdOnConn(c)
 }
 
 // Read implements Read.
@@ -289,14 +290,16 @@ func (c *Conn) SetSession(session interface{}) {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		c.g.pollers[c.Hash()%len(c.g.pollers)].modWrite(c.fd)
+		//equal c.g.pollers[c.Hash()%len(c.g.pollers)].modWrite(c.fd)
+		noRaceConnOpOnEngine(c.g, c.Hash()%len(c.g.pollers), "modWrite", c)
 	}
 }
 
 func (c *Conn) resetRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
-		p := c.g.pollers[c.Hash()%len(c.g.pollers)]
+		// equal p := c.g.pollers[c.Hash()%len(c.g.pollers)]
+		p := noRaceGetPollerOnEngine(c.g, c.Hash()%len(c.g.pollers))
 		p.deleteEvent(c.fd)
 		p.addRead(c.fd)
 	}
@@ -464,7 +467,8 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	if c.g != nil {
-		c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+		// equal c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
+		noRaceConnOpOnEngine(c.g, c.Hash()%len(c.g.pollers), "deleteConn", c)
 	}
 
 	return syscall.Close(c.fd)

@@ -408,11 +408,13 @@ func (e *Engine) InitTLSBuffers() {
 	}
 	e.tlsBuffers = make([][]byte, e.NParser)
 	for i := 0; i < e.NParser; i++ {
-		e.tlsBuffers[i] = make([]byte, e.ReadBufferSize)
+		// equal e.tlsBuffers[i] = make([]byte, e.ReadBufferSize)
+		noRaceInitTlsBufferFormEngine(e, i)
 	}
 
 	e.getTLSBuffer = func(c *nbio.Conn) []byte {
-		return e.tlsBuffers[uint64(c.Hash())%uint64(e.NParser)]
+		// equal return e.tlsBuffers[uint64(c.Hash())%uint64(e.NParser)]
+		return noRaceGetTlsBufferFromEngine(e, c)
 	}
 
 	if runtime.GOOS == "windows" {
