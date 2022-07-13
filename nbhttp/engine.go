@@ -409,12 +409,12 @@ func (e *Engine) InitTLSBuffers() {
 	e.tlsBuffers = make([][]byte, e.NParser)
 	for i := 0; i < e.NParser; i++ {
 		// equal e.tlsBuffers[i] = make([]byte, e.ReadBufferSize)
-		cohereInitTlsBufferFormEngine(e, i)
+		noRaceInitTlsBufferFormEngine(e, i)
 	}
 
 	e.getTLSBuffer = func(c *nbio.Conn) []byte {
 		// equal return e.tlsBuffers[uint64(c.Hash())%uint64(e.NParser)]
-		return cohereGetTlsBufferFromEngine(e, c)
+		return noRaceGetTlsBufferFromEngine(e, c)
 	}
 
 	if runtime.GOOS == "windows" {
