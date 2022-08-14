@@ -300,6 +300,11 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
+// The negotiated websocket subprotocol
+func (c *Conn) Subprotocol() string {
+	return c.subprotocol
+}
+
 func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool) *Conn {
 	conn := &Conn{
 		Conn:                     c,
