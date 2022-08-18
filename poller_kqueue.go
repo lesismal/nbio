@@ -72,10 +72,7 @@ func (p *poller) deleteConn(c *Conn) {
 		return
 	}
 	fd := c.fd
-	if c == p.g.connsUnix[fd] {
-		p.g.connsUnix[fd] = nil
-		p.deleteEvent(fd)
-	}
+	noRaceDeleteConnElemOnPoller(p, fd, c)
 	p.g.onClose(c, c.closeErr)
 }
 
@@ -172,7 +169,7 @@ func (p *poller) acceptorLoop() {
 	}
 
 	p.shutdown = false
-	for !p.shutdown {
+	for !noRaceLoadShutdown(p) {
 		conn, err := p.listener.Accept()
 		if err == nil {
 			c, err := NBConn(conn)
@@ -180,8 +177,9 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
-			o.addConn(c)
+			//o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
+			//o.addConn(c)
+			noRaceConnOpOnEngine(p.g, c.fd%len(p.g.pollers), "addConn", c)
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
@@ -203,8 +201,8 @@ func (p *poller) readWriteLoop() {
 	var events = make([]syscall.Kevent_t, 1024)
 	var changes []syscall.Kevent_t
 
-	p.shutdown = false
-	for !p.shutdown {
+	noRaceSetShutdown(p, false)
+	for !noRaceLoadShutdown(p) {
 		p.mux.Lock()
 		changes = p.eventList
 		p.eventList = nil
@@ -226,7 +224,7 @@ func (p *poller) readWriteLoop() {
 
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
-	p.shutdown = true
+	noRaceSetShutdown(p, true)
 	if p.listener != nil {
 		p.listener.Close()
 	}

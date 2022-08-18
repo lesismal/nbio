@@ -329,7 +329,7 @@ func testHeapTimerExecManyRandtime(g *Engine) {
 			ch5 <- n
 		}))
 	}
-	if len(its) != 100 || g.timers.Len() != 100 {
+	if len(its) != 100 || noRaceLenTimers(g.timers) != 100 {
 		log.Panicf("invalid timers length: %v, %v", len(its), g.timers.Len())
 	}
 	for i := 0; i < 50; i++ {
@@ -339,7 +339,7 @@ func testHeapTimerExecManyRandtime(g *Engine) {
 		its[0].Stop()
 		its = its[1:]
 	}
-	if len(its) != 50 || g.timers.Len() != 50 {
+	if len(its) != 50 || noRaceLenTimers(g.timers) != 50 {
 		log.Panicf("invalid timers length: %v, %v", len(its), g.timers.Len())
 	}
 	recved := 0
