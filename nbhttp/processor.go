@@ -66,7 +66,6 @@ func releaseClientResponse(res *http.Response) {
 			br.Close()
 			bodyReaderPool.Put(br)
 		}
-		// equal *res = emptyClientResponse
 		noRaceSetResponse(res, emptyClientResponse)
 		clientResponsePool.Put(res)
 	}
@@ -278,7 +277,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 		if req.Close {
 			// the data may still in the send queue
 			p.conn.Close()
-		} else if p.parser == nil || p.parser.ConnState == nil {
+		} else if p.parser == nil || p.parser.Reader == nil {
 			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 		}
 		releaseRequest(req)

@@ -44,7 +44,7 @@ type Parser struct {
 
 	Processor Processor
 
-	ConnState ReadCloser
+	Reader ReadCloser
 
 	Engine *Engine
 
@@ -92,8 +92,8 @@ func (p *Parser) Close(err error) {
 
 	p.errClose = err
 
-	if p.ConnState != nil {
-		p.ConnState.Close(p, p.errClose)
+	if p.Reader != nil {
+		p.Reader.Close(p, p.errClose)
 	}
 	if p.Processor != nil {
 		p.Processor.Close(p, p.errClose)
@@ -145,12 +145,12 @@ func (p *Parser) Read(data []byte) error {
 	}
 
 UPGRADER:
-	if p.ConnState != nil {
+	if p.Reader != nil {
 		udata := data
 		if start > 0 {
 			udata = data[start:]
 		}
-		err := p.ConnState.Read(p, udata)
+		err := p.Reader.Read(p, udata)
 		if p.cache != nil {
 			mempool.Free(p.cache)
 			p.cache = nil
@@ -159,7 +159,7 @@ UPGRADER:
 	}
 
 	for i := offset; i < len(data); i++ {
-		if p.ConnState != nil {
+		if p.Reader != nil {
 			goto UPGRADER
 		}
 		c = data[i]

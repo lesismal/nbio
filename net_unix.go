@@ -39,6 +39,9 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 		return nil, err
 	}
 
+	lAddr := conn.LocalAddr()
+	rAddr := conn.RemoteAddr()
+
 	conn.Close()
 
 	// err = syscall.SetNonblock(newFd, true)
@@ -47,9 +50,43 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 	// 	return nil, err
 	// }
 
-	return &Conn{
+	c := &Conn{
 		fd:    newFd,
-		lAddr: conn.LocalAddr(),
-		rAddr: conn.RemoteAddr(),
-	}, nil
+		lAddr: lAddr,
+		rAddr: rAddr,
+	}
+
+	if _, isUDP := conn.(*net.UDPConn); isUDP {
+		lAddrUDP := lAddr.(*net.UDPAddr)
+		newLAddr := net.UDPAddr{
+			IP:   make([]byte, len(lAddrUDP.IP)),
+			Port: lAddrUDP.Port,
+			Zone: lAddrUDP.Zone,
+		}
+
+		// use `for loop` instead of `copy` or `append` to avoid race warning, still don't know why, maybe fake warning.
+		// copy(newLAddr.IP, lAddrUDP.IP)
+		for i := range newLAddr.IP {
+			newLAddr.IP[i] = lAddrUDP.IP[i]
+		}
+
+		c.lAddr = &newLAddr
+		// c.lAddr = lAddrUDP
+		if rAddr == nil {
+			c.typ = ConnTypeUDPServer
+			c.connUDP = &udpConn{
+				parent: c,
+				conns:  map[string]*Conn{},
+			}
+		} else {
+			c.typ = ConnTypeUDPClientFromDial
+			c.connUDP = &udpConn{
+				parent: c,
+			}
+		}
+	} else {
+		c.typ = ConnTypeTCP
+	}
+
+	return c, nil
 }

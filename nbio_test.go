@@ -1,8 +1,8 @@
 package nbio
 
 import (
+	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net"
@@ -19,7 +19,7 @@ var testfile = "test_tmp.file"
 var gopher *Engine
 
 func init() {
-	if err := ioutil.WriteFile(testfile, make([]byte, 1024*100), 0600); err != nil {
+	if err := os.WriteFile(testfile, make([]byte, 1024*100), 0600); err != nil {
 		log.Panicf("write file failed: %v", err)
 	}
 
@@ -358,6 +358,146 @@ LOOP_RECV:
 
 	it := &htimer{parent: g, index: -1}
 	it.Stop()
+}
+
+func TestUDP(t *testing.T) {
+	g := NewEngine(Config{})
+	timeout := time.Second * 1
+	chTimeout := make(chan *Conn, 1)
+	g.OnOpen(func(c *Conn) {
+		log.Printf("onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
+		c.SetReadDeadline(time.Now().Add(timeout))
+	})
+	g.OnData(func(c *Conn, data []byte) {
+		log.Println("onData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		_, err := c.Write(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+	g.OnClose(func(c *Conn, err error) {
+		log.Println("onClose:", c.RemoteAddr().String(), err)
+		select {
+		case chTimeout <- c:
+		default:
+		}
+	})
+
+	err := g.Start()
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer g.Stop()
+
+	addrstr := fmt.Sprintf("127.0.0.1:%d", 9999)
+	addr, err := net.ResolveUDPAddr("udp", addrstr)
+	if err != nil {
+		t.Fatalf("ResolveUDPAddr error: %v", err)
+	}
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		t.Fatalf("listen error: %v", err)
+	}
+
+	time.Sleep(time.Second)
+	lisConn, _ := g.AddConn(conn)
+	time.Sleep(time.Second)
+
+	newClientConn := func() *net.UDPConn {
+		connUDP, errDial := net.DialUDP("udp4", nil, &net.UDPAddr{
+			IP:   net.IPv4(127, 0, 0, 1),
+			Port: 9999,
+		})
+		if errDial != nil {
+			t.Fatalf("net.DialUDP failed: %v", err)
+		}
+		return connUDP
+	}
+
+	connTimeout := newClientConn()
+	connTimeout.Write([]byte("test timeout"))
+	defer connTimeout.Close()
+	begin := time.Now()
+	select {
+	case c := <-chTimeout:
+		if c.RemoteAddr().String() != connTimeout.LocalAddr().String() {
+			log.Fatalf("invalid udp conn")
+		}
+		used := time.Since(begin)
+		if used < timeout {
+			log.Fatalf("test timeout failed: %v < %v", used.Seconds(), timeout.Seconds())
+		}
+		log.Printf("test udp conn timeout success")
+	case <-time.After(timeout + time.Second):
+		log.Fatalf("timeout")
+	}
+
+	clientNum := 2
+	msgPerClient := 2
+	wg := sync.WaitGroup{}
+	for i := 0; i < clientNum; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			conn := newClientConn()
+			defer conn.Close()
+			for j := 0; j < msgPerClient; j++ {
+				str := fmt.Sprintf("message-%d", clientNum*idx+j)
+				wbuf := []byte(str)
+				rbuf := make([]byte, 1024)
+				if _, werr := conn.Write(wbuf); werr == nil {
+					log.Printf("send msg success: %v, %s", conn.LocalAddr().String(), str)
+					if packLen, _, rerr := conn.ReadFromUDP(rbuf); rerr == nil {
+						if str != string(wbuf[:packLen]) {
+							log.Fatalf("recv msg not equal: %v, [%v != %v]", conn.LocalAddr().String(), str, string(rbuf[:packLen]))
+						}
+						log.Printf("recv msg success: %v, %s", conn.LocalAddr().String(), str)
+					} else {
+						log.Printf("recv msg failed: %v, %v", conn.LocalAddr().String(), rerr)
+					}
+				} else {
+					log.Println("send msg failed:", werr)
+				}
+			}
+		}(i)
+	}
+	wg.Wait()
+
+	var done = make(chan int)
+	var cntFromServer int32
+	var fromClientStr = "from client"
+	var fromServerStr = "from server"
+	g.OnOpen(func(c *Conn) {
+		log.Println("onOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
+		c.SetReadDeadline(time.Now().Add(timeout))
+	})
+	g.OnData(func(c *Conn, data []byte) {
+		log.Println("OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		if string(data) == fromClientStr {
+			c.Write([]byte(fromServerStr))
+		} else {
+			if atomic.AddInt32(&cntFromServer, 1) == 3 {
+				c.Close()
+			} else {
+				c.Write([]byte(fromClientStr))
+			}
+		}
+	})
+	clientConn := newClientConn()
+	nbc, err := g.AddConn(clientConn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.OnClose(func(c *Conn, err error) {
+		log.Println("onClose:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		if nbc == c {
+			close(done)
+		}
+	})
+	nbc.Write([]byte(fromClientStr))
+	<-done
+	lisConn.Close()
+	time.Sleep(timeout * 2)
 }
 
 func TestStop(t *testing.T) {

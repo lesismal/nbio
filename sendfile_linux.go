@@ -47,7 +47,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		c.mux.Lock()
 	}
 
-	c.g.beforeWrite(c)
+	c.p.g.beforeWrite(c)
 
 	var (
 		err   error

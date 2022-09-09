@@ -58,17 +58,16 @@ type poller struct {
 }
 
 func (p *poller) addConn(c *Conn) {
-	c.g = p.g
-	p.g.onOpen(c)
+	if c.typ != ConnTypeUDPServer {
+		p.g.onOpen(c)
+	}
 	fd := c.fd
 	noRaceAddConnOnPoller(p, fd, c)
 	err := p.addRead(fd)
 	if err != nil {
-		// equal p.g.connsUnix[fd] = nil
 		noRaceAddConnOnPoller(p, fd, nil)
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
-		return
 	}
 }
 
@@ -81,8 +80,15 @@ func (p *poller) deleteConn(c *Conn) {
 		return
 	}
 	fd := c.fd
-	noRaceDeleteConnElemOnPoller(p, fd, c)
-	p.g.onClose(c, c.closeErr)
+
+	if c.typ != ConnTypeUDPClientFromRead {
+		noRaceDeleteConnElemOnPoller(p, fd, c)
+		p.deleteEvent(fd)
+	}
+
+	if c.typ != ConnTypeUDPServer {
+		p.g.onClose(c, c.closeErr)
+	}
 }
 
 func (p *poller) start() {
@@ -118,13 +124,10 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			// equal
-			//	o := p.g.pollers[c.fd%len(p.g.pollers)]
-			//	o.addConn(c)
-			noRaceConnOpOnEngine(p.g, c.fd%len(p.g.pollers), "addConn", c)
+			noRaceConnOperation(p.g, c, noRaceConnOpAdd)
 		} else {
 			var ne net.Error
-			if ok := errors.As(err, &ne); ok && ne.Temporary() {
+			if ok := errors.As(err, &ne); ok && ne.Timeout() {
 				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
@@ -183,9 +186,9 @@ func (p *poller) readWriteLoop() {
 						if p.g.onRead == nil {
 							for i := 0; i < p.g.maxConnReadTimesPerEventLoop; i++ {
 								buffer := p.g.borrow(c)
-								n, err := c.Read(buffer)
+								rc, n, err := c.readAndGetConn(buffer)
 								if n > 0 {
-									p.g.onData(c, buffer[:n])
+									p.g.onData(rc, buffer[:n])
 								}
 								p.g.payback(c, buffer)
 								if errors.Is(err, syscall.EINTR) {
@@ -257,7 +260,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			panic("invalid listener num")
 		}
 
-		addr := g.addrs[index%len(g.listeners)]
+		addr := g.addrs[index%len(g.addrs)]
 		ln, err := net.Listen(g.network, addr)
 		if err != nil {
 			return nil, err

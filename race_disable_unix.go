@@ -4,15 +4,16 @@
 package nbio
 
 //go:norace
-func noRaceConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
-	p := g.pollers[index]
+func noRaceConnOperation(g *Engine, c *Conn, op int) {
+	p := g.pollers[c.Hash()%len(g.pollers)]
 	switch op {
-	case "deleteConn":
-		p.deleteConn(c)
-	case "addConn":
+	case noRaceConnOpAdd:
+		c.p = p
 		p.addConn(c)
-	case "modWrite":
+	case noRaceConnOpMod:
 		p.modWrite(c.fd)
+	case noRaceConnOpDel:
+		p.deleteConn(c)
 	}
 }
 
@@ -21,13 +22,9 @@ func noRaceGetFdOnConn(c *Conn) int {
 	return c.fd
 }
 
-//	equal
-//		if (*Conn) == (*poller).(*Engine).connsUnix[fd]
-//		Is true equal (*poller).(*Engine).connsUnix[fd] = nil;(*poller).deleteEvent(fd)
 //go:norace
 func noRaceDeleteConnElemOnPoller(p *poller, fd int, c *Conn) {
 	if c == p.g.connsUnix[fd] {
 		p.g.connsUnix[fd] = nil
-		p.deleteEvent(fd)
 	}
 }

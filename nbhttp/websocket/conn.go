@@ -300,7 +300,7 @@ func (c *Conn) SetCompressionLevel(level int) error {
 	return nil
 }
 
-// The negotiated websocket subprotocol
+// Subprotocol returns the negotiated websocket subprotocol.
 func (c *Conn) Subprotocol() string {
 	return c.subprotocol
 }

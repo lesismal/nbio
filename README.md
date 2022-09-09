@@ -61,16 +61,21 @@
   
 
 ## Features
-- [x] linux: epoll, both ET/LT(default) supported
-- [x] macos(bsd): kqueue
-- [x] windows: golang std net
-- [x] nbio.Conn implements a non-blocking net.Conn(except windows)
-- [x] writev supported
-- [x] concurrent write/close supported(both nbio.Conn and nbio/nbhttp/websocket.Conn)
+### Cross Platform
+- [x] Linux: Epoll, both ET/LT(as default) supported
+- [x] BSD(MacOS): Kqueue
+- [x] Windows: Based on std net, for debugging only
+
+### Protocols Supported
+- [x] TCP/UDP supported
 - [x] TLS supported
-- [x] HTTP/HTTPS 1.x
-- [x] Websocket, [Passes the Autobahn Test Suite](https://lesismal.github.io/nbio/websocket), `OnOpen/OnMessage/OnClose` order guaranteed
-- [ ] HTTP 2.0(no plans, 2.0 is not good enough)
+- [x] HTTP/HTTPS 1.x supported
+- [x] Websocket supported, [Passes the Autobahn Test Suite](https://lesismal.github.io/nbio/websocket), `OnOpen/OnMessage/OnClose` order guaranteed
+
+### Interface
+- [x] Implements a non-blocking net.Conn(except windows)
+- [x] Concurrent Write/Close supported(both nbio.Conn and nbio/nbhttp/websocket.Conn)
+- [x] Writev supported
 
 
 ## Installation
@@ -330,6 +335,11 @@ g.OnData(func(c *Conn, data []byte) {
 
 - [gin-http-and-websocket-server](https://github.com/lesismal/nbio_examples/blob/master/http_with_other_frameworks/gin_server/gin_server.go)
 - [echo-http-and-websocket-server](https://github.com/lesismal/nbio_examples/blob/master/http_with_other_frameworks/echo_server/echo_server.go)
+
+## UDP Examples
+
+- [udp-server](https://github.com/lesismal/nbio-examples/blob/master/udp/server/server.go)
+- [udp-client](https://github.com/lesismal/nbio-examples/blob/master/udp/client/client.go)
 
 ## More Examples
 

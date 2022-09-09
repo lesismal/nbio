@@ -4,13 +4,13 @@
 package nbio
 
 //go:norace
-func noRaceConnOpOnEngine(g *Engine, index int, op string, c *Conn) {
-	p := g.pollers[index]
+func noRaceConnOperation(g *Engine, c *Conn, op int) {
+	p := g.pollers[c.Hash()%len(g.pollers)]
 	switch op {
-	case "deleteConn":
-		p.deleteConn(c)
-	case "addConn":
+	case noRaceConnOpAdd:
 		p.addConn(c)
+	case noRaceConnOpDel:
+		p.deleteConn(c)
 	}
 	return
 }

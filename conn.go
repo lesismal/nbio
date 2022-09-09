@@ -13,6 +13,25 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
+type ConnType = int8
+
+const (
+	ConnTypeTCP ConnType = iota + 1
+	ConnTypeUDPServer
+	ConnTypeUDPClientFromRead
+	ConnTypeUDPClientFromDial
+)
+
+// IsUDP .
+func (c *Conn) IsUDP() bool {
+	return c.typ != ConnTypeTCP
+}
+
+// Type .
+func (c *Conn) Type() ConnType {
+	return c.typ
+}
+
 // OnData registers callback for data.
 func (c *Conn) OnData(h func(conn *Conn, data []byte)) {
 	c.DataHandler = h
@@ -72,7 +91,7 @@ func (c *Conn) Execute(f func()) bool {
 	c.mux.Unlock()
 
 	if isHead {
-		c.g.Execute(func() {
+		c.p.g.Execute(func() {
 			i := 0
 			for {
 				func() {
@@ -111,7 +130,7 @@ func (c *Conn) MustExecute(f func()) {
 	c.mux.Unlock()
 
 	if isHead {
-		c.g.Execute(func() {
+		c.p.g.Execute(func() {
 			i := 0
 			for {
 				f()

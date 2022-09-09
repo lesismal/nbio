@@ -56,10 +56,11 @@ type poller struct {
 }
 
 func (p *poller) addConn(c *Conn) {
-	c.g = p.g
-	p.g.onOpen(c)
+	if c.typ != ConnTypeUDPServer {
+		p.g.onOpen(c)
+	}
 	fd := c.fd
-	p.g.connsUnix[fd] = c
+	noRaceAddConnOnPoller(p, fd, c)
 	p.addRead(c.fd)
 }
 
@@ -72,8 +73,15 @@ func (p *poller) deleteConn(c *Conn) {
 		return
 	}
 	fd := c.fd
-	noRaceDeleteConnElemOnPoller(p, fd, c)
-	p.g.onClose(c, c.closeErr)
+
+	if c.typ != ConnTypeUDPClientFromRead {
+		noRaceDeleteConnElemOnPoller(p, fd, c)
+		p.deleteEvent(fd)
+	}
+
+	if c.typ != ConnTypeUDPServer {
+		p.g.onClose(c, c.closeErr)
+	}
 }
 
 func (p *poller) trigger() {
@@ -112,9 +120,9 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			if p.g.onRead == nil {
 				for {
 					buffer := p.g.borrow(c)
-					n, err := c.Read(buffer)
+					rc, n, err := c.readAndGetConn(buffer)
 					if n > 0 {
-						p.g.onData(c, buffer[:n])
+						p.g.onData(rc, buffer[:n])
 					}
 					p.g.payback(c, buffer)
 					if err == syscall.EINTR {
@@ -177,9 +185,7 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			//o := p.g.pollers[int(c.fd)%len(p.g.pollers)]
-			//o.addConn(c)
-			noRaceConnOpOnEngine(p.g, c.fd%len(p.g.pollers), "addConn", c)
+			noRaceConnOperation(p.g, c, noRaceConnOpAdd)
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
@@ -237,7 +243,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			panic("invalid listener num")
 		}
 
-		addr := g.addrs[index%len(g.listeners)]
+		addr := g.addrs[index%len(g.addrs)]
 		ln, err := net.Listen(g.network, addr)
 		if err != nil {
 			return nil, err
