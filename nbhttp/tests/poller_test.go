@@ -26,7 +26,7 @@ var (
 	text   = "hello world"
 	addr   = "localhost:8889"
 
-	svr *nbhttp.Server
+	engine *nbhttp.Engine
 )
 
 func onWebsocket(w http.ResponseWriter, r *http.Request) {
@@ -59,14 +59,14 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/wss", onWebsocket)
 
-	svr = nbhttp.NewServer(nbhttp.Config{
+	engine = nbhttp.NewEngine(nbhttp.Config{
 		Network:   "tcp",
 		AddrsTLS:  []string{addr},
 		TLSConfig: tlsConfig,
 		Handler:   mux,
 	})
 
-	err = svr.Start()
+	err = engine.Start()
 	if err != nil {
 		fmt.Printf("nbio.Start failed: %v\n", err)
 		*startupError = err
@@ -74,7 +74,7 @@ func server(ctx context.Context, started *sync.WaitGroup, startupError *error) {
 		return
 	}
 	started.Done()
-	defer svr.Stop()
+	defer engine.Stop()
 
 	<-ctx.Done()
 	log.Println("exit")
@@ -94,7 +94,7 @@ func client() error {
 	// }
 
 	dialer := &websocket.Dialer{
-		Engine: svr.Engine,
+		Engine: engine,
 		Upgrader: func() *websocket.Upgrader {
 			u := websocket.NewUpgrader()
 			u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {

@@ -58,7 +58,6 @@ func (h *timerHeap) Pop() interface{} {
 	n := len(old)
 	x := old[n-1]
 	old[n-1] = nil // avoid memory leak
-	// equal *h = old[0 : n-1]
 	noRaceUpdateLittleHeap(h, noRaceModifyLittleHeap(old, 0, n-1))
 	return x
 }

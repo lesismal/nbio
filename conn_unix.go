@@ -11,6 +11,7 @@ import (
 	"errors"
 	"net"
 	"runtime"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -22,15 +23,18 @@ import (
 type Conn struct {
 	mux sync.Mutex
 
-	g *Engine
+	p *poller
 
 	fd int
+
+	connUDP *udpConn
 
 	rTimer *htimer
 	wTimer *htimer
 
 	writeBuffer []byte
 
+	typ      ConnType
 	closed   bool
 	isWAdded bool
 	closeErr error
@@ -51,7 +55,6 @@ type Conn struct {
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
-	// equal return c.fd
 	return noRaceGetFdOnConn(c)
 }
 
@@ -64,26 +67,88 @@ func (c *Conn) Read(b []byte) (int, error) {
 		return 0, errClosed
 	}
 
-	n, err := syscall.Read(c.fd, b)
+	_, n, err := c.doRead(b)
 	c.mux.Unlock()
 	if err == nil {
-		c.g.afterRead(c)
+		c.p.g.afterRead(c)
 	}
 
 	return n, err
 }
 
+// ReadUDP .
+func (c *Conn) ReadUDP(b []byte) (*Conn, int, error) {
+	return c.readAndGetConn(b)
+}
+
+func (c *Conn) readAndGetConn(b []byte) (*Conn, int, error) {
+	// use lock to prevent multiple conn data confusion when fd is reused on unix.
+	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+		return c, 0, errClosed
+	}
+
+	dstConn, n, err := c.doRead(b)
+	c.mux.Unlock()
+	if err == nil {
+		c.p.g.afterRead(c)
+	}
+
+	return dstConn, n, err
+}
+
+func (c *Conn) doRead(b []byte) (*Conn, int, error) {
+	switch c.typ {
+	case ConnTypeTCP:
+		return c.readTCP(b)
+	case ConnTypeUDPServer, ConnTypeUDPClientFromDial:
+		return c.readUDP(b)
+	case ConnTypeUDPClientFromRead:
+	default:
+	}
+	return c, 0, errors.New("invalid udp conn for reading")
+}
+
+func (c *Conn) readTCP(b []byte) (*Conn, int, error) {
+	nread, err := syscall.Read(c.fd, b)
+	return c, nread, err
+}
+
+func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
+	nread, rAddr, err := syscall.Recvfrom(c.fd, b, 0)
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+	if err != nil {
+		return c, 0, err
+	}
+
+	var g = c.p.g
+	var dstConn = c
+	if c.typ == ConnTypeUDPServer {
+		uc, ok := c.connUDP.getConn(c.p, c.fd, rAddr)
+		if g.udpReadTimeout > 0 {
+			uc.SetReadDeadline(time.Now().Add(g.udpReadTimeout))
+		}
+		if !ok {
+			g.onOpen(uc)
+		}
+		dstConn = uc
+	}
+
+	return dstConn, nread, err
+}
+
 // Write implements Write.
 func (c *Conn) Write(b []byte) (int, error) {
-	// defer c.g.onWriteBufferFree(c, b)
-
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
 		return -1, errClosed
 	}
 
-	c.g.beforeWrite(c)
+	c.p.g.beforeWrite(c)
 
 	n, err := c.write(b)
 	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
@@ -108,11 +173,6 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Writev implements Writev.
 func (c *Conn) Writev(in [][]byte) (int, error) {
-	// defer func() {
-	// 	for _, v := range in {
-	// 		c.g.onWriteBufferFree(c, v)
-	// 	}
-	// }()
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
@@ -120,7 +180,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		return 0, errClosed
 	}
 
-	c.g.beforeWrite(c)
+	c.p.g.beforeWrite(c)
 
 	var n int
 	var err error
@@ -149,6 +209,22 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	return n, err
 }
 
+func (c *Conn) writeTCP(b []byte) (int, error) {
+	return syscall.Write(c.fd, b)
+}
+
+func (c *Conn) writeUDPClientFromDial(b []byte) (int, error) {
+	return syscall.Write(c.fd, b)
+}
+
+func (c *Conn) writeUDPClientFromRead(b []byte) (int, error) {
+	err := syscall.Sendto(c.fd, b, 0, c.connUDP.rAddr)
+	if err != nil {
+		return 0, err
+	}
+	return len(b), nil
+}
+
 // Close implements Close.
 func (c *Conn) Close() error {
 	return c.closeWithError(nil)
@@ -160,6 +236,8 @@ func (c *Conn) CloseWithError(err error) error {
 }
 
 // LocalAddr implements LocalAddr.
+//
+//go:norace
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
 }
@@ -174,14 +252,15 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
 		if !t.IsZero() {
+			g := c.p.g
 			now := time.Now()
 			if c.rTimer == nil {
-				c.rTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+				c.rTimer = g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
 			} else {
 				c.rTimer.Reset(t.Sub(now))
 			}
 			if c.wTimer == nil {
-				c.wTimer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+				c.wTimer = g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
 			} else {
 				c.wTimer.Reset(t.Sub(now))
 			}
@@ -209,7 +288,7 @@ func (c *Conn) setDeadline(timer **htimer, returnErr error, t time.Time) error {
 	if !t.IsZero() {
 		now := time.Now()
 		if *timer == nil {
-			*timer = c.g.afterFunc(t.Sub(now), func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.afterFunc(t.Sub(now), func() { c.closeWithError(returnErr) })
 		} else {
 			(*timer).Reset(t.Sub(now))
 		}
@@ -290,16 +369,14 @@ func (c *Conn) SetSession(session interface{}) {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		//equal c.g.pollers[c.Hash()%len(c.g.pollers)].modWrite(c.fd)
-		noRaceConnOpOnEngine(c.g, c.Hash()%len(c.g.pollers), "modWrite", c)
+		noRaceConnOperation(c.p.g, c, noRaceConnOpMod)
 	}
 }
 
 func (c *Conn) resetRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
-		// equal p := c.g.pollers[c.Hash()%len(c.g.pollers)]
-		p := noRaceGetPollerOnEngine(c.g, c.Hash()%len(c.g.pollers))
+		p := c.p
 		p.deleteEvent(c.fd)
 		p.addRead(c.fd)
 	}
@@ -315,7 +392,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	}
 
 	if len(c.writeBuffer) == 0 {
-		n, err := syscall.Write(c.fd, b)
+		n, err := c.doWrite(b)
 		if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 			return n, err
 		}
@@ -323,7 +400,7 @@ func (c *Conn) write(b []byte) (int, error) {
 			n = 0
 		}
 		left := len(b) - n
-		if left > 0 {
+		if left > 0 && c.typ == ConnTypeTCP {
 			c.writeBuffer = mempool.Malloc(left)
 			copy(c.writeBuffer, b[n:])
 			c.modWrite()
@@ -349,7 +426,7 @@ func (c *Conn) flush() error {
 
 	old := c.writeBuffer
 
-	n, err := syscall.Write(c.fd, old)
+	n, err := c.doWrite(old)
 	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
@@ -427,8 +504,25 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	return nwrite, nil
 }
 
+func (c *Conn) doWrite(b []byte) (int, error) {
+	var err error
+	var nread int
+	switch c.typ {
+	case ConnTypeTCP:
+		nread, err = c.writeTCP(b)
+	case ConnTypeUDPServer:
+	case ConnTypeUDPClientFromDial:
+		nread, err = c.writeUDPClientFromDial(b)
+	case ConnTypeUDPClientFromRead:
+		nread, err = c.writeUDPClientFromRead(b)
+	default:
+	}
+	return nread, err
+}
+
 func (c *Conn) overflow(n int) bool {
-	return c.g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > c.g.maxWriteBufferSize)
+	g := c.p.g
+	return g.maxWriteBufferSize > 0 && (len(c.writeBuffer)+n > g.maxWriteBufferSize)
 }
 
 func (c *Conn) closeWithError(err error) error {
@@ -466,12 +560,19 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 		}
 	}
 
-	if c.g != nil {
-		// equal c.g.pollers[c.Hash()%len(c.g.pollers)].deleteConn(c)
-		noRaceConnOpOnEngine(c.g, c.Hash()%len(c.g.pollers), "deleteConn", c)
+	if c.p.g != nil {
+		noRaceConnOperation(c.p.g, c, noRaceConnOpDel)
 	}
 
-	return syscall.Close(c.fd)
+	switch c.typ {
+	case ConnTypeTCP:
+		err = syscall.Close(c.fd)
+	case ConnTypeUDPServer, ConnTypeUDPClientFromDial, ConnTypeUDPClientFromRead:
+		err = c.connUDP.Close()
+	default:
+	}
+
+	return err
 }
 
 // NBConn converts net.Conn to *Conn.
@@ -488,4 +589,100 @@ func NBConn(conn net.Conn) (*Conn, error) {
 		}
 	}
 	return c, nil
+}
+
+type udpConn struct {
+	parent *Conn
+
+	rAddr    syscall.Sockaddr
+	rAddrStr string
+
+	mux   sync.RWMutex
+	conns map[string]*Conn
+}
+
+func (u *udpConn) Close() error {
+	parent := u.parent
+	if parent.connUDP != u {
+		parent.mux.Lock()
+		delete(parent.connUDP.conns, u.rAddrStr)
+		parent.mux.Unlock()
+	} else {
+		for _, c := range u.conns {
+			c.Close()
+		}
+		u.conns = nil
+	}
+	return nil
+}
+
+func (u *udpConn) getConn(p *poller, fd int, rsa syscall.Sockaddr) (*Conn, bool) {
+	rAddrStr := getUDPNetAddrString(rsa)
+	u.mux.RLock()
+	c, ok := u.conns[rAddrStr]
+	u.mux.RUnlock()
+
+	if !ok {
+		c = &Conn{
+			p:     p,
+			fd:    fd,
+			lAddr: u.parent.lAddr,
+			rAddr: getUDPNetAddr(rsa),
+			typ:   ConnTypeUDPClientFromRead,
+			connUDP: &udpConn{
+				rAddr:    rsa,
+				rAddrStr: rAddrStr,
+				parent:   u.parent,
+			},
+		}
+		u.mux.Lock()
+		u.conns[rAddrStr] = c
+		u.mux.Unlock()
+	}
+
+	return c, ok
+}
+
+func getUDPNetAddrString(sa syscall.Sockaddr) string {
+	if sa == nil {
+		return "<nil>"
+	}
+	var ip []byte
+	var port int
+	var zone string
+
+	switch vt := sa.(type) {
+	case *syscall.SockaddrInet4:
+		ip = vt.Addr[:]
+		port = vt.Port
+		return string(ip) + strconv.Itoa(port)
+	case *syscall.SockaddrInet6:
+		ip = vt.Addr[:]
+		port = vt.Port
+		i, err := net.InterfaceByIndex(int(vt.ZoneId))
+		if err == nil && i != nil {
+			return string(ip) + i.Name + strconv.Itoa(port)
+		}
+	}
+
+	return string(ip) + zone + strconv.Itoa(port)
+}
+
+func getUDPNetAddr(sa syscall.Sockaddr) *net.UDPAddr {
+	ret := &net.UDPAddr{}
+	switch vt := sa.(type) {
+	case *syscall.SockaddrInet4:
+		ret.IP = make([]byte, len(vt.Addr))
+		copy(ret.IP[:], vt.Addr[:])
+		ret.Port = vt.Port
+	case *syscall.SockaddrInet6:
+		ret.IP = make([]byte, len(vt.Addr))
+		copy(ret.IP[:], vt.Addr[:])
+		ret.Port = vt.Port
+		i, err := net.InterfaceByIndex(int(vt.ZoneId))
+		if err == nil && i != nil {
+			ret.Zone = i.Name
+		}
+	}
+	return ret
 }

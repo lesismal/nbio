@@ -25,6 +25,9 @@ const (
 
 	// DefaultMaxConnReadTimesPerEventLoop .
 	DefaultMaxConnReadTimesPerEventLoop = 3
+
+	// DefaultUDPReadTimeout .
+	DefaultUDPReadTimeout = 120 * time.Second
 )
 
 var (
@@ -68,6 +71,9 @@ type Config struct {
 
 	// EpollMod sets the epoll mod, EPOLLLT by default.
 	EpollMod uint32
+
+	// UDPReadTimeout sets the timeout for udp sessions.
+	UDPReadTimeout time.Duration
 }
 
 // Gopher keeps old type to compatible with new name Engine.
@@ -95,6 +101,7 @@ type Engine struct {
 	readBufferSize               int
 	maxWriteBufferSize           int
 	maxConnReadTimesPerEventLoop int
+	udpReadTimeout               time.Duration
 	epollMod                     uint32
 	lockListener                 bool
 	lockPoller                   bool
@@ -192,8 +199,8 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	// equal g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].addConn(c)
-	noRaceConnOpOnEngine(g, c.Hash()%g.pollerNum, "addConn", c)
+
+	noRaceConnOperation(g, c, noRaceConnOpAdd)
 	return c, nil
 }
 
@@ -322,7 +329,6 @@ func (g *Engine) atOnce(f func()) {
 
 func (g *Engine) afterFunc(timeout time.Duration, f func()) *htimer {
 	g.mux.Lock()
-	defer g.mux.Unlock()
 
 	now := time.Now()
 	it := &htimer{
@@ -331,10 +337,13 @@ func (g *Engine) afterFunc(timeout time.Duration, f func()) *htimer {
 		f:      f,
 		parent: g,
 	}
+
 	heap.Push(&g.timers, it)
 	if g.timers[0] == it {
 		g.trigger.Reset(timeout)
 	}
+
+	g.mux.Unlock()
 
 	return it
 }
@@ -353,7 +362,6 @@ func (g *Engine) removeTimer(it *htimer) {
 		if len(g.timers) > 0 {
 			if index == 0 {
 				g.trigger.Reset(time.Until(g.timers[0].expire))
-
 			}
 		} else {
 			g.trigger.Reset(timeForever)
@@ -448,8 +456,7 @@ func (g *Engine) timerLoop() {
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
 func (g *Engine) PollerBuffer(c *Conn) []byte {
-	// equal return g.pollers[uint32(c.Hash())%uint32(g.pollerNum)].ReadBuffer
-	return noRaceGetReadBufferFromPoller(g, c.Hash()%g.pollerNum)
+	return noRaceGetReadBufferFromPoller(c)
 }
 
 func (g *Engine) initHandlers() {

@@ -51,7 +51,7 @@ type Upgrader struct {
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
 	onClose          func(c *Conn, err error)
 }
-type connState struct {
+type WebsocketReader struct {
 	common             *Upgrader
 	conn               *Conn
 	expectingFragments bool
@@ -63,7 +63,7 @@ type connState struct {
 }
 
 // CompressionEnabled .
-func (u *connState) CompressionEnabled() bool {
+func (u *WebsocketReader) CompressionEnabled() bool {
 	return u.compress
 }
 
@@ -247,8 +247,8 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
 
-	state := &connState{common: u}
-	parser.ConnState = state
+	state := &WebsocketReader{common: u}
+	parser.Reader = state
 
 	buf := mempool.Malloc(1024)[0:0]
 	buf = mempool.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
@@ -312,7 +312,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	return state.conn, nil
 }
 
-func (u *connState) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
+func (u *WebsocketReader) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFragments bool) error {
 	if res1 && !u.common.enableCompression {
 		return ErrReserveBitSet
 	}
@@ -332,7 +332,7 @@ func (u *connState) validFrame(opcode MessageType, fin, res1, res2, res3, expect
 }
 
 // return false if length is ok.
-func (u *connState) isMessageTooLarge(len int) bool {
+func (u *WebsocketReader) isMessageTooLarge(len int) bool {
 	if u.common.MessageLengthLimit == 0 {
 		// 0 means unlimitted size
 		return false
@@ -341,7 +341,7 @@ func (u *connState) isMessageTooLarge(len int) bool {
 }
 
 // Read .
-func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
+func (u *WebsocketReader) Read(p *nbhttp.Parser, data []byte) error {
 	oldLen := len(u.buffer)
 	if u.common.ReadLimit > 0 && (int64(oldLen+len(data)) > u.common.ReadLimit || int64(oldLen+len(u.message)) > u.common.ReadLimit) {
 		return nbhttp.ErrTooLong
@@ -466,7 +466,7 @@ func (u *connState) Read(p *nbhttp.Parser, data []byte) error {
 }
 
 // Close .
-func (u *connState) Close(p *nbhttp.Parser, err error) {
+func (u *WebsocketReader) Close(p *nbhttp.Parser, err error) {
 	if u.conn != nil {
 		u.conn.onClose(u.conn, err)
 		u.conn.Close()
@@ -488,12 +488,7 @@ func (u *Upgrader) handleDataFrame(p *nbhttp.Parser, c *Conn, opcode MessageType
 	})
 }
 
-func (u *connState) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
-	if u.opcode == TextMessage && !u.Engine.CheckUtf8(u.message) {
-		u.conn.Close()
-		return
-	}
-
+func (u *WebsocketReader) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	if !p.Execute(func() {
 		u.common.handleWsMessage(u.conn, opcode, body)
 	}) {
@@ -503,7 +498,7 @@ func (u *connState) handleMessage(p *nbhttp.Parser, opcode MessageType, body []b
 	}
 }
 
-func (u *connState) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
+func (u *WebsocketReader) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
 	if !p.Execute(func() {
 		u.common.handleWsMessage(u.conn, opcode, body)
 		if len(body) > 0 && u.Engine.ReleaseWebsocketPayload {
@@ -518,7 +513,17 @@ func (u *connState) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, 
 
 func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 	switch opcode {
-	case TextMessage, BinaryMessage:
+	case BinaryMessage:
+		u.messageHandler(c, opcode, data)
+	case TextMessage:
+		if !c.Engine.CheckUtf8(data) {
+			const errText = "Invalid UTF-8 bytes"
+			protoErrorData := make([]byte, 2+len(errText))
+			binary.BigEndian.PutUint16(protoErrorData, 1002)
+			copy(protoErrorData[2:], errText)
+			c.WriteMessage(CloseMessage, protoErrorData)
+			return
+		}
 		u.messageHandler(c, opcode, data)
 	case CloseMessage:
 		if len(data) >= 2 {
@@ -547,7 +552,7 @@ func (u *Upgrader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
 	}
 }
 
-func (u *connState) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
+func (u *WebsocketReader) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
 	l := int64(len(u.buffer))
 	headLen := int64(2)
 	if l >= 2 {
@@ -898,7 +903,7 @@ func nextTokenOrQuoted(s string) (value string, rest string) {
 	return "", ""
 }
 
-func (u *connState) readAll(r io.Reader, size int) ([]byte, error) {
+func (u *WebsocketReader) readAll(r io.Reader, size int) ([]byte, error) {
 	const maxAppendSize = 1024 * 1024 * 4
 	buf := u.Engine.BodyAllocator.Malloc(size)[0:0]
 	for {

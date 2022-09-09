@@ -265,7 +265,7 @@ func (e *Engine) startListeners() error {
 						e.AddConnTLS(conn, tlsConfig)
 					} else {
 						var ne net.Error
-						if ok := errors.As(err, &ne); ok && ne.Temporary() {
+						if ok := errors.As(err, &ne); ok && ne.Timeout() {
 							logging.Error("Accept failed: temporary error, retrying...")
 							time.Sleep(time.Second / 20)
 						} else {
@@ -309,7 +309,7 @@ func (e *Engine) startListeners() error {
 						e.AddConnNonTLS(conn)
 					} else {
 						var ne net.Error
-						if ok := errors.As(err, &ne); ok && ne.Temporary() {
+						if ok := errors.As(err, &ne); ok && ne.Timeout() {
 							logging.Error("Accept failed: temporary error, retrying...")
 							time.Sleep(time.Second / 20)
 						} else {
@@ -408,12 +408,10 @@ func (e *Engine) InitTLSBuffers() {
 	}
 	e.tlsBuffers = make([][]byte, e.NParser)
 	for i := 0; i < e.NParser; i++ {
-		// equal e.tlsBuffers[i] = make([]byte, e.ReadBufferSize)
 		noRaceInitTlsBufferFormEngine(e, i)
 	}
 
 	e.getTLSBuffer = func(c *nbio.Conn) []byte {
-		// equal return e.tlsBuffers[uint64(c.Hash())%uint64(e.NParser)]
 		return noRaceGetTlsBufferFromEngine(e, c)
 	}
 
