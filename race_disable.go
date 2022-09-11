@@ -44,21 +44,6 @@ func noRaceAddConnOnPoller(p *poller, fd int, c *Conn) {
 }
 
 //go:norace
-func noRaceLenTimers(ts timerHeap) int {
-	return ts.Len()
-}
-
-//go:norace
-func noRaceModifyLittleHeap(ts timerHeap, start, end int) timerHeap {
-	return ts[start:end]
-}
-
-//go:norace
-func noRaceUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
-	*ptr = ts
-}
-
-//go:norace
 func noRaceGetReadBufferFromPoller(c *Conn) []byte {
 	return c.p.ReadBuffer
 }
