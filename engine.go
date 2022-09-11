@@ -72,6 +72,9 @@ type Config struct {
 
 	// UDPReadTimeout sets the timeout for udp sessions.
 	UDPReadTimeout time.Duration
+
+	// TimerExecute sets the executor for timer callbacks.
+	TimerExecute func(f func())
 }
 
 // Gopher keeps old type to compatible with new name Engine.

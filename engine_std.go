@@ -94,7 +94,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
-	g.Timer = timer.New(g.Name, g.TimerExecute)
+	g.Timer.Start()
 
 	if len(g.addrs) == 0 {
 		logging.Info("NBIO[%v] start", g.Name)
@@ -118,6 +118,7 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
+		Timer:              timer.New(conf.Name, conf.TimerExecute),
 		Name:               conf.Name,
 		network:            conf.Network,
 		addrs:              conf.Addrs,

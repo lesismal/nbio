@@ -37,17 +37,25 @@ type Timer struct {
 }
 
 func New(name string, executor func(f func())) *Timer {
-	t := &Timer{
-		name:      name,
-		executor:  executor,
-		callings:  []func(){},
-		chCalling: make(chan struct{}, 1),
-		trigger:   time.NewTimer(TimeForever),
-		chClose:   make(chan struct{}),
-	}
-	t.wg.Add(1)
-	go t.timerLoop()
+	t := &Timer{}
+
+	// avoid race warning
+	t.mux.Lock()
+	t.name = name
+	t.executor = executor
+	t.callings = []func(){}
+	t.chCalling = make(chan struct{}, 1)
+	t.trigger = time.NewTimer(TimeForever)
+	t.chClose = make(chan struct{})
+	t.mux.Unlock()
+
 	return t
+}
+
+// Start .
+func (t *Timer) Start() {
+	t.wg.Add(1)
+	go t.loop()
 }
 
 // Stop .
@@ -138,7 +146,7 @@ func (t *Timer) ResetTimer(it *Item) {
 	}
 }
 
-func (t *Timer) timerLoop() {
+func (t *Timer) loop() {
 	defer t.wg.Done()
 	logging.Debug("Timer[%v] timer start", t.name)
 	defer logging.Debug("Timer[%v] timer stopped", t.name)
