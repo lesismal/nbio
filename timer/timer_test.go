@@ -8,7 +8,7 @@ import (
 )
 
 func TestHeapTimer(t *testing.T) {
-	timer := New("nbio")
+	timer := New("nbio", nil)
 	defer timer.Stop()
 
 	timeout := time.Second / 10

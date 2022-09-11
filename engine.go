@@ -141,7 +141,7 @@ func (g *Engine) Stop() {
 	for c := range conns {
 		if c != nil {
 			cc := c
-			g.AtOnce(func() {
+			g.Async(func() {
 				cc.Close()
 			})
 		}
@@ -149,7 +149,7 @@ func (g *Engine) Stop() {
 	for _, c := range connsUnix {
 		if c != nil {
 			cc := c
-			g.AtOnce(func() {
+			g.Async(func() {
 				cc.Close()
 			})
 		}
@@ -214,7 +214,7 @@ func (g *Engine) OnClose(h func(c *Conn, err error)) {
 		panic("invalid nil handler")
 	}
 	g.onCloseOnNoRace(func(c *Conn, err error) {
-		// g.AtOnce(func() {
+		// g.Async(func() {
 		defer g.wgConn.Done()
 		h(c, err)
 		// })

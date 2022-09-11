@@ -87,7 +87,7 @@ func (t *Timer) AfterFunc(timeout time.Duration, f func()) *Item {
 	return it
 }
 
-func (t *Timer) AtOnce(f func()) {
+func (t *Timer) Async(f func()) {
 	if f != nil {
 		t.mux.Lock()
 		t.callings = append(t.callings, f)
@@ -156,7 +156,7 @@ func (t *Timer) timerLoop() {
 				t.callings = t.callings[1:]
 				t.mux.Unlock()
 				if t.executor != nil {
-					t.executor(it.f)
+					t.executor(f)
 				} else {
 					func() {
 						defer func() {
