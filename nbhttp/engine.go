@@ -135,19 +135,31 @@ type Config struct {
 	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd
 	MaxConnReadTimesPerEventLoop int
 
+	// Handler sets HTTP handler for Engine.
 	Handler http.Handler
 
+	// ServerExecutor sets the executor for server callbacks.
 	ServerExecutor func(f func())
 
+	// ClientExecutor sets the executor for client callbacks.
 	ClientExecutor func(f func())
 
+	// TimerExecutor sets the executor for timer callbacks.
+	TimerExecutor func(f func())
+
+	// TLSAllocator sets the buffer allocator for TLS.
 	TLSAllocator tls.Allocator
 
+	// BodyAllocator sets the buffer allocator for HTTP.
 	BodyAllocator mempool.Allocator
 
+	// Context sets common context for Engine.
 	Context context.Context
-	Cancel  func()
 
+	// Cancel sets the cancel func for common context.
+	Cancel func()
+
+	// SupportServerOnly .
 	SupportServerOnly bool
 }
 
@@ -651,6 +663,7 @@ func NewEngine(conf Config) *Engine {
 		MaxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
 		LockPoller:                   conf.LockPoller,
 		LockListener:                 conf.LockListener,
+		TimerExecute:                 conf.TimerExecutor,
 	}
 	g := nbio.NewEngine(gopherConf)
 	g.Execute = serverExecutor
