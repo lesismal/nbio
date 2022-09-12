@@ -7,20 +7,42 @@ import (
 	"time"
 )
 
-func TestHeapTimer(t *testing.T) {
+func TestTimerSchedule(t *testing.T) {
+	timer := New("nbio", nil)
+	timer.Start()
+	defer timer.Stop()
+
+	count := 0
+	interval := time.Second / 100
+	var f func()
+	done := make(chan int)
+	f = func() {
+		if count < 5 {
+			timer.AfterFunc(interval, f)
+			count++
+			log.Printf("timer schedule count: %v", count)
+		} else {
+			close(done)
+		}
+	}
+	timer.AfterFunc(interval, f)
+	<-done
+}
+
+func TestTimer(t *testing.T) {
 	timer := New("nbio", nil)
 	timer.Start()
 	defer timer.Stop()
 
 	timeout := time.Second / 10
 
-	testHeapTimerNormal(timer, timeout)
-	testHeapTimerExecPanic(timer, timeout)
-	testHeapTimerNormalExecMany(timer, timeout)
-	testHeapTimerExecManyRandtime(timer)
+	testTimerNormal(timer, timeout)
+	testTimerExecPanic(timer, timeout)
+	testTimerNormalExecMany(timer, timeout)
+	testTimerExecManyRandtime(timer)
 }
 
-func testHeapTimerNormal(timer *Timer, timeout time.Duration) {
+func testTimerNormal(timer *Timer, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
 	timer.AfterFunc(timeout*5, func() {
@@ -57,13 +79,13 @@ func testHeapTimerNormal(timer *Timer, timeout time.Duration) {
 	}
 }
 
-func testHeapTimerExecPanic(timer *Timer, timeout time.Duration) {
+func testTimerExecPanic(timer *Timer, timeout time.Duration) {
 	timer.AfterFunc(timeout, func() {
 		panic("test")
 	})
 }
 
-func testHeapTimerNormalExecMany(timer *Timer, timeout time.Duration) {
+func testTimerNormalExecMany(timer *Timer, timeout time.Duration) {
 	ch4 := make(chan int, 5)
 	for i := 0; i < 5; i++ {
 		n := i + 1
@@ -86,7 +108,7 @@ func testHeapTimerNormalExecMany(timer *Timer, timeout time.Duration) {
 	}
 }
 
-func testHeapTimerExecManyRandtime(timer *Timer) {
+func testTimerExecManyRandtime(timer *Timer) {
 	its := make([]*Item, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {

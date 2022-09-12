@@ -95,6 +95,7 @@ func (t *Timer) AfterFunc(timeout time.Duration, f func()) *Item {
 	return it
 }
 
+// Async executes f in another goroutine.
 func (t *Timer) Async(f func()) {
 	if f != nil {
 		t.mux.Lock()
@@ -107,7 +108,7 @@ func (t *Timer) Async(f func()) {
 	}
 }
 
-func (t *Timer) RemoveTimer(it *Item) {
+func (t *Timer) removeTimer(it *Item) {
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
@@ -128,8 +129,7 @@ func (t *Timer) RemoveTimer(it *Item) {
 	}
 }
 
-// ResetTimer removes a timer.
-func (t *Timer) ResetTimer(it *Item) {
+func (t *Timer) resetTimer(it *Item) {
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
@@ -266,11 +266,11 @@ type Item struct {
 
 // Stop stops a timer.
 func (it *Item) Stop() {
-	it.parent.RemoveTimer(it)
+	it.parent.removeTimer(it)
 }
 
 // Reset resets timer.
 func (it *Item) Reset(timeout time.Duration) {
 	it.expire = time.Now().Add(timeout)
-	it.parent.ResetTimer(it)
+	it.parent.resetTimer(it)
 }
