@@ -216,7 +216,7 @@ func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 	e.mux.Lock()
 	defer e.mux.Unlock()
 	for v := range e.conns {
-		c := (*nbio.Conn)(unsafe.Pointer(v))
+		c := *((**nbio.Conn)(unsafe.Pointer(&v)))
 		sess := c.Session()
 		if sess != nil {
 			if c.ExecuteLen() == 0 {
@@ -233,7 +233,7 @@ func (e *Engine) closeAllConns() {
 	e.mux.Lock()
 	defer e.mux.Unlock()
 	for v := range e.conns {
-		c := (*nbio.Conn)(unsafe.Pointer(v))
+		c := *((**nbio.Conn)(unsafe.Pointer(&v)))
 		c.Close()
 	}
 }
