@@ -2,6 +2,7 @@ package timer
 
 import (
 	"log"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -11,12 +12,12 @@ func TestTimerGroupSchedule(t *testing.T) {
 	tg.Start()
 	defer tg.Stop()
 
-	count := 0
+	count := int32(0)
 	interval := time.Second / 100
 	var f func()
 	done := make(chan int)
 	f = func() {
-		if count < 5 {
+		if atomic.AddInt32(&count, 1) < 5 {
 			tg.AfterFunc(interval, f)
 			count++
 			log.Printf("timer schedule count: %v", count)
