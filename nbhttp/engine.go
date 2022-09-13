@@ -180,7 +180,7 @@ type Engine struct {
 	_onStop  func()
 
 	mux   sync.Mutex
-	conns map[*nbio.Conn]struct{}
+	conns map[uintptr]struct{}
 
 	tlsBuffers   [][]byte
 	getTLSBuffer func(c *nbio.Conn) []byte
@@ -215,7 +215,8 @@ func (e *Engine) Online() int {
 func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 	e.mux.Lock()
 	defer e.mux.Unlock()
-	for c := range e.conns {
+	for v := range e.conns {
+		c := (*nbio.Conn)(unsafe.Pointer(v))
 		sess := c.Session()
 		if sess != nil {
 			if c.ExecuteLen() == 0 {
@@ -231,7 +232,8 @@ func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
 func (e *Engine) closeAllConns() {
 	e.mux.Lock()
 	defer e.mux.Unlock()
-	for c := range e.conns {
+	for v := range e.conns {
+		c := (*nbio.Conn)(unsafe.Pointer(v))
 		c.Close()
 	}
 }
@@ -530,7 +532,7 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 		c.Close()
 		return
 	}
-	engine.conns[nbc] = struct{}{}
+	engine.conns[uintptr(unsafe.Pointer(nbc))] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 	processor := NewServerProcessor(nbc, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
@@ -559,7 +561,7 @@ func (engine *Engine) AddConnTLS(conn net.Conn, tlsConfig *tls.Config) {
 		nbc.Close()
 		return
 	}
-	engine.conns[nbc] = struct{}{}
+	engine.conns[uintptr(unsafe.Pointer(nbc))] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 
@@ -685,7 +687,7 @@ func NewEngine(conf Config) *Engine {
 		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
 		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
 		CheckUtf8:                    utf8.Valid,
-		conns:                        map[*nbio.Conn]struct{}{},
+		conns:                        map[uintptr]struct{}{},
 		ExecuteClient:                clientExecutor,
 
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
@@ -707,7 +709,7 @@ func NewEngine(conf Config) *Engine {
 			}
 			engine._onClose(c, err)
 			engine.mux.Lock()
-			delete(engine.conns, c)
+			delete(engine.conns, uintptr(unsafe.Pointer(c)))
 			engine.mux.Unlock()
 		})
 	})
