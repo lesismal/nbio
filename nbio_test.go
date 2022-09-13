@@ -278,9 +278,7 @@ func TestUDP(t *testing.T) {
 		t.Fatalf("listen error: %v", err)
 	}
 
-	time.Sleep(time.Second)
 	lisConn, _ := g.AddConn(conn)
-	time.Sleep(time.Second)
 
 	newClientConn := func() *net.UDPConn {
 		connUDP, errDial := net.DialUDP("udp4", nil, &net.UDPAddr{
