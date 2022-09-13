@@ -17,10 +17,9 @@ func TestTimerGroupSchedule(t *testing.T) {
 	var f func()
 	done := make(chan int)
 	f = func() {
-		if atomic.AddInt32(&count, 1) < 5 {
+		if atomic.AddInt32(&count, 1) <= 5 {
 			tg.AfterFunc(interval, f)
-			count++
-			log.Printf("timer schedule count: %v", count)
+			log.Printf("timer schedule count: %v", atomic.LoadInt32(&count))
 		} else {
 			close(done)
 		}
