@@ -79,10 +79,11 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // ReadUDP .
 func (c *Conn) ReadUDP(b []byte) (*Conn, int, error) {
-	return c.readAndGetConn(b)
+	return c.ReadAndGetConn(b)
 }
 
-func (c *Conn) readAndGetConn(b []byte) (*Conn, int, error) {
+// ReadAndGetConn .
+func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	// use lock to prevent multiple conn data confusion when fd is reused on unix.
 	c.mux.Lock()
 	if c.closed {
