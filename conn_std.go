@@ -14,6 +14,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/lesismal/nbio/timer"
 )
 
 // Conn wraps net.Conn
@@ -27,7 +29,7 @@ type Conn struct {
 	conn    net.Conn
 	connUDP *udpConn
 
-	rTimer *htimer
+	rTimer *timer.Item
 
 	typ      ConnType
 	closed   bool
@@ -324,7 +326,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 // SetReadDeadline wraps net.Conn.SetReadDeadline
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	if t.IsZero() {
-		t = time.Now().Add(timeForever)
+		t = time.Now().Add(timer.TimeForever)
 	}
 
 	if c.typ == ConnTypeTCP {
@@ -333,7 +335,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 
 	timeout := t.Sub(time.Now())
 	if c.rTimer == nil {
-		c.rTimer = c.p.g.afterFunc(timeout, func() {
+		c.rTimer = c.p.g.AfterFunc(timeout, func() {
 			c.CloseWithError(errReadTimeout)
 		})
 	} else {
@@ -350,7 +352,7 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	}
 
 	if t.IsZero() {
-		t = time.Now().Add(timeForever)
+		t = time.Now().Add(timer.TimeForever)
 	}
 
 	return c.conn.SetWriteDeadline(t)
