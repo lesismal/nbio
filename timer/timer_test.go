@@ -3,48 +3,41 @@ package timer
 import (
 	"log"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 )
 
-func TestTimerSchedule(t *testing.T) {
-	timer := New("nbio", nil)
-	timer.Start()
-	defer timer.Stop()
-
-	count := 0
-	interval := time.Second / 100
-	var f func()
-	done := make(chan int)
-	f = func() {
-		if count < 5 {
-			timer.AfterFunc(interval, f)
-			count++
-			log.Printf("timer schedule count: %v", count)
-		} else {
-			close(done)
-		}
-	}
-	timer.AfterFunc(interval, f)
-	<-done
-}
-
 func TestTimer(t *testing.T) {
-	timer := New("nbio", nil)
-	timer.Start()
-	defer timer.Stop()
+	tg := NewGroup("nbio", 4, nil)
+	tg.Start()
+	defer tg.Stop()
 
-	timeout := time.Second / 10
+	timeout := time.Second / 100
 
-	testTimerNormal(timer, timeout)
-	testTimerExecPanic(timer, timeout)
-	testTimerExecManyRandtime(timer)
+	testAsync(tg)
+	testTimerNormal(tg, timeout)
+	testTimerExecPanic(tg, timeout)
+	testTimerNormalExecMany(tg, timeout)
+	testTimerExecManyRandtime(tg)
 }
 
-func testTimerNormal(timer *Timer, timeout time.Duration) {
+func testAsync(tg *TimerGroup) {
+	loops := 3
+	wg := sync.WaitGroup{}
+	for i := 0; i < loops; i++ {
+		wg.Add(1)
+		tg.Async(func() {
+			defer wg.Done()
+		})
+	}
+	wg.Wait()
+}
+
+func testTimerNormal(tg *TimerGroup, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
-	timer.AfterFunc(timeout*5, func() {
+	tg.AfterFunc(timeout*5, func() {
 		close(ch1)
 	})
 	<-ch1
@@ -55,7 +48,7 @@ func testTimerNormal(timer *Timer, timeout time.Duration) {
 
 	t2 := time.Now()
 	ch2 := make(chan int)
-	it2 := timer.AfterFunc(timeout, func() {
+	it2 := tg.AfterFunc(timeout, func() {
 		close(ch2)
 	})
 	it2.Reset(timeout * 5)
@@ -66,11 +59,11 @@ func testTimerNormal(timer *Timer, timeout time.Duration) {
 	}
 
 	ch3 := make(chan int)
-	it3 := timer.AfterFunc(timeout, func() {
+	it3 := tg.AfterFunc(timeout, func() {
 		close(ch3)
 	})
 	it3.Stop()
-	<-timer.After(timeout * 2)
+	<-tg.After(timeout * 2)
 	select {
 	case <-ch3:
 		log.Panicf("stop failed")
@@ -78,24 +71,44 @@ func testTimerNormal(timer *Timer, timeout time.Duration) {
 	}
 }
 
-func testTimerExecPanic(timer *Timer, timeout time.Duration) {
-	timer.AfterFunc(timeout, func() {
+func testTimerExecPanic(tg *TimerGroup, timeout time.Duration) {
+	tg.AfterFunc(timeout, func() {
 		panic("test")
 	})
 }
 
-func testTimerExecManyRandtime(timer *Timer) {
+func testTimerNormalExecMany(tg *TimerGroup, timeout time.Duration) {
+	ch4 := make(chan int, 5)
+	for i := 0; i < 5; i++ {
+		n := i + 1
+		if n == 3 {
+			n = 5
+		} else if n == 5 {
+			n = 3
+		}
+
+		tg.AfterFunc(timeout*time.Duration(n), func() {
+			ch4 <- n
+		})
+	}
+
+	for i := 0; i < 5; i++ {
+		n := <-ch4
+		if n != i+1 {
+			log.Panicf("invalid n: %v, %v", i, n)
+		}
+	}
+}
+
+func testTimerExecManyRandtime(tg *TimerGroup) {
 	its := make([]*Item, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {
 		n := 500 + rand.Int()%200
 		to := time.Duration(n) * time.Second / 1000
-		its = append(its, timer.AfterFunc(to, func() {
+		its = append(its, tg.AfterFunc(to, func() {
 			ch5 <- n
 		}))
-	}
-	if len(its) != 100 || noRaceLenTimers(timer.items) != 100 {
-		log.Panicf("invalid timers length: %v, %v", len(its), timer.items.Len())
 	}
 	for i := 0; i < 50; i++ {
 		if its[0] == nil {
@@ -103,9 +116,6 @@ func testTimerExecManyRandtime(timer *Timer) {
 		}
 		its[0].Stop()
 		its = its[1:]
-	}
-	if len(its) != 50 || noRaceLenTimers(timer.items) != 50 {
-		log.Panicf("invalid timers length: %v, %v", len(its), timer.items.Len())
 	}
 	recved := 0
 LOOP_RECV:
@@ -120,9 +130,6 @@ LOOP_RECV:
 	if recved != 50 {
 		log.Panicf("invalid recved num: %v", recved)
 	}
-
-	it := &Item{parent: timer, index: -1}
-	it.Stop()
 }
 
 //go:norace
