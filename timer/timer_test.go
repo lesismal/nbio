@@ -38,7 +38,6 @@ func TestTimer(t *testing.T) {
 
 	testTimerNormal(timer, timeout)
 	testTimerExecPanic(timer, timeout)
-	testTimerNormalExecMany(timer, timeout)
 	testTimerExecManyRandtime(timer)
 }
 
