@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/mempool"
+	"github.com/lesismal/nbio/timer"
 )
 
 // Conn implements net.Conn.
@@ -29,8 +30,8 @@ type Conn struct {
 
 	connUDP *udpConn
 
-	rTimer *htimer
-	wTimer *htimer
+	rTimer *timer.Item
+	wTimer *timer.Item
 
 	writeBuffer []byte
 
@@ -78,10 +79,11 @@ func (c *Conn) Read(b []byte) (int, error) {
 
 // ReadUDP .
 func (c *Conn) ReadUDP(b []byte) (*Conn, int, error) {
-	return c.readAndGetConn(b)
+	return c.ReadAndGetConn(b)
 }
 
-func (c *Conn) readAndGetConn(b []byte) (*Conn, int, error) {
+// ReadAndGetConn .
+func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	// use lock to prevent multiple conn data confusion when fd is reused on unix.
 	c.mux.Lock()
 	if c.closed {
@@ -255,12 +257,12 @@ func (c *Conn) SetDeadline(t time.Time) error {
 			g := c.p.g
 			now := time.Now()
 			if c.rTimer == nil {
-				c.rTimer = g.afterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+				c.rTimer = g.AfterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
 			} else {
 				c.rTimer.Reset(t.Sub(now))
 			}
 			if c.wTimer == nil {
-				c.wTimer = g.afterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+				c.wTimer = g.AfterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
 			} else {
 				c.wTimer.Reset(t.Sub(now))
 			}
@@ -279,7 +281,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *Conn) setDeadline(timer **htimer, returnErr error, t time.Time) error {
+func (c *Conn) setDeadline(timer **timer.Item, returnErr error, t time.Time) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if c.closed {
@@ -288,7 +290,7 @@ func (c *Conn) setDeadline(timer **htimer, returnErr error, t time.Time) error {
 	if !t.IsZero() {
 		now := time.Now()
 		if *timer == nil {
-			*timer = c.p.g.afterFunc(t.Sub(now), func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.AfterFunc(t.Sub(now), func() { c.closeWithError(returnErr) })
 		} else {
 			(*timer).Reset(t.Sub(now))
 		}
@@ -529,6 +531,16 @@ func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
 	if !c.closed {
 		c.closed = true
+
+		if c.wTimer != nil {
+			c.wTimer.Stop()
+			c.wTimer = nil
+		}
+		if c.rTimer != nil {
+			c.rTimer.Stop()
+			c.rTimer = nil
+		}
+
 		c.mux.Unlock()
 		return c.closeWithErrorWithoutLock(err)
 	}
@@ -538,15 +550,6 @@ func (c *Conn) closeWithError(err error) error {
 
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	c.closeErr = err
-
-	if c.wTimer != nil {
-		c.wTimer.Stop()
-		c.wTimer = nil
-	}
-	if c.rTimer != nil {
-		c.rTimer.Stop()
-		c.rTimer = nil
-	}
 
 	if c.writeBuffer != nil {
 		mempool.Free(c.writeBuffer)

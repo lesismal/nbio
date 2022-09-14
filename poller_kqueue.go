@@ -120,7 +120,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			if p.g.onRead == nil {
 				for {
 					buffer := p.g.borrow(c)
-					rc, n, err := c.readAndGetConn(buffer)
+					rc, n, err := c.ReadAndGetConn(buffer)
 					if n > 0 {
 						p.g.onData(rc, buffer[:n])
 					}

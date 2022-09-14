@@ -11,9 +11,9 @@ import (
 	"net"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/timer"
 )
 
 // Start init and start pollers.
@@ -87,8 +87,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
-	g.Add(1)
-	go g.timerLoop()
+	g.Timer.Start()
 
 	if len(g.addrs) == 0 {
 		logging.Info("NBIO[%v] start", g.Name)
@@ -115,6 +114,7 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
+		Timer:                        timer.New(conf.Name, conf.TimerExecute),
 		Name:                         conf.Name,
 		network:                      conf.Network,
 		addrs:                        conf.Addrs,
@@ -129,10 +129,6 @@ func NewEngine(conf Config) *Engine {
 		listeners:                    make([]*poller, len(conf.Addrs))[0:0],
 		pollers:                      make([]*poller, conf.NPoller),
 		connsUnix:                    make([]*Conn, MaxOpenFiles),
-		callings:                     []func(){},
-		chCalling:                    make(chan struct{}, 1),
-		trigger:                      time.NewTimer(timeForever),
-		chTimer:                      make(chan struct{}),
 	}
 
 	g.initHandlers()
