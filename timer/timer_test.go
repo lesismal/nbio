@@ -132,7 +132,3 @@ LOOP_RECV:
 	}
 }
 
-//go:norace
-func noRaceLenTimers(ts timerHeap) int {
-	return ts.Len()
-}
