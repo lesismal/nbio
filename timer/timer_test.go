@@ -85,29 +85,6 @@ func testTimerExecPanic(timer *Timer, timeout time.Duration) {
 	})
 }
 
-func testTimerNormalExecMany(timer *Timer, timeout time.Duration) {
-	ch4 := make(chan int, 5)
-	for i := 0; i < 5; i++ {
-		n := i + 1
-		if n == 3 {
-			n = 5
-		} else if n == 5 {
-			n = 3
-		}
-
-		timer.AfterFunc(timeout*time.Duration(n), func() {
-			ch4 <- n
-		})
-	}
-
-	for i := 0; i < 5; i++ {
-		n := <-ch4
-		if n != i+1 {
-			log.Panicf("invalid n: %v, %v", i, n)
-		}
-	}
-}
-
 func testTimerExecManyRandtime(timer *Timer) {
 	its := make([]*Item, 100)[0:0]
 	ch5 := make(chan int, 100)
