@@ -125,7 +125,7 @@ func (res *Response) Write(data []byte) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		buf = mempool.Malloc(len(data)+2)[0:0]
+		buf = mempool.Malloc(len(data) + 2)[0:0]
 		buf = mempool.Append(buf, data...)
 		buf = mempool.AppendString(buf, "\r\n")
 		if len(buf) < maxPacketSize {
@@ -257,13 +257,15 @@ func (res *Response) eoncodeHead() {
 		const contentType = "Content-Type: text/plain; charset=utf-8\r\n"
 		data = mempool.AppendString(data, contentType)
 	}
-	if !res.chunked {
-		const contentLenthKey = "Content-Length: "
+
+	const contentLenthKey = "Content-Length"
+	if !res.chunked && len(res.header[contentLenthKey]) == 0 {
+		const contentLenthPrefix = "Content-Length: "
 		if !res.hasBody {
-			data = mempool.AppendString(data, contentLenthKey)
+			data = mempool.AppendString(data, contentLenthPrefix)
 			data = mempool.Append(data, '0', '\r', '\n')
 		} else {
-			data = mempool.AppendString(data, contentLenthKey)
+			data = mempool.AppendString(data, contentLenthPrefix)
 			l := len(res.bodyBuffer)
 			if l > 0 {
 				s := strconv.FormatInt(int64(l), 10)
