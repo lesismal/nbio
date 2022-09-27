@@ -86,6 +86,9 @@ func TestEcho(t *testing.T) {
 		c.SetWriteBuffer(1024 * 4)
 		log.Printf("connected, local addr: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
 	})
+	g.BeforeWrite(func(c *Conn) {
+		c.SetWriteDeadline(time.Now().Add(time.Second * 5))
+	})
 	g.OnData(func(c *Conn, data []byte) {
 		recved := atomic.AddInt64(&total, int64(len(data)))
 		if len(data) > 0 && recved >= int64(clientNum*msgSize) {
