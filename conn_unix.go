@@ -175,14 +175,14 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Writev implements Writev.
 func (c *Conn) Writev(in [][]byte) (int, error) {
+	c.p.g.beforeWrite(c)
+
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
 
 		return 0, errClosed
 	}
-
-	c.p.g.beforeWrite(c)
 
 	var n int
 	var err error
