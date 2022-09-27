@@ -144,13 +144,13 @@ func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 
 // Write implements Write.
 func (c *Conn) Write(b []byte) (int, error) {
+	c.p.g.beforeWrite(c)
+
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
 		return -1, errClosed
 	}
-
-	c.p.g.beforeWrite(c)
 
 	n, err := c.write(b)
 	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
