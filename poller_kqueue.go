@@ -9,6 +9,7 @@ package nbio
 
 import (
 	"net"
+	"os"
 	"runtime"
 	"sync"
 	"syscall"
@@ -40,13 +41,13 @@ type poller struct {
 	kfd   int
 	evtfd int
 
-	listener net.Listener
-
 	index int
 
 	shutdown bool
 
-	isListener bool
+	listener     net.Listener
+	isListener   bool
+	unixSockAddr string
 
 	ReadBuffer []byte
 
@@ -233,6 +234,9 @@ func (p *poller) stop() {
 	noRaceSetShutdown(p, true)
 	if p.listener != nil {
 		p.listener.Close()
+		if p.unixSockAddr != "" {
+			os.Remove(p.unixSockAddr)
+		}
 	}
 	p.trigger()
 }
@@ -256,6 +260,10 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			isListener: isListener,
 			pollType:   "LISTENER",
 		}
+		if g.network == "unix" {
+			p.unixSockAddr = addr
+		}
+
 		return p, nil
 	}
 
