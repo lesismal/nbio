@@ -20,7 +20,7 @@ import (
 func (g *Engine) Start() error {
 	udpListeners := make([]*net.UDPConn, len(g.addrs))[0:0]
 	switch g.network {
-	case "tcp", "tcp4", "tcp6":
+	case "unix", "tcp", "tcp4", "tcp6":
 		for i := range g.addrs {
 			ln, err := newPoller(g, true, i)
 			if err != nil {
