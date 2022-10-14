@@ -172,7 +172,9 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 					}
 				}
 			} else {
-				asyncHandler(wsConn, res, e)
+				d.Engine.Execute(func() {
+					asyncHandler(wsConn, res, e)
+				})
 			}
 		}
 
