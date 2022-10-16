@@ -45,7 +45,6 @@
     - [Handle Disconnected](#handle-disconnected)
     - [Handle Data](#handle-data)
     - [Handle Memory Allocation/Free For Reading](#handle-memory-allocationfree-for-reading)
-    - [Handle Memory Free For Writing](#handle-memory-free-for-writing)
     - [Handle Conn Before Read](#handle-conn-before-read)
     - [Handle Conn After Read](#handle-conn-after-read)
     - [Handle Conn Before Write](#handle-conn-before-write)
@@ -265,13 +264,6 @@ g.OnReadBufferFree(func(c *Conn, b []byte) {
 })
 ```
 
-### Handle Memory Free For Writing
-```golang
-g.OnWriteBufferFree(func(c *Conn, b []byte) {
-    // ...
-})
-```
-
 ### Handle Conn Before Read
 ```golang
 // BeforeRead registers callback before syscall.Read
@@ -280,6 +272,7 @@ g.OnData(func(c *Conn, data []byte) {
     c.SetReadDeadline(time.Now().Add(time.Second*30))
 })
 ```
+
 ### Handle Conn After Read
 ```golang
 // AfterRead registers callback after syscall.Read
