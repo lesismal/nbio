@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"os"
 	"runtime"
 	"syscall"
 	"time"
@@ -49,8 +50,9 @@ type poller struct {
 
 	shutdown bool
 
-	listener   net.Listener
-	isListener bool
+	listener     net.Listener
+	isListener   bool
+	unixSockAddr string
 
 	ReadBuffer []byte
 
@@ -222,6 +224,9 @@ func (p *poller) stop() {
 	noRaceSetShutdown(p, true)
 	if p.listener != nil {
 		p.listener.Close()
+		if p.unixSockAddr != "" {
+			os.Remove(p.unixSockAddr)
+		}
 	} else {
 		n := uint64(1)
 		syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
@@ -272,6 +277,9 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			listener:   ln,
 			isListener: isListener,
 			pollType:   "LISTENER",
+		}
+		if g.network == "unix" {
+			p.unixSockAddr = addr
 		}
 
 		return p, nil

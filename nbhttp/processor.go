@@ -398,6 +398,19 @@ func (p *ClientProcessor) OnTrailerHeader(key, value string) {
 func (p *ClientProcessor) OnComplete(parser *Parser) {
 	res := p.response
 	p.response = nil
+
+	// Fix #225
+	// Handle upgrade handshake response in the io goroutine to avoid concurrent issue:
+	// 1. when the server may send a message together with handshake response
+	// 2. we handle the handshake response in another goroutine
+	// 3. poller continue reading data using http parser(the upgrader reader hasn't been set before 2)
+	// then we got parsing errors or panic.
+	if res.StatusCode == http.StatusSwitchingProtocols {
+		p.handler(res, nil)
+		releaseClientResponse(res)
+		return
+	}
+
 	if !parser.Execute(func() {
 		p.handler(res, nil)
 		releaseClientResponse(res)

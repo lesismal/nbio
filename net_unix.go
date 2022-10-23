@@ -13,6 +13,15 @@ import (
 	"syscall"
 )
 
+func init() {
+	var limit syscall.Rlimit
+	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err ==nil {
+		if n := int(limit.Max); n > 0 {
+			MaxOpenFiles = n
+		}
+	}
+}
+
 //go:norace
 func dupStdConn(conn net.Conn) (*Conn, error) {
 	sc, ok := conn.(interface {
