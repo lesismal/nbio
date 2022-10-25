@@ -85,9 +85,9 @@ func (wr *WebsocketReader) CompressionEnabled() bool {
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
 	wr := &Upgrader{
-		Engine:                    DefaultEngine,
-		BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
-		BlockingModAsyncWrite:     true,
+		Engine: DefaultEngine,
+		// BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
+		// BlockingModAsyncWrite:     false,
 	}
 	wr.pingMessageHandler = func(c *Conn, data string) {
 		if len(data) > 125 {
@@ -346,10 +346,12 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 }
 
 func (wr *WebsocketReader) blockingModReadLoop() {
-	var (
-		conn = wr.conn
-		buf  = make([]byte, wr.BlockingModReadBufferSize)
-	)
+	conn := wr.conn
+	bufSize := wr.BlockingModReadBufferSize
+	if bufSize <= 0 {
+		bufSize = DefaultBlockingReadBufferSize
+	}
+	buf := make([]byte, bufSize)
 
 	defer func() {
 		conn.Close()
