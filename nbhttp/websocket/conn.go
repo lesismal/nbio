@@ -49,14 +49,15 @@ type Conn struct {
 
 	mux sync.Mutex
 
-	isClient bool
-
+	isClient                 bool
 	onCloseCalled            bool
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	compressionLevel         int
 
 	subprotocol string
+
+	chAsyncWrite chan []byte
 
 	session interface{}
 
@@ -104,6 +105,10 @@ func validCloseCode(code int) bool {
 	return false
 }
 
+// func (c *Conn) Close() error {
+// 	return c.Conn.Close()
+// }
+
 // OnClose .
 func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h != nil {
@@ -112,6 +117,10 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 			defer c.mux.Unlock()
 			if !c.onCloseCalled {
 				c.onCloseCalled = true
+				// if c.chAsyncWrite != nil {
+				// 	close(c.chAsyncWrite)
+				// c.chAsyncWrite = nil
+				// }
 				h(c, err)
 			}
 		}
@@ -270,8 +279,19 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		buf[0] |= byte(0x80)
 	}
 
+	if c.chAsyncWrite != nil {
+		select {
+		case c.chAsyncWrite <- buf:
+		default:
+			mempool.Free(buf)
+			return ErrMessageSendQuqueIsFull
+		}
+		return nil
+	}
+
 	_, err := c.Conn.Write(buf)
 	mempool.Free(buf)
+
 	return err
 }
 

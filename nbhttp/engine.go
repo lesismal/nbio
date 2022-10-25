@@ -30,26 +30,11 @@ const (
 	// DefaultHTTPReadLimit .
 	DefaultHTTPReadLimit = 1024 * 1024 * 64
 
-	// DefaultMinBufferSize .
-	DefaultMinBufferSize = 1024 * 2
-
-	// DefaultHTTPWriteBufferSize .
-	DefaultHTTPWriteBufferSize = 1024 * 2
-
 	// DefaultMaxWebsocketFramePayloadSize .
 	DefaultMaxWebsocketFramePayloadSize = 1024 * 32
 
-	// DefaultMessageHandlerPoolSize .
-	// DefaultMessageHandlerPoolSize = runtime.NumCPU() * 256.
-
-	// DefaultMessageHandlerTaskIdleTime .
-	DefaultMessageHandlerTaskIdleTime = time.Second * 60
-
 	// DefaultKeepaliveTime .
 	DefaultKeepaliveTime = time.Second * 120
-
-	// DefaultTLSHandshakeTimeout .
-	DefaultTLSHandshakeTimeout = time.Second * 10
 )
 
 const defaultNetwork = "tcp"
