@@ -762,12 +762,27 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, o
 }
 
 func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, onClose func()) {
-	buf := make([]byte, engine.BlockingReadBufferSize)
+	var (
+		n   int
+		err error
+		buf = make([]byte, engine.BlockingReadBufferSize)
+	)
+
+	defer func() {
+		parser.Close(err)
+		engine.mux.Lock()
+		switch vt := conn.(type) {
+		case *net.TCPConn:
+			delete(engine.conns, uintptr(unsafe.Pointer(vt)))
+		}
+		engine.mux.Unlock()
+		engine._onClose(conn, err)
+		onClose()
+	}()
+
 	for {
-		n, err := conn.Read(buf)
+		n, err = conn.Read(buf)
 		if err != nil {
-			engine._onClose(conn, err)
-			onClose()
 			return
 		}
 		parser.Read(buf[:n])
@@ -775,6 +790,12 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, onClose fu
 }
 
 func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, onClose func()) {
+	var (
+		n   int
+		err error
+		buf = make([]byte, engine.BlockingReadBufferSize)
+	)
+
 	defer func() {
 		if err := recover(); err != nil {
 			const size = 64 << 10
@@ -782,36 +803,36 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 			buf = buf[:runtime.Stack(buf, false)]
 			logging.Error("readTLSConnBlocking failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
+		parser.Close(err)
+		engine.mux.Lock()
+		switch vt := conn.(type) {
+		case *net.TCPConn:
+			delete(engine.conns, uintptr(unsafe.Pointer(vt)))
+		}
+		engine.mux.Unlock()
+		engine._onClose(conn, err)
+		tlsConn.ResetOrFreeBuffer()
 		onClose()
 	}()
 
-	buf := make([]byte, engine.BlockingReadBufferSize)
 	// tlsBuf := make([]byte, engine.BlockingReadBufferSize)
 	for {
-		n, err := conn.Read(buf)
+		n, err = conn.Read(buf)
 		if err != nil {
-			engine._onClose(conn, err)
 			return
 		}
 
 		readed := buf[:n]
-
 		for {
 			_, n, err = tlsConn.AppendAndRead(readed, buf)
 			readed = nil
 			if err != nil {
-				conn.Close()
-				tlsConn.ResetOrFreeBuffer()
-				// tlsConn.Close()
 				return
 			}
 			if n > 0 {
 				err = parser.Read(buf[:n])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
-					conn.Close()
-					tlsConn.ResetOrFreeBuffer()
-					// tlsConn.Close()
 					return
 				}
 			}
