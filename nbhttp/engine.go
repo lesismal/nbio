@@ -793,21 +793,25 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 			engine._onClose(conn, err)
 			return
 		}
-		defer tlsConn.ResetOrFreeBuffer()
 
 		readed := buf[:n]
+
 		for {
 			_, n, err = tlsConn.AppendAndRead(readed, buf)
 			readed = nil
 			if err != nil {
-				conn.Close()
+				// conn.Close()
+				tlsConn.ResetOrFreeBuffer()
+				tlsConn.Close()
 				return
 			}
 			if n > 0 {
 				err = parser.Read(buf[:n])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
-					conn.Close()
+					// conn.Close()
+					tlsConn.ResetOrFreeBuffer()
+					tlsConn.Close()
 					return
 				}
 			}
@@ -815,6 +819,7 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 				break
 			}
 		}
+		tlsConn.ResetOrFreeBuffer()
 	}
 }
 
