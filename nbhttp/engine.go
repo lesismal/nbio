@@ -579,7 +579,6 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-	println("--- TLSDataHandler 111:", len(data))
 	parser := c.Session().(*Parser)
 	if parser == nil {
 		logging.Error("nil parser")
@@ -592,7 +591,6 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 		buffer := e.getTLSBuffer(c)
 		for {
 			_, nread, err := tlsConn.AppendAndRead(data, buffer)
-			println("--- TLSDataHandler 222:", nread, err)
 			data = nil
 			if err != nil {
 				c.CloseWithError(err)
