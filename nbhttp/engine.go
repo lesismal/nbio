@@ -643,12 +643,12 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 }
 
 // AddConnNonTLSBlocking .
-func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, onClose func()) {
+func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, decrease func()) {
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		conn.Close()
-		onClose()
+		decrease()
 		return
 	}
 	switch vt := conn.(type) {
@@ -657,7 +657,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, onClose func()) {
 	default:
 		engine.mux.Unlock()
 		conn.Close()
-		onClose()
+		decrease()
 		return
 	}
 	engine.mux.Unlock()
@@ -678,7 +678,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, onClose func()) {
 	parser.Engine = engine
 	processor.(*ServerProcessor).parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
-	go engine.readConnBlocking(conn, parser, onClose)
+	go engine.readConnBlocking(conn, parser, decrease)
 }
 
 // AddConnTLS .
@@ -717,12 +717,12 @@ func (engine *Engine) AddConnTLS(conn net.Conn, tlsConfig *tls.Config) {
 }
 
 // AddConnTLSBlocking .
-func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, onClose func()) {
+func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		conn.Close()
-		onClose()
+		decrease()
 		return
 	}
 
@@ -732,7 +732,7 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, o
 	default:
 		engine.mux.Unlock()
 		conn.Close()
-		onClose()
+		decrease()
 		return
 	}
 	engine.mux.Unlock()
@@ -759,10 +759,10 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, o
 	processor.(*ServerProcessor).parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 	tlsConn.SetSession(parser)
-	go engine.readTLSConnBlocking(conn, tlsConn, parser, onClose)
+	go engine.readTLSConnBlocking(conn, tlsConn, parser, decrease)
 }
 
-func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, onClose func()) {
+func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease func()) {
 	var (
 		n   int
 		err error
@@ -778,7 +778,7 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, onClose fu
 		}
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
-		onClose()
+		decrease()
 	}()
 
 	for {
@@ -790,7 +790,7 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, onClose fu
 	}
 }
 
-func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, onClose func()) {
+func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
 	var (
 		n   int
 		err error
@@ -805,6 +805,7 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 			logging.Error("readTLSConnBlocking failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 		parser.Close(err)
+		tlsConn.Close()
 		engine.mux.Lock()
 		switch vt := conn.(type) {
 		case *net.TCPConn:
@@ -812,11 +813,9 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 		}
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
-		tlsConn.ResetOrFreeBuffer()
-		onClose()
+		decrease()
 	}()
 
-	// tlsBuf := make([]byte, engine.BlockingReadBufferSize)
 	for {
 		n, err = conn.Read(buf)
 		if err != nil {
@@ -841,7 +840,6 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 				break
 			}
 		}
-		tlsConn.ResetOrFreeBuffer()
 	}
 }
 
