@@ -792,9 +792,9 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 
 func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
 	var (
-		n   int
-		err error
-		buf = make([]byte, engine.BlockingReadBufferSize)
+		err    error
+		nread  int
+		buffer = make([]byte, engine.BlockingReadBufferSize)
 	)
 
 	defer func() {
@@ -817,26 +817,26 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 	}()
 
 	for {
-		n, err = conn.Read(buf)
+		nread, err = conn.Read(buffer)
 		if err != nil {
 			return
 		}
 
-		readed := buf[:n]
+		readed := buffer[:nread]
 		for {
-			_, n, err = tlsConn.AppendAndRead(readed, buf)
+			_, nread, err = tlsConn.AppendAndRead(readed, buffer)
 			readed = nil
 			if err != nil {
 				return
 			}
-			if n > 0 {
-				err = parser.Read(buf[:n])
+			if nread > 0 {
+				err = parser.Read(buffer[:nread])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
 					return
 				}
 			}
-			if n == 0 {
+			if nread == 0 {
 				break
 			}
 		}

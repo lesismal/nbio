@@ -149,9 +149,6 @@ func (wr *WebsocketReader) OnMessage(h func(*Conn, MessageType, []byte)) {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, data)
-			if wr.KeepaliveTime > 0 {
-				c.SetReadDeadline(time.Now().Add(wr.KeepaliveTime))
-			}
 		}
 	}
 }
@@ -617,6 +614,9 @@ func (wr *WebsocketReader) handleProtocolMessage(p *nbhttp.Parser, opcode Messag
 }
 
 func (wr *WebsocketReader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
+	if wr.KeepaliveTime > 0 {
+		defer c.SetReadDeadline(time.Now().Add(wr.KeepaliveTime))
+	}
 	switch opcode {
 	case BinaryMessage:
 		wr.messageHandler(c, opcode, data)
