@@ -588,10 +588,11 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
 		defer tlsConn.ResetOrFreeBuffer()
 
-		buffer := e.getTLSBuffer(c)
+		readed := data
+		buffer := data
 		for {
-			_, nread, err := tlsConn.AppendAndRead(data, buffer)
-			data = nil
+			_, nread, err := tlsConn.AppendAndRead(readed, buffer)
+			readed = nil
 			if err != nil {
 				c.CloseWithError(err)
 				return
