@@ -21,7 +21,7 @@ import (
 
 // Response represents the server side of an HTTP response.
 type Response struct {
-	parser *Parser
+	Parser *Parser
 
 	request *http.Request // request for this response
 
@@ -46,11 +46,11 @@ type Response struct {
 
 // Hijack .
 func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if res.parser.Processor == nil {
+	if res.Parser.Processor == nil {
 		return nil, nil, errors.New("nil Proccessor")
 	}
 	res.hijacked = true
-	return res.parser.Processor.Conn(), nil, nil
+	return res.Parser.Processor.Conn(), nil, nil
 }
 
 // Header .
@@ -93,7 +93,7 @@ func (res *Response) WriteString(s string) (int, error) {
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
 	l := len(data)
-	conn := res.parser.Processor.Conn()
+	conn := res.Parser.Processor.Conn()
 	if l == 0 || conn == nil {
 		return 0, nil
 	}
@@ -167,7 +167,7 @@ func (res *Response) Write(data []byte) (int, error) {
 
 // ReadFrom .
 func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
-	c := res.parser.Processor.Conn()
+	c := res.Parser.Processor.Conn()
 	if c == nil {
 		return 0, nil
 	}
@@ -397,7 +397,7 @@ func (res *Response) formatInt(n int, base int) string {
 // NewResponse .
 func NewResponse(parser *Parser, request *http.Request, enableSendfile bool) *Response {
 	res := responsePool.Get().(*Response)
-	res.parser = parser
+	res.Parser = parser
 	res.request = request
 	res.header = http.Header{ /*"Server": []string{"nbio"}*/ }
 	res.enableSendfile = enableSendfile
