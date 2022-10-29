@@ -29,7 +29,7 @@ var (
 	// DefaultBlockingModAsyncWrite represents whether create a goroutine to handle writing:
 	// true : create a goroutine to recv buffers and write to conn, default is true;
 	// false: write buffer to the conn directely.
-	DefaultBlockingModAsyncWrite = true
+	DefaultBlockingModAsyncWrite = false
 
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
@@ -244,10 +244,10 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 	}
 
-	isStd := false
+	var parser *nbhttp.Parser
 	switch vt := conn.(type) {
 	case *nbio.Conn:
-		parser, ok := vt.Session().(*nbhttp.Parser)
+		parser, ok = vt.Session().(*nbhttp.Parser)
 		if !ok {
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
@@ -258,7 +258,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 	case *tls.Conn:
 		nbc, ok := vt.Conn().(*nbio.Conn)
 		if !ok {
-			parser, ok := vt.Session().(*nbhttp.Parser)
+			parser, ok = vt.Session().(*nbhttp.Parser)
 			if !ok {
 				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 			}
@@ -271,7 +271,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			}
 
 		} else {
-			parser, ok := nbc.Session().(*nbhttp.Parser)
+			parser, ok = nbc.Session().(*nbhttp.Parser)
 			if !ok {
 				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 			}
@@ -281,7 +281,11 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			wr.Engine = parser.Engine
 		}
 	default:
-		isStd = true
+		nbResonse, ok := w.(*nbhttp.Response)
+		if ok {
+			parser = nbResonse.Parser
+			parser.Reader = wr
+		}
 		wr.conn = newConn(wr, conn, subprotocol, compress)
 		wr.conn.Engine = wr.Engine
 		wr.isBlockingMod = true
@@ -349,7 +353,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		if wr.BlockingModAsyncWrite {
 			go wr.blockingModWriteLoop()
 		}
-		if isStd {
+		if parser == nil {
 			go wr.blockingModReadLoop()
 		}
 	}
