@@ -346,9 +346,6 @@ func (e *Engine) listenNonTLSNonBlocking(ln net.Listener) {
 
 func (e *Engine) startListeners() error {
 	if e.IOMod == IOModMixed {
-		if e.MaxBlockingOnline <= 0 {
-			e.MaxBlockingOnline = DefaultMaxBlockingOnline
-		}
 		e.listenerMux = lmux.New(e.MaxBlockingOnline)
 	}
 
@@ -876,7 +873,11 @@ func NewEngine(conf Config) *Engine {
 		conf.BlockingReadBufferSize = DefaultBlockingReadBufferSize
 	}
 	switch conf.IOMod {
-	case IOModNonBlocking, IOModBlocking, IOModMixed:
+	case IOModNonBlocking, IOModBlocking:
+	case IOModMixed:
+		if conf.MaxBlockingOnline <= 0 {
+			conf.MaxBlockingOnline = DefaultMaxBlockingOnline
+		}
 	default:
 		conf.IOMod = DefaultIOMod
 	}
