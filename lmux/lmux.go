@@ -27,7 +27,7 @@ func New(maxOnlineA int) *ListenerMux {
 	}
 }
 
-// ListenerMux manages
+// ListenerMux manages listeners and handle the connection dispatching logic.
 type ListenerMux struct {
 	listeners  map[net.Listener]listenerAB
 	chClose    chan struct{}
@@ -37,7 +37,7 @@ type ListenerMux struct {
 
 // Mux creates and returns ChanListener A and B:
 // If the online num of A is less than ListenerMux. maxOnlineA, the new connection will be dispatched to A;
-// Else the new connection will be dispatched to B。
+// Else the new connection will be dispatched to B.
 func (lm *ListenerMux) Mux(l net.Listener) (*ChanListener, *ChanListener) {
 	if l == nil || lm == nil {
 		return nil, nil
@@ -141,6 +141,7 @@ func (l *ChanListener) Addr() net.Addr {
 	return l.addr
 }
 
+// Decrease decreases the online num if it's A.
 func (l *ChanListener) Decrease() {
 	if l.decrease != nil {
 		l.decrease()
