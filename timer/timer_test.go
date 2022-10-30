@@ -131,4 +131,3 @@ LOOP_RECV:
 		log.Panicf("invalid recved num: %v", recved)
 	}
 }
-

@@ -62,4 +62,7 @@ var (
 
 	// ErrMessageTooLarge.
 	ErrMessageTooLarge = errors.New("message exceeds the configured limit")
+
+	// ErrMessageSendQuqueIsFull .
+	ErrMessageSendQuqueIsFull = errors.New("message send queue is full")
 )

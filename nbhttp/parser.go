@@ -126,7 +126,7 @@ func (p *Parser) Read(data []byte) error {
 	defer p.mux.Unlock()
 
 	if p.state == stateClose {
-		return ErrClosed
+		return net.ErrClosed
 	}
 
 	if len(data) == 0 {
@@ -165,7 +165,7 @@ UPGRADER:
 		c = data[i]
 		switch p.state {
 		case stateClose:
-			return ErrClosed
+			return net.ErrClosed
 		case stateMethodBefore:
 			if isValidMethodChar(c) {
 				start = i

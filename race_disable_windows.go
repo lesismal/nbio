@@ -12,5 +12,4 @@ func noRaceConnOperation(g *Engine, c *Conn, op int) {
 	case noRaceConnOpDel:
 		p.deleteConn(c)
 	}
-	return
 }

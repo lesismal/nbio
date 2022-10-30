@@ -273,12 +273,12 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 				releaseResponse(res)
 				return
 			}
-		}
-		if req.Close {
-			// the data may still in the send queue
-			p.conn.Close()
-		} else if p.parser == nil || p.parser.Reader == nil {
-			p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+			if req.Close {
+				// the data may still in the send queue
+				p.conn.Close()
+			} else if p.parser == nil || p.parser.Reader == nil {
+				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+			}
 		}
 		releaseRequest(req)
 		releaseResponse(res)
