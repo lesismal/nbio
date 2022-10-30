@@ -16,13 +16,13 @@ import (
 	"github.com/lesismal/nbio/timer"
 )
 
-// Start init and start pollers
+// Start init and start pollers.
 func (g *Engine) Start() error {
 	udpListeners := make([]*net.UDPConn, len(g.addrs))[0:0]
 	switch g.network {
 	case "tcp", "tcp4", "tcp6":
 		for i := range g.addrs {
-			ln, err := newPoller(g, true, int(i))
+			ln, err := newPoller(g, true, i)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					g.listeners[j].stop()
@@ -52,13 +52,13 @@ func (g *Engine) Start() error {
 	}
 
 	for i := 0; i < g.pollerNum; i++ {
-		p, err := newPoller(g, false, int(i))
+		p, err := newPoller(g, false, i)
 		if err != nil {
 			for j := 0; j < len(g.listeners); j++ {
 				g.listeners[j].stop()
 			}
 
-			for j := 0; j < int(i); j++ {
+			for j := 0; j < i; j++ {
 				g.pollers[j].stop()
 			}
 			return err
@@ -104,7 +104,7 @@ func (g *Engine) Start() error {
 	return nil
 }
 
-// NewEngine is a factory impl
+// NewEngine is a factory impl.
 func NewEngine(conf Config) *Engine {
 	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
@@ -137,7 +137,7 @@ func NewEngine(conf Config) *Engine {
 
 	g.OnReadBufferAlloc(func(c *Conn) []byte {
 		if c.ReadBuffer == nil {
-			c.ReadBuffer = make([]byte, int(g.readBufferSize))
+			c.ReadBuffer = make([]byte, g.readBufferSize)
 		}
 		return c.ReadBuffer
 	})

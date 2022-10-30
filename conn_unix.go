@@ -65,7 +65,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		return 0, errClosed
+		return 0, net.ErrClosed
 	}
 
 	_, n, err := c.doRead(b)
@@ -88,7 +88,7 @@ func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		return c, 0, errClosed
+		return c, 0, net.ErrClosed
 	}
 
 	dstConn, n, err := c.doRead(b)
@@ -149,7 +149,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		return -1, errClosed
+		return -1, net.ErrClosed
 	}
 
 	n, err := c.write(b)
@@ -181,7 +181,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	if c.closed {
 		c.mux.Unlock()
 
-		return 0, errClosed
+		return 0, net.ErrClosed
 	}
 
 	var n int
@@ -418,7 +418,7 @@ func (c *Conn) flush() error {
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		return errClosed
+		return net.ErrClosed
 	}
 
 	if len(c.writeBuffer) == 0 {

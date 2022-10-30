@@ -9,7 +9,6 @@ import (
 )
 
 var (
-	errClosed       = errors.New("conn closed")
 	errReadTimeout  = errors.New("read timeout")
 	errWriteTimeout = errors.New("write timeout")
 )

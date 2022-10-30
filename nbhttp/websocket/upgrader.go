@@ -29,7 +29,7 @@ var (
 	// DefaultBlockingModAsyncWrite represents whether create a goroutine to handle writing:
 	// true : create a goroutine to recv buffers and write to conn, default is true;
 	// false: write buffer to the conn directely.
-	DefaultBlockingModAsyncWrite = true
+	DefaultBlockingModAsyncWrite = false
 
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
@@ -149,9 +149,6 @@ func (wr *WebsocketReader) OnMessage(h func(*Conn, MessageType, []byte)) {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, data)
-			if wr.KeepaliveTime > 0 {
-				c.SetReadDeadline(time.Now().Add(wr.KeepaliveTime))
-			}
 		}
 	}
 }
@@ -247,9 +244,10 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 	}
 
+	var parser *nbhttp.Parser
 	switch vt := conn.(type) {
 	case *nbio.Conn:
-		parser, ok := vt.Session().(*nbhttp.Parser)
+		parser, ok = vt.Session().(*nbhttp.Parser)
 		if !ok {
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
@@ -260,24 +258,40 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 	case *tls.Conn:
 		nbc, ok := vt.Conn().(*nbio.Conn)
 		if !ok {
-			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+			parser, ok = vt.Session().(*nbhttp.Parser)
+			if !ok {
+				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+			}
+			parser.Reader = wr
+			wr.conn = newConn(wr, conn, subprotocol, compress)
+			wr.conn.Engine = wr.Engine
+			wr.isBlockingMod = true
+			if wr.BlockingModAsyncWrite {
+				wr.conn.chAsyncWrite = make(chan []byte, 4096)
+			}
+
+		} else {
+			parser, ok = nbc.Session().(*nbhttp.Parser)
+			if !ok {
+				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+			}
+			parser.Reader = wr
+			wr.conn = newConn(wr, conn, subprotocol, compress)
+			wr.conn.Engine = parser.Engine
+			wr.Engine = parser.Engine
 		}
-		parser, ok := nbc.Session().(*nbhttp.Parser)
-		if !ok {
-			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
-		}
-		parser.Reader = wr
-		wr.conn = newConn(wr, conn, subprotocol, compress)
-		wr.conn.Engine = parser.Engine
-		wr.Engine = parser.Engine
 	default:
+		nbResonse, ok := w.(*nbhttp.Response)
+		if ok {
+			parser = nbResonse.Parser
+			parser.Reader = wr
+		}
 		wr.conn = newConn(wr, conn, subprotocol, compress)
 		wr.conn.Engine = wr.Engine
 		wr.isBlockingMod = true
 		if wr.BlockingModAsyncWrite {
 			wr.conn.chAsyncWrite = make(chan []byte, 4096)
 		}
-
 	}
 
 	buf := mempool.Malloc(1024)[0:0]
@@ -339,7 +353,9 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		if wr.BlockingModAsyncWrite {
 			go wr.blockingModWriteLoop()
 		}
-		go wr.blockingModReadLoop()
+		if parser == nil {
+			go wr.blockingModReadLoop()
+		}
 	}
 
 	return wr.conn, nil
@@ -602,6 +618,9 @@ func (wr *WebsocketReader) handleProtocolMessage(p *nbhttp.Parser, opcode Messag
 }
 
 func (wr *WebsocketReader) handleWsMessage(c *Conn, opcode MessageType, data []byte) {
+	if wr.KeepaliveTime > 0 {
+		defer c.SetReadDeadline(time.Now().Add(wr.KeepaliveTime))
+	}
 	switch opcode {
 	case BinaryMessage:
 		wr.messageHandler(c, opcode, data)

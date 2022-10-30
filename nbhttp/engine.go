@@ -18,9 +18,26 @@ import (
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/lmux"
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/taskpool"
+)
+
+const (
+	// IOModNonBlocking represents that the server serve all the connections by nbio poller goroutines to handle io events.
+	IOModNonBlocking = 0
+	// IOModBlocking represents that the server serve each connection with one goroutien at least to handle reading.
+	IOModBlocking = 1
+	// IOModMixed represents that the server creates listener mux to handle different connections, 1 listener will be dispatch to two ChanListener:
+	// If ChanListener A's online is less than its max online num, the new connection will be dispatch to this listener A and served by single goroutine;
+	// Else the new connection will be dispatch to ChanListener B and served by nbio poller.
+	IOModMixed = 2
+
+	// DefaultIOMod represents the default IO Mod used by nbhttp.Engine.
+	DefaultIOMod = IOModNonBlocking
+	// DefaultMaxBlockingOnline represents the default num of connections that will be dispatched to ChanListner A.
+	DefaultMaxBlockingOnline = 10000
 )
 
 const (
@@ -35,6 +52,9 @@ const (
 
 	// DefaultKeepaliveTime .
 	DefaultKeepaliveTime = time.Second * 120
+
+	// DefaultBlockingReadBufferSize sets to 4k(<= goroutine stack size).
+	DefaultBlockingReadBufferSize = 1024 * 4
 )
 
 const defaultNetwork = "tcp"
@@ -146,6 +166,13 @@ type Config struct {
 
 	// SupportServerOnly .
 	SupportServerOnly bool
+
+	// IOMod represents io mod, it is set to IOModNonBlocking by default.
+	IOMod int
+	// MaxBlockingOnline represents max blocking conn's online num.
+	MaxBlockingOnline int
+	// BlockingReadBufferSize represents read buffer size of blocking mod.
+	BlockingReadBufferSize int
 }
 
 // Engine .
@@ -153,15 +180,13 @@ type Engine struct {
 	*nbio.Engine
 	*Config
 
-	MaxLoad                      int
-	MaxWebsocketFramePayloadSize int
-	ReleaseWebsocketPayload      bool
-	CheckUtf8                    func(data []byte) bool
+	CheckUtf8 func(data []byte) bool
 
-	listeners []net.Listener
+	listenerMux *lmux.ListenerMux
+	listeners   []net.Listener
 
-	_onOpen  func(c *nbio.Conn)
-	_onClose func(c *nbio.Conn, err error)
+	_onOpen  func(c net.Conn)
+	_onClose func(c net.Conn, err error)
 	_onStop  func()
 
 	mux   sync.Mutex
@@ -178,12 +203,12 @@ type Engine struct {
 }
 
 // OnOpen registers callback for new connection.
-func (e *Engine) OnOpen(h func(c *nbio.Conn)) {
+func (e *Engine) OnOpen(h func(c net.Conn)) {
 	e._onOpen = h
 }
 
 // OnClose registers callback for disconnected.
-func (e *Engine) OnClose(h func(c *nbio.Conn, err error)) {
+func (e *Engine) OnClose(h func(c net.Conn, err error)) {
 	e._onClose = h
 }
 
@@ -223,7 +248,36 @@ func (e *Engine) closeAllConns() {
 	}
 }
 
+func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(net.Conn, *tls.Config, func()), decrease func()) {
+	e.WaitGroup.Add(1)
+	go func() {
+		defer func() {
+			// ln.Close()
+			e.WaitGroup.Done()
+		}()
+		for {
+			conn, err := ln.Accept()
+			if err == nil {
+				addConn(conn, tlsConfig, decrease)
+			} else {
+				var ne net.Error
+				if ok := errors.As(err, &ne); ok && ne.Timeout() {
+					logging.Error("Accept failed: temporary error, retrying...")
+					time.Sleep(time.Second / 20)
+				} else {
+					logging.Error("Accept failed: %v, exit...", err)
+					break
+				}
+			}
+		}
+	}()
+}
+
 func (e *Engine) startListeners() error {
+	if e.IOMod == IOModMixed {
+		e.listenerMux = lmux.New(e.MaxBlockingOnline)
+	}
+
 	for _, conf := range e.AddrConfigsTLS {
 		if conf.Addr != "" {
 			network := conf.Network
@@ -240,10 +294,7 @@ func (e *Engine) startListeners() error {
 				}
 				return err
 			}
-			e.listeners = append(e.listeners, ln)
-
 			logging.Info("Serve     TLS On: [%v]", conf.Addr)
-			e.WaitGroup.Add(1)
 
 			tlsConfig := conf.TLSConfig
 			if tlsConfig == nil {
@@ -253,27 +304,18 @@ func (e *Engine) startListeners() error {
 				}
 			}
 
-			go func() {
-				defer func() {
-					ln.Close()
-					e.WaitGroup.Done()
-				}()
-				for {
-					conn, err := ln.Accept()
-					if err == nil {
-						e.AddConnTLS(conn, tlsConfig)
-					} else {
-						var ne net.Error
-						if ok := errors.As(err, &ne); ok && ne.Timeout() {
-							logging.Error("Accept failed: temporary error, retrying...")
-							time.Sleep(time.Second / 20)
-						} else {
-							logging.Error("Accept failed: %v, exit...", err)
-							break
-						}
-					}
-				}
-			}()
+			switch e.IOMod {
+			case IOModMixed:
+				lnA, lnB := e.listenerMux.Mux(ln)
+				e.listen(lnA, tlsConfig, e.AddConnTLSBlocking, lnA.Decrease)
+				e.listen(lnB, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+			case IOModBlocking:
+				e.listeners = append(e.listeners, ln)
+				e.listen(ln, tlsConfig, e.AddConnTLSBlocking, func() {})
+			case IOModNonBlocking:
+				e.listeners = append(e.listeners, ln)
+				e.listen(ln, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+			}
 		}
 	}
 
@@ -296,35 +338,31 @@ func (e *Engine) startListeners() error {
 			e.listeners = append(e.listeners, ln)
 
 			logging.Info("Serve  NonTLS On: [%v]", conf.Addr)
-			e.WaitGroup.Add(1)
-			go func() {
-				defer func() {
-					ln.Close()
-					e.WaitGroup.Done()
-				}()
-				for {
-					conn, err := ln.Accept()
-					if err == nil {
-						e.AddConnNonTLS(conn)
-					} else {
-						var ne net.Error
-						if ok := errors.As(err, &ne); ok && ne.Timeout() {
-							logging.Error("Accept failed: temporary error, retrying...")
-							time.Sleep(time.Second / 20)
-						} else {
-							logging.Error("Accept failed: %v, exit...", err)
-							break
-						}
-					}
-				}
-			}()
+
+			switch e.IOMod {
+			case IOModMixed:
+				lnA, lnB := e.listenerMux.Mux(ln)
+				e.listen(lnA, nil, e.AddConnNonTLSBlocking, lnA.Decrease)
+				e.listen(lnB, nil, e.AddConnNonTLSNonBlocking, func() {})
+			case IOModBlocking:
+				e.listeners = append(e.listeners, ln)
+				e.listen(ln, nil, e.AddConnNonTLSBlocking, func() {})
+			case IOModNonBlocking:
+				e.listeners = append(e.listeners, ln)
+				e.listen(ln, nil, e.AddConnNonTLSNonBlocking, func() {})
+			}
 		}
 	}
+
+	e.listenerMux.Start()
 
 	return nil
 }
 
 func (e *Engine) stopListeners() {
+	if e.IOMod == IOModMixed && e.listenerMux != nil {
+		e.listenerMux.Stop()
+	}
 	for _, ln := range e.listeners {
 		ln.Close()
 	}
@@ -467,7 +505,6 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-
 	parser := c.Session().(*Parser)
 	if parser == nil {
 		logging.Error("nil parser")
@@ -477,10 +514,11 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	if tlsConn, ok := parser.Processor.Conn().(*tls.Conn); ok {
 		defer tlsConn.ResetOrFreeBuffer()
 
-		buffer := e.getTLSBuffer(c)
+		readed := data
+		buffer := data
 		for {
-			_, nread, err := tlsConn.AppendAndRead(data, buffer)
-			data = nil
+			_, nread, err := tlsConn.AppendAndRead(readed, buffer)
+			readed = nil
 			if err != nil {
 				c.CloseWithError(err)
 				return
@@ -501,8 +539,8 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
-// AddConnNonTLS .
-func (engine *Engine) AddConnNonTLS(c net.Conn) {
+// AddConnNonTLSNonBlocking .
+func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(c)
 	if err != nil {
 		c.Close()
@@ -530,8 +568,47 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
-// AddConnTLS .
-func (engine *Engine) AddConnTLS(conn net.Conn, tlsConfig *tls.Config) {
+// AddConnNonTLSBlocking .
+func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		conn.Close()
+		decrease()
+		return
+	}
+	switch vt := conn.(type) {
+	case *net.TCPConn:
+		engine.conns[uintptr(unsafe.Pointer(vt))] = struct{}{}
+	default:
+		engine.mux.Unlock()
+		conn.Close()
+		decrease()
+		return
+	}
+	engine.mux.Unlock()
+	engine._onOpen(conn)
+	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, func(f func()) bool {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+		}()
+		f()
+		return true
+	})
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+	go engine.readConnBlocking(conn, parser, decrease)
+}
+
+// AddConnTLSNonBlocking .
+func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(conn)
 	if err != nil {
 		conn.Close()
@@ -565,6 +642,133 @@ func (engine *Engine) AddConnTLS(conn net.Conn, tlsConfig *tls.Config) {
 	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
+// AddConnTLSBlocking .
+func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		conn.Close()
+		decrease()
+		return
+	}
+
+	switch vt := conn.(type) {
+	case *net.TCPConn:
+		engine.conns[uintptr(unsafe.Pointer(vt))] = struct{}{}
+	default:
+		engine.mux.Unlock()
+		conn.Close()
+		decrease()
+		return
+	}
+	engine.mux.Unlock()
+	engine._onOpen(conn)
+
+	isClient := false
+	isNonBlock := true
+	tlsConn := tls.NewConn(conn, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
+	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	parser := NewParser(processor, false, engine.ReadLimit, func(f func()) bool {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+		}()
+		f()
+		return true
+	})
+	parser.Conn = tlsConn
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
+	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+	tlsConn.SetSession(parser)
+	go engine.readTLSConnBlocking(conn, tlsConn, parser, decrease)
+}
+
+func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease func()) {
+	var (
+		n   int
+		err error
+		buf = make([]byte, engine.BlockingReadBufferSize)
+	)
+
+	defer func() {
+		parser.Close(err)
+		engine.mux.Lock()
+		switch vt := conn.(type) {
+		case *net.TCPConn:
+			delete(engine.conns, uintptr(unsafe.Pointer(vt)))
+		}
+		engine.mux.Unlock()
+		engine._onClose(conn, err)
+		decrease()
+	}()
+
+	for {
+		n, err = conn.Read(buf)
+		if err != nil {
+			return
+		}
+		parser.Read(buf[:n])
+	}
+}
+
+func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
+	var (
+		err    error
+		nread  int
+		buffer = make([]byte, engine.BlockingReadBufferSize)
+	)
+
+	defer func() {
+		if err := recover(); err != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			logging.Error("readTLSConnBlocking failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+		}
+		parser.Close(err)
+		tlsConn.Close()
+		engine.mux.Lock()
+		switch vt := conn.(type) {
+		case *net.TCPConn:
+			delete(engine.conns, uintptr(unsafe.Pointer(vt)))
+		}
+		engine.mux.Unlock()
+		engine._onClose(conn, err)
+		decrease()
+	}()
+
+	for {
+		nread, err = conn.Read(buffer)
+		if err != nil {
+			return
+		}
+
+		readed := buffer[:nread]
+		for {
+			_, nread, err = tlsConn.AppendAndRead(readed, buffer)
+			readed = nil
+			if err != nil {
+				return
+			}
+			if nread > 0 {
+				err = parser.Read(buffer[:nread])
+				if err != nil {
+					logging.Debug("parser.Read failed: %v", err)
+					return
+				}
+			}
+			if nread == 0 {
+				break
+			}
+		}
+	}
+}
+
 // NewEngine .
 func NewEngine(conf Config) *Engine {
 	if conf.MaxLoad <= 0 {
@@ -593,6 +797,18 @@ func NewEngine(conf Config) *Engine {
 	}
 	if conf.BodyAllocator == nil {
 		conf.BodyAllocator = mempool.DefaultMemPool
+	}
+	if conf.BlockingReadBufferSize <= 0 {
+		conf.BlockingReadBufferSize = DefaultBlockingReadBufferSize
+	}
+	switch conf.IOMod {
+	case IOModNonBlocking, IOModBlocking:
+	case IOModMixed:
+		if conf.MaxBlockingOnline <= 0 {
+			conf.MaxBlockingOnline = DefaultMaxBlockingOnline
+		}
+	default:
+		conf.IOMod = DefaultIOMod
 	}
 
 	var handler = conf.Handler
@@ -663,17 +879,14 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	engine := &Engine{
-		Engine:                       g,
-		Config:                       &conf,
-		_onOpen:                      func(c *nbio.Conn) {},
-		_onClose:                     func(c *nbio.Conn, err error) {},
-		_onStop:                      func() {},
-		MaxLoad:                      conf.MaxLoad,
-		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
-		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
-		CheckUtf8:                    utf8.Valid,
-		conns:                        map[uintptr]struct{}{},
-		ExecuteClient:                clientExecutor,
+		Engine:        g,
+		Config:        &conf,
+		_onOpen:       func(c net.Conn) {},
+		_onClose:      func(c net.Conn, err error) {},
+		_onStop:       func() {},
+		CheckUtf8:     utf8.Valid,
+		conns:         map[uintptr]struct{}{},
+		ExecuteClient: clientExecutor,
 
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
