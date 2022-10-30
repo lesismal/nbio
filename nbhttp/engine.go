@@ -25,11 +25,18 @@ import (
 )
 
 const (
+	// IOModNonBlocking represents that the server serve all the connections by nbio poller goroutines to handle io events.
 	IOModNonBlocking = 0
-	IOModBlocking    = 1
-	IOModMixed       = 2
+	// IOModBlocking represents that the server serve each connection with one goroutien at least to handle reading.
+	IOModBlocking = 1
+	// IOModMixed represents that the server create listener mux to handle different connections, 1 listener will be dispatch to two ChanListener:
+	// If ChanListener A's online is less than its max online num, the new connection will be dispatch to this listener A and served by single goroutine;
+	// Else the new connection will be dispatch to ChanListener B and served by nbio poller.
+	IOModMixed = 2
 
-	DefaultIOMod             = IOModNonBlocking
+	// DefaultIOMod represents the default IO Mod used by nbhttp.Engine.
+	DefaultIOMod = IOModNonBlocking
+	// DefaultMaxBlockingOnline represents the default num of connections that will be dispatched to ChanListner A.
 	DefaultMaxBlockingOnline = 10000
 )
 
@@ -46,7 +53,7 @@ const (
 	// DefaultKeepaliveTime .
 	DefaultKeepaliveTime = time.Second * 120
 
-	// DefaultBlockingReadBufferSize sets to 4k(<= goroutine stack size)
+	// DefaultBlockingReadBufferSize sets to 4k(<= goroutine stack size).
 	DefaultBlockingReadBufferSize = 1024 * 4
 )
 
@@ -173,10 +180,7 @@ type Engine struct {
 	*nbio.Engine
 	*Config
 
-	MaxLoad                      int
-	MaxWebsocketFramePayloadSize int
-	ReleaseWebsocketPayload      bool
-	CheckUtf8                    func(data []byte) bool
+	CheckUtf8 func(data []byte) bool
 
 	listenerMux *lmux.ListenerMux
 	listeners   []net.Listener
@@ -875,17 +879,14 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	engine := &Engine{
-		Engine:                       g,
-		Config:                       &conf,
-		_onOpen:                      func(c net.Conn) {},
-		_onClose:                     func(c net.Conn, err error) {},
-		_onStop:                      func() {},
-		MaxLoad:                      conf.MaxLoad,
-		MaxWebsocketFramePayloadSize: conf.MaxWebsocketFramePayloadSize,
-		ReleaseWebsocketPayload:      conf.ReleaseWebsocketPayload,
-		CheckUtf8:                    utf8.Valid,
-		conns:                        map[uintptr]struct{}{},
-		ExecuteClient:                clientExecutor,
+		Engine:        g,
+		Config:        &conf,
+		_onOpen:       func(c net.Conn) {},
+		_onClose:      func(c net.Conn, err error) {},
+		_onStop:       func() {},
+		CheckUtf8:     utf8.Valid,
+		conns:         map[uintptr]struct{}{},
+		ExecuteClient: clientExecutor,
 
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
