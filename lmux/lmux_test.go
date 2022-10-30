@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-//go:norace
 func TestListenerMux(t *testing.T) {
 	maxOnlineA := 3
 	totalConn := 5

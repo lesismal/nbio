@@ -18,25 +18,26 @@ type listenerAB struct {
 	a, b *ChanListener
 }
 
+// New returns a ListenerMux.
 func New(maxOnlineA int) *ListenerMux {
 	return &ListenerMux{
 		listeners:  map[net.Listener]listenerAB{},
 		chClose:    make(chan struct{}),
 		maxOnlineA: int32(maxOnlineA),
-		chEventA:   make(chan event, 1024*32),
-		chEventB:   make(chan event, 1024*32),
 	}
 }
 
+// ListenerMux manages
 type ListenerMux struct {
 	listeners  map[net.Listener]listenerAB
 	chClose    chan struct{}
 	onlineA    int32
 	maxOnlineA int32
-	chEventA   chan event
-	chEventB   chan event
 }
 
+// Mux creates and returns ChanListener A and B:
+// If the online num of A is less than ListenerMux. maxOnlineA, the new connection will be dispatched to A;
+// Else the new connection will be dispatched to B。
 func (lm *ListenerMux) Mux(l net.Listener) (*ChanListener, *ChanListener) {
 	if l == nil || lm == nil {
 		return nil, nil
@@ -48,31 +49,20 @@ func (lm *ListenerMux) Mux(l net.Listener) (*ChanListener, *ChanListener) {
 		a: &ChanListener{
 			addr:     l.Addr(),
 			chClose:  lm.chClose,
-			chEvent:  lm.chEventA,
+			chEvent:  make(chan event, 1024*64),
 			decrease: lm.DecreaseOnlineA,
 		},
 		b: &ChanListener{
 			addr:    l.Addr(),
 			chClose: lm.chClose,
-			chEvent: lm.chEventB,
+			chEvent: make(chan event, 1024*64),
 		},
 	}
 	lm.listeners[l] = ab
 	return ab.a, ab.b
 }
 
-func (lm *ListenerMux) Stop() {
-	if lm == nil {
-		return
-	}
-	for l, ab := range lm.listeners {
-		l.Close()
-		ab.a.Close()
-		ab.b.Close()
-	}
-	close(lm.chClose)
-}
-
+// Start starts to accpet and dispatch the connections to ChanListener A or B.
 func (lm *ListenerMux) Start() {
 	if lm == nil {
 		return
@@ -104,6 +94,20 @@ func (lm *ListenerMux) Start() {
 	}
 }
 
+// Stop stops all the listeners.
+func (lm *ListenerMux) Stop() {
+	if lm == nil {
+		return
+	}
+	for l, ab := range lm.listeners {
+		l.Close()
+		ab.a.Close()
+		ab.b.Close()
+	}
+	close(lm.chClose)
+}
+
+// DecreaseOnlineA decreases the online num of ChanListener A.
 func (lm *ListenerMux) DecreaseOnlineA() {
 	atomic.AddInt32(&lm.onlineA, -1)
 }

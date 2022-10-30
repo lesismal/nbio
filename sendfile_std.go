@@ -21,9 +21,9 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {
 	}
 
 	if remain <= 0 {
-		stat, err := f.Stat()
+		stat, e := f.Stat()
 		if err != nil {
-			return 0, err
+			return 0, e
 		}
 		remain = stat.Size()
 	}

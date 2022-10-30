@@ -18,7 +18,7 @@ import (
 	"github.com/lesismal/nbio/timer"
 )
 
-// Conn wraps net.Conn
+// Conn wraps net.Conn.
 type Conn struct {
 	p *poller
 
@@ -37,7 +37,7 @@ type Conn struct {
 
 	ReadBuffer []byte
 
-	// user session
+	// user session.
 	session interface{}
 
 	execList []func()
@@ -47,12 +47,12 @@ type Conn struct {
 	DataHandler func(c *Conn, data []byte)
 }
 
-// Hash returns a hashcode
+// Hash returns a hashcode.
 func (c *Conn) Hash() int {
 	return c.hash
 }
 
-// Read wraps net.Conn.Read
+// Read wraps net.Conn.Read.
 func (c *Conn) Read(b []byte) (int, error) {
 	if c.closeErr != nil {
 		return 0, c.closeErr
@@ -165,7 +165,7 @@ func (c *Conn) readUDP(b []byte) (int, error) {
 	return nread, err
 }
 
-// Write wraps net.Conn.Write
+// Write wraps net.Conn.Write.
 func (c *Conn) Write(b []byte) (int, error) {
 	var err error
 	var nwrite int
@@ -218,7 +218,7 @@ func (c *Conn) writeUDPClientFromRead(b []byte) (int, error) {
 	return nwrite, err
 }
 
-// Writev wraps buffers.WriteTo/syscall.Writev
+// Writev wraps buffers.WriteTo/syscall.Writev.
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	if c.connUDP == nil {
 		buffers := net.Buffers(in)
@@ -232,11 +232,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		return int(nwrite), err
 	}
 
-	var err error
 	var total = 0
-	var nwrite = 0
 	for _, b := range in {
-		nwrite, err = c.Write(b)
+		nwrite, err := c.Write(b)
 		if nwrite > 0 {
 			total += nwrite
 		}
@@ -248,10 +246,10 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 			return total, err
 		}
 	}
-	return total, err
+	return total, nil
 }
 
-// Close wraps net.Conn.Close
+// Close wraps net.Conn.Close.
 func (c *Conn) Close() error {
 	var err error
 	c.mux.Lock()
@@ -289,7 +287,7 @@ func (c *Conn) CloseWithError(err error) error {
 	return c.Close()
 }
 
-// LocalAddr wraps net.Conn.LocalAddr
+// LocalAddr wraps net.Conn.LocalAddr.
 func (c *Conn) LocalAddr() net.Addr {
 	switch c.typ {
 	case ConnTypeTCP:
@@ -301,7 +299,7 @@ func (c *Conn) LocalAddr() net.Addr {
 	return nil
 }
 
-// RemoteAddr wraps net.Conn.RemoteAddr
+// RemoteAddr wraps net.Conn.RemoteAddr.
 func (c *Conn) RemoteAddr() net.Addr {
 	switch c.typ {
 	case ConnTypeTCP:
@@ -315,7 +313,7 @@ func (c *Conn) RemoteAddr() net.Addr {
 	return nil
 }
 
-// SetDeadline wraps net.Conn.SetDeadline
+// SetDeadline wraps net.Conn.SetDeadline.
 func (c *Conn) SetDeadline(t time.Time) error {
 	if c.typ == ConnTypeTCP {
 		return c.conn.SetDeadline(t)
@@ -323,7 +321,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return c.SetReadDeadline(t)
 }
 
-// SetReadDeadline wraps net.Conn.SetReadDeadline
+// SetReadDeadline wraps net.Conn.SetReadDeadline.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	if t.IsZero() {
 		t = time.Now().Add(timer.TimeForever)
@@ -333,7 +331,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 		return c.conn.SetReadDeadline(t)
 	}
 
-	timeout := t.Sub(time.Now())
+	timeout := time.Until(t)
 	if c.rTimer == nil {
 		c.rTimer = c.p.g.AfterFunc(timeout, func() {
 			c.CloseWithError(errReadTimeout)
@@ -345,7 +343,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 	return nil
 }
 
-// SetWriteDeadline wraps net.Conn.SetWriteDeadline
+// SetWriteDeadline wraps net.Conn.SetWriteDeadline.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -358,7 +356,7 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return c.conn.SetWriteDeadline(t)
 }
 
-// SetNoDelay wraps net.Conn.SetNoDelay
+// SetNoDelay wraps net.Conn.SetNoDelay.
 func (c *Conn) SetNoDelay(nodelay bool) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -371,7 +369,7 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 	return nil
 }
 
-// SetReadBuffer wraps net.Conn.SetReadBuffer
+// SetReadBuffer wraps net.Conn.SetReadBuffer.
 func (c *Conn) SetReadBuffer(bytes int) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -384,7 +382,7 @@ func (c *Conn) SetReadBuffer(bytes int) error {
 	return nil
 }
 
-// SetWriteBuffer wraps net.Conn.SetWriteBuffer
+// SetWriteBuffer wraps net.Conn.SetWriteBuffer.
 func (c *Conn) SetWriteBuffer(bytes int) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -397,7 +395,7 @@ func (c *Conn) SetWriteBuffer(bytes int) error {
 	return nil
 }
 
-// SetKeepAlive wraps net.Conn.SetKeepAlive
+// SetKeepAlive wraps net.Conn.SetKeepAlive.
 func (c *Conn) SetKeepAlive(keepalive bool) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -410,7 +408,7 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 	return nil
 }
 
-// SetKeepAlivePeriod wraps net.Conn.SetKeepAlivePeriod
+// SetKeepAlivePeriod wraps net.Conn.SetKeepAlivePeriod.
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -423,7 +421,7 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	return nil
 }
 
-// SetLinger wraps net.Conn.SetLinger
+// SetLinger wraps net.Conn.SetLinger.
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -436,12 +434,12 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return nil
 }
 
-// Session returns user session
+// Session returns user session.
 func (c *Conn) Session() interface{} {
 	return c.session
 }
 
-// SetSession sets user session
+// SetSession sets user session.
 func (c *Conn) SetSession(session interface{}) {
 	c.session = session
 }
@@ -481,7 +479,7 @@ func newConn(conn net.Conn) *Conn {
 	return c
 }
 
-// NBConn converts net.Conn to *Conn
+// NBConn converts net.Conn to *Conn.
 func NBConn(conn net.Conn) (*Conn, error) {
 	if conn == nil {
 		return nil, errors.New("invalid conn: nil")
@@ -547,11 +545,4 @@ func (u *udpConn) getConn(p *poller, rAddr *net.UDPAddr) (*Conn, bool) {
 	}
 
 	return c, ok
-}
-
-func newUDPConn(uc *net.UDPConn) *udpConn {
-	return &udpConn{
-		UDPConn: uc,
-		conns:   map[string]*Conn{},
-	}
 }
