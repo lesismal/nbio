@@ -244,7 +244,7 @@ func (e *Engine) closeAllConns() {
 	}
 }
 
-func (e *Engine) listenTLSBlocking(ln net.Listener, tlsConfig *tls.Config, onClose func()) {
+func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(conn net.Conn, tlsConfig *tls.Config, decrease func()), onClose func()) {
 	e.WaitGroup.Add(1)
 	go func() {
 		defer func() {
@@ -255,81 +255,6 @@ func (e *Engine) listenTLSBlocking(ln net.Listener, tlsConfig *tls.Config, onClo
 			conn, err := ln.Accept()
 			if err == nil {
 				e.AddConnTLSBlocking(conn, tlsConfig, onClose)
-			} else {
-				var ne net.Error
-				if ok := errors.As(err, &ne); ok && ne.Timeout() {
-					logging.Error("Accept failed: temporary error, retrying...")
-					time.Sleep(time.Second / 20)
-				} else {
-					logging.Error("Accept failed: %v, exit...", err)
-					break
-				}
-			}
-		}
-	}()
-}
-
-func (e *Engine) listenTLSNonBlocking(ln net.Listener, tlsConfig *tls.Config) {
-	e.WaitGroup.Add(1)
-	go func() {
-		defer func() {
-			ln.Close()
-			e.WaitGroup.Done()
-		}()
-		for {
-			conn, err := ln.Accept()
-			if err == nil {
-				e.AddConnTLS(conn, tlsConfig)
-			} else {
-				var ne net.Error
-				if ok := errors.As(err, &ne); ok && ne.Timeout() {
-					logging.Error("Accept failed: temporary error, retrying...")
-					time.Sleep(time.Second / 20)
-				} else {
-					logging.Error("Accept failed: %v, exit...", err)
-					break
-				}
-			}
-		}
-	}()
-}
-
-func (e *Engine) listenNonTLSBlocking(ln net.Listener, onClose func()) {
-	e.WaitGroup.Add(1)
-	go func() {
-		defer func() {
-			ln.Close()
-			e.WaitGroup.Done()
-		}()
-		for {
-			conn, err := ln.Accept()
-			if err == nil {
-				e.AddConnNonTLSBlocking(conn, onClose)
-			} else {
-				var ne net.Error
-				if ok := errors.As(err, &ne); ok && ne.Timeout() {
-					logging.Error("Accept failed: temporary error, retrying...")
-					time.Sleep(time.Second / 20)
-				} else {
-					logging.Error("Accept failed: %v, exit...", err)
-					break
-				}
-			}
-		}
-	}()
-}
-
-func (e *Engine) listenNonTLSNonBlocking(ln net.Listener) {
-	e.WaitGroup.Add(1)
-	go func() {
-		defer func() {
-			ln.Close()
-			e.WaitGroup.Done()
-		}()
-		for {
-			conn, err := ln.Accept()
-			if err == nil {
-				e.AddConnNonTLS(conn)
 			} else {
 				var ne net.Error
 				if ok := errors.As(err, &ne); ok && ne.Timeout() {
@@ -378,14 +303,14 @@ func (e *Engine) startListeners() error {
 			switch e.IOMod {
 			case IOModMixed:
 				lnA, lnB := e.listenerMux.Mux(ln)
-				e.listenTLSBlocking(lnA, tlsConfig, lnA.Decrease)
-				e.listenTLSNonBlocking(lnB, tlsConfig)
+				e.listen(lnA, tlsConfig, e.AddConnTLSBlocking, lnA.Decrease)
+				e.listen(lnB, tlsConfig, e.AddConnTLSNonBlocking, func() {})
 			case IOModBlocking:
 				e.listeners = append(e.listeners, ln)
-				e.listenTLSBlocking(ln, tlsConfig, func() {})
+				e.listen(ln, tlsConfig, e.AddConnTLSBlocking, func() {})
 			case IOModNonBlocking:
 				e.listeners = append(e.listeners, ln)
-				e.listenTLSNonBlocking(ln, tlsConfig)
+				e.listen(ln, tlsConfig, e.AddConnTLSNonBlocking, func() {})
 			}
 		}
 	}
@@ -413,14 +338,14 @@ func (e *Engine) startListeners() error {
 			switch e.IOMod {
 			case IOModMixed:
 				lnA, lnB := e.listenerMux.Mux(ln)
-				e.listenNonTLSBlocking(lnA, lnA.Decrease)
-				e.listenNonTLSNonBlocking(lnB)
+				e.listen(lnA, nil, e.AddConnNonTLSBlocking, lnA.Decrease)
+				e.listen(lnB, nil, e.AddConnNonTLSNonBlocking, func() {})
 			case IOModBlocking:
 				e.listeners = append(e.listeners, ln)
-				e.listenNonTLSBlocking(ln, func() {})
+				e.listen(ln, nil, e.AddConnNonTLSBlocking, func() {})
 			case IOModNonBlocking:
 				e.listeners = append(e.listeners, ln)
-				e.listenNonTLSNonBlocking(ln)
+				e.listen(ln, nil, e.AddConnNonTLSNonBlocking, func() {})
 			}
 		}
 	}
@@ -611,7 +536,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 }
 
 // AddConnNonTLS .
-func (engine *Engine) AddConnNonTLS(c net.Conn) {
+func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(c)
 	if err != nil {
 		c.Close()
@@ -640,7 +565,7 @@ func (engine *Engine) AddConnNonTLS(c net.Conn) {
 }
 
 // AddConnNonTLSBlocking .
-func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, decrease func()) {
+func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
@@ -679,7 +604,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, decrease func()) {
 }
 
 // AddConnTLS .
-func (engine *Engine) AddConnTLS(conn net.Conn, tlsConfig *tls.Config) {
+func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(conn)
 	if err != nil {
 		conn.Close()
