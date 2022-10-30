@@ -244,7 +244,7 @@ func (e *Engine) closeAllConns() {
 	}
 }
 
-func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(conn net.Conn, tlsConfig *tls.Config, decrease func()), onClose func()) {
+func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(net.Conn, *tls.Config, func()), decrease func()) {
 	e.WaitGroup.Add(1)
 	go func() {
 		defer func() {
@@ -254,7 +254,7 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(con
 		for {
 			conn, err := ln.Accept()
 			if err == nil {
-				e.AddConnTLSBlocking(conn, tlsConfig, onClose)
+				addConn(conn, tlsConfig, decrease)
 			} else {
 				var ne net.Error
 				if ok := errors.As(err, &ne); ok && ne.Timeout() {
@@ -535,7 +535,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
-// AddConnNonTLS .
+// AddConnNonTLSNonBlocking .
 func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(c)
 	if err != nil {
@@ -603,7 +603,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 	go engine.readConnBlocking(conn, parser, decrease)
 }
 
-// AddConnTLS .
+// AddConnTLSNonBlocking .
 func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(conn)
 	if err != nil {
