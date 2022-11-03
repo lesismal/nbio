@@ -149,7 +149,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 		}
 	} else {
 		syscall.Close(fd)
-		p.deleteEvent(fd)
+		// p.deleteEvent(fd)
 	}
 }
 
