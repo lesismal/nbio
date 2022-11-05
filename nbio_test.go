@@ -380,6 +380,68 @@ func TestUDP(t *testing.T) {
 	time.Sleep(timeout * 2)
 }
 
+func TestUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	unixAddr := "./test.unix"
+	defer os.Remove(unixAddr)
+	g := NewEngine(Config{
+		Network: "unix",
+		Addrs:   []string{unixAddr},
+	})
+	var connSvr *Conn
+	var connCli *Conn
+	g.OnOpen(func(c *Conn) {
+		if connSvr == nil {
+			connSvr = c
+		}
+		log.Printf("unix onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
+	g.OnData(func(c *Conn, data []byte) {
+		log.Println("unix onData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		if c == connSvr {
+			_, err := c.Write([]byte("world"))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if c == connCli && string(data) == "world" {
+			c.Close()
+		}
+	})
+	chClose := make(chan *Conn, 2)
+	g.OnClose(func(c *Conn, err error) {
+		log.Println("unix onClose:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		chClose <- c
+	})
+
+	err := g.Start()
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer g.Stop()
+
+	c, err := net.Dial("unix", unixAddr)
+	if err != nil {
+		t.Fatalf("unix Dial: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	}
+	defer c.Close()
+	time.Sleep(time.Second / 10)
+	buf := []byte("hello")
+	connCli, err = g.AddConn(c)
+	if err != nil {
+		t.Fatalf("unix AddConn: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	}
+	_, err = connCli.Write(buf)
+	if err != nil {
+		t.Fatalf("unix Write: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	}
+	<-chClose
+	<-chClose
+}
+
 func TestStop(t *testing.T) {
 	gopher.Stop()
 	os.Remove(testfile)

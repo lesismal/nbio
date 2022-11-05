@@ -13,23 +13,44 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
+// ConnType .
 type ConnType = int8
 
 const (
+	// ConnTypeTCP .
 	ConnTypeTCP ConnType = iota + 1
+	// ConnTypeUDPServer .
 	ConnTypeUDPServer
+	// ConnTypeUDPClientFromRead .
 	ConnTypeUDPClientFromRead
+	// ConnTypeUDPClientFromDial .
 	ConnTypeUDPClientFromDial
+	// ConnTypeUnix .
+	ConnTypeUnix
 )
-
-// IsUDP .
-func (c *Conn) IsUDP() bool {
-	return c.typ != ConnTypeTCP
-}
 
 // Type .
 func (c *Conn) Type() ConnType {
 	return c.typ
+}
+
+// IsTCP .
+func (c *Conn) IsTCP() bool {
+	return c.typ == ConnTypeTCP
+}
+
+// IsUDP .
+func (c *Conn) IsUDP() bool {
+	switch c.typ {
+	case ConnTypeUDPServer, ConnTypeUDPClientFromDial, ConnTypeUDPClientFromRead:
+		return true
+	}
+	return false
+}
+
+// IsUnix .
+func (c *Conn) IsUnix() bool {
+	return c.typ == ConnTypeUnix
 }
 
 // OnData registers callback for data.

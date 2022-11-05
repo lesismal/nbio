@@ -65,7 +65,12 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 		rAddr: rAddr,
 	}
 
-	if _, isUDP := conn.(*net.UDPConn); isUDP {
+	switch conn.(type) {
+	case *net.TCPConn:
+		c.typ = ConnTypeTCP
+	case *net.UnixConn:
+		c.typ = ConnTypeUnix
+	case *net.UDPConn:
 		lAddrUDP := lAddr.(*net.UDPAddr)
 		newLAddr := net.UDPAddr{
 			IP:   make([]byte, len(lAddrUDP.IP)),
@@ -93,8 +98,7 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 				parent: c,
 			}
 		}
-	} else {
-		c.typ = ConnTypeTCP
+	default:
 	}
 
 	return c, nil
