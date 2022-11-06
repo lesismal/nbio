@@ -7,8 +7,10 @@ package nbio
 import (
 	"context"
 	"net"
+	"runtime"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/timer"
@@ -323,6 +325,14 @@ func (g *Engine) initHandlers() {
 
 	if g.Execute == nil {
 		g.Execute = func(f func()) {
+			defer func() {
+				if err := recover(); err != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				}
+			}()
 			f()
 		}
 	}

@@ -325,9 +325,10 @@ func (c *Conn) Subprotocol() string {
 	return c.subprotocol
 }
 
-func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool) *Conn {
+func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool, asyncWrite bool) *Conn {
 	conn := &Conn{
 		Conn:                     c,
+		Engine:                   u.Engine,
 		subprotocol:              subprotocol,
 		remoteCompressionEnabled: remoteCompressionEnabled,
 		compressionLevel:         defaultCompressionLevel,
@@ -335,6 +336,10 @@ func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 	}
 	conn.EnableWriteCompression(u.enableWriteCompression)
 	conn.SetCompressionLevel(u.compressionLevel)
+	if asyncWrite {
+		conn.chAsyncWrite = make(chan []byte, 4096)
+	}
+	u.conn = conn
 
 	return conn
 }

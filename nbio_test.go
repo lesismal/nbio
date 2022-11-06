@@ -158,6 +158,9 @@ func TestTimeout(t *testing.T) {
 	var begin time.Time
 	var timeout = time.Second
 	g.OnOpen(func(c *Conn) {
+		c.IsTCP()
+		c.IsUDP()
+		c.IsUnix()
 		begin = time.Now()
 		c.SetReadDeadline(begin.Add(timeout))
 	})
@@ -348,6 +351,9 @@ func TestUDP(t *testing.T) {
 	var fromClientStr = "from client"
 	var fromServerStr = "from server"
 	g.OnOpen(func(c *Conn) {
+		c.IsTCP()
+		c.IsUDP()
+		c.IsUnix()
 		log.Println("onOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
 		c.SetReadDeadline(time.Now().Add(timeout))
 	})
@@ -397,6 +403,10 @@ func TestUnix(t *testing.T) {
 		if connSvr == nil {
 			connSvr = c
 		}
+		c.Type()
+		c.IsTCP()
+		c.IsUDP()
+		c.IsUnix()
 		log.Printf("unix onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
 	})
 	g.OnData(func(c *Conn, data []byte) {
