@@ -279,7 +279,7 @@ func (e *Engine) startListeners() error {
 		e.listenerMux = lmux.New(e.MaxBlockingOnline)
 	}
 
-	for i, _ := range e.AddrConfigsTLS {
+	for i := range e.AddrConfigsTLS {
 		conf := &e.AddrConfigsTLS[i]
 		if conf.Addr != "" {
 			network := conf.Network
@@ -325,7 +325,7 @@ func (e *Engine) startListeners() error {
 		}
 	}
 
-	for i, _ := range e.AddrConfigs {
+	for i := range e.AddrConfigs {
 		conf := &e.AddrConfigs[i]
 		if conf.Addr != "" {
 			network := conf.Network
