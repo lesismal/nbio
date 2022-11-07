@@ -300,7 +300,7 @@ func (e *Engine) startListeners() error {
 			if conf.pAddr != nil {
 				*conf.pAddr = conf.Addr
 			}
-			logging.Info("Serve     TLS On: [%v]", conf.Addr)
+			logging.Info("Serve     TLS On: [%v@%v]", conf.Network, conf.Addr)
 
 			tlsConfig := conf.TLSConfig
 			if tlsConfig == nil {
@@ -347,7 +347,7 @@ func (e *Engine) startListeners() error {
 				*conf.pAddr = conf.Addr
 			}
 
-			logging.Info("Serve  NonTLS On: [%v]", conf.Addr)
+			logging.Info("Serve  NonTLS On: [%v@%v]", conf.Network, conf.Addr)
 
 			switch e.IOMod {
 			case IOModMixed:
@@ -882,10 +882,10 @@ func NewEngine(conf Config) *Engine {
 	g.Execute = serverExecutor
 
 	for i, addr := range conf.Addrs {
-		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Addr: addr, pAddr: &conf.Addrs[i]})
+		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.Addrs[i]})
 	}
 	for i, addr := range conf.AddrsTLS {
-		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Addr: addr, pAddr: &conf.AddrsTLS[i]})
+		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.AddrsTLS[i]})
 	}
 
 	engine := &Engine{
