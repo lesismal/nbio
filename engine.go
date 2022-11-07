@@ -77,6 +77,12 @@ type Config struct {
 
 	// TimerExecute sets the executor for timer callbacks.
 	TimerExecute func(f func())
+
+	// Listen is used to create listener for Engine.
+	Listen func(network, addr string) (net.Listener, error)
+
+	// ListenUDP is used to create udp listener for Engine.
+	ListenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 }
 
 // Gopher keeps old type to compatible with new name Engine.
@@ -100,8 +106,11 @@ type Engine struct {
 
 	wgConn sync.WaitGroup
 
-	network                      string
-	addrs                        []string
+	network   string
+	addrs     []string
+	listen    func(network, addr string) (net.Listener, error)
+	listenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
+
 	pollerNum                    int
 	readBufferSize               int
 	maxWriteBufferSize           int

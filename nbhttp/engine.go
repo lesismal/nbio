@@ -94,6 +94,12 @@ type Config struct {
 	// AddrConfigsTLS is the tls listening addr details list for an Engine.
 	AddrConfigsTLS []ConfAddr
 
+	// Listen is used to create listener for Engine.
+	Listen func(network, addr string) (net.Listener, error)
+
+	// ListenUDP is used to create udp listener for Engine.
+	ListenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
+
 	// MaxLoad represents the max online num, it's set to 10k by default.
 	MaxLoad int
 
@@ -289,7 +295,7 @@ func (e *Engine) startListeners() error {
 			if network == "" {
 				network = defaultNetwork
 			}
-			ln, err := net.Listen(network, conf.Addr)
+			ln, err := e.Listen(network, conf.Addr)
 			if err != nil {
 				for _, l := range e.listeners {
 					l.Close()
@@ -335,7 +341,7 @@ func (e *Engine) startListeners() error {
 			if network == "" {
 				network = defaultNetwork
 			}
-			ln, err := net.Listen(network, conf.Addr)
+			ln, err := e.Listen(network, conf.Addr)
 			if err != nil {
 				for _, l := range e.listeners {
 					l.Close()
@@ -810,6 +816,12 @@ func NewEngine(conf Config) *Engine {
 	}
 	if conf.BlockingReadBufferSize <= 0 {
 		conf.BlockingReadBufferSize = DefaultBlockingReadBufferSize
+	}
+	if conf.Listen == nil {
+		conf.Listen = net.Listen
+	}
+	if conf.ListenUDP == nil {
+		conf.ListenUDP = net.ListenUDP
 	}
 	switch conf.IOMod {
 	case IOModNonBlocking, IOModBlocking:

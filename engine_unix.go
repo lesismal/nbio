@@ -41,7 +41,7 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
-			ln, err := net.ListenUDP("udp", addr)
+			ln, err := g.ListenUDP("udp", addr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
@@ -114,12 +114,20 @@ func NewEngine(conf Config) *Engine {
 	if conf.MaxConnReadTimesPerEventLoop <= 0 {
 		conf.MaxConnReadTimesPerEventLoop = DefaultMaxConnReadTimesPerEventLoop
 	}
+	if conf.Listen == nil {
+		conf.Listen = net.Listen
+	}
+	if conf.ListenUDP == nil {
+		conf.ListenUDP = net.ListenUDP
+	}
 
 	g := &Engine{
 		Timer:                        timer.New(conf.Name, conf.TimerExecute),
 		Name:                         conf.Name,
 		network:                      conf.Network,
 		addrs:                        conf.Addrs,
+		listen:                       conf.Listen,
+		listenUDP:                    conf.ListenUDP,
 		pollerNum:                    conf.NPoller,
 		readBufferSize:               conf.ReadBufferSize,
 		maxWriteBufferSize:           conf.MaxWriteBufferSize,
