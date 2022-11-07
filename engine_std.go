@@ -29,6 +29,7 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
+			g.addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
 	case "udp", "udp4", "udp6":
@@ -47,6 +48,7 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
+			g.addrs[i] = ln.LocalAddr().String()
 			udpListeners = append(udpListeners, ln)
 		}
 	}

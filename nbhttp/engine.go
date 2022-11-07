@@ -64,6 +64,7 @@ type ConfAddr struct {
 	Network   string
 	Addr      string
 	TLSConfig *tls.Config
+	pAddr     *string
 }
 
 // Config .
@@ -278,7 +279,8 @@ func (e *Engine) startListeners() error {
 		e.listenerMux = lmux.New(e.MaxBlockingOnline)
 	}
 
-	for _, conf := range e.AddrConfigsTLS {
+	for i, _ := range e.AddrConfigsTLS {
+		conf := &e.AddrConfigsTLS[i]
 		if conf.Addr != "" {
 			network := conf.Network
 			if network == "" {
@@ -293,6 +295,10 @@ func (e *Engine) startListeners() error {
 					l.Close()
 				}
 				return err
+			}
+			conf.Addr = ln.Addr().String()
+			if conf.pAddr != nil {
+				*conf.pAddr = conf.Addr
 			}
 			logging.Info("Serve     TLS On: [%v]", conf.Addr)
 
@@ -319,7 +325,8 @@ func (e *Engine) startListeners() error {
 		}
 	}
 
-	for _, conf := range e.AddrConfigs {
+	for i, _ := range e.AddrConfigs {
+		conf := &e.AddrConfigs[i]
 		if conf.Addr != "" {
 			network := conf.Network
 			if network == "" {
@@ -335,7 +342,10 @@ func (e *Engine) startListeners() error {
 				}
 				return err
 			}
-			e.listeners = append(e.listeners, ln)
+			conf.Addr = ln.Addr().String()
+			if conf.pAddr != nil {
+				*conf.pAddr = conf.Addr
+			}
 
 			logging.Info("Serve  NonTLS On: [%v]", conf.Addr)
 
@@ -871,11 +881,11 @@ func NewEngine(conf Config) *Engine {
 	g := nbio.NewEngine(gopherConf)
 	g.Execute = serverExecutor
 
-	for _, addr := range conf.Addrs {
-		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Addr: addr})
+	for i, addr := range conf.Addrs {
+		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Addr: addr, pAddr: &conf.Addrs[i]})
 	}
-	for _, addr := range conf.AddrsTLS {
-		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Addr: addr})
+	for i, addr := range conf.AddrsTLS {
+		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Addr: addr, pAddr: &conf.AddrsTLS[i]})
 	}
 
 	engine := &Engine{
