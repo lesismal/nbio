@@ -41,7 +41,7 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
-			ln, err := g.ListenUDP("udp", addr)
+			ln, err := g.listenUDP("udp", addr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
