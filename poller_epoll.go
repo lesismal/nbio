@@ -129,7 +129,7 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			p.addConn(c)
+			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
 			var ne net.Error
 			if ok := errors.As(err, &ne); ok && ne.Timeout() {
