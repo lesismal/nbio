@@ -199,7 +199,7 @@ type Engine struct {
 	mux   sync.Mutex
 	conns map[uintptr]struct{}
 
-	tlsBuffers [][]byte
+	// tlsBuffers [][]byte
 	// getTLSBuffer func(c *nbio.Conn) []byte
 
 	emptyRequest *http.Request

@@ -129,8 +129,6 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			p := p.g.pollers[c.Hash()%len(p.g.pollers)]
-			c.p = p
 			p.addConn(c)
 		} else {
 			var ne net.Error
