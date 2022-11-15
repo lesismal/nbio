@@ -68,14 +68,14 @@ func (p *poller) addConn(c *Conn) {
 	p.g.connsUnix[fd] = c
 	err := p.addRead(fd)
 	if err != nil {
-		p.g.connsUnix[fd] = nil  
+		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
 }
 
 func (p *poller) getConn(fd int) *Conn {
-	return return p.g.connsUnix[fd]
+	return p.g.connsUnix[fd]
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -158,7 +158,7 @@ func (p *poller) readWriteLoop() {
 		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
-	p.shutdown=false 
+	p.shutdown = false
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
@@ -225,7 +225,7 @@ func (p *poller) readWriteLoop() {
 
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
-	p.shutdown= true
+	p.shutdown = true
 	if p.listener != nil {
 		p.listener.Close()
 		if p.unixSockAddr != "" {

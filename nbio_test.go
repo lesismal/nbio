@@ -247,7 +247,7 @@ func TestFuzz(t *testing.T) {
 
 func TestUDP(t *testing.T) {
 	g := NewEngine(Config{})
-	timeout := time.Second * 1
+	timeout := time.Second / 5
 	chTimeout := make(chan *Conn, 1)
 	g.OnOpen(func(c *Conn) {
 		log.Printf("onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
@@ -298,7 +298,10 @@ func TestUDP(t *testing.T) {
 	}
 
 	connTimeout := newClientConn()
-	connTimeout.Write([]byte("test timeout"))
+	n, err := connTimeout.Write([]byte("test timeout"))
+	if err != nil {
+		log.Fatalf("write udp failed: %v, %v", n, err)
+	}
 	defer connTimeout.Close()
 	begin := time.Now()
 	select {
