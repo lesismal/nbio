@@ -207,7 +207,8 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 		return nil, err
 	}
 
-	noRaceConnOperation(g, c, noRaceConnOpAdd)
+	p := g.pollers[c.Hash()%len(g.pollers)]
+	p.addConn(c)
 	return c, nil
 }
 
@@ -216,10 +217,10 @@ func (g *Engine) OnOpen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onOpenOnNoRace(func(c *Conn) {
+	g.onOpen = func(c *Conn) {
 		g.wgConn.Add(1)
 		h(c)
-	})
+	}
 }
 
 // OnClose registers callback for disconnected.
@@ -227,17 +228,17 @@ func (g *Engine) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onCloseOnNoRace(func(c *Conn, err error) {
+	g.onClose = func(c *Conn, err error) {
 		// g.Async(func() {
 		defer g.wgConn.Done()
 		h(c, err)
 		// })
-	})
+	}
 }
 
 // OnRead registers callback for reading event.
 func (g *Engine) OnRead(h func(c *Conn)) {
-	g.onReadOnNoRace(h)
+	g.onRead = h
 }
 
 // OnData registers callback for data.
@@ -245,7 +246,7 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onDataOnNoRace(h)
+	g.onData = h
 }
 
 // OnReadBufferAlloc registers callback for memory allocating.
@@ -253,7 +254,7 @@ func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onReadBufferAllocOnNoRace(h)
+	g.onReadBufferAlloc = h
 }
 
 // OnReadBufferFree registers callback for memory release.
@@ -261,7 +262,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onReadBufferFreeOnNoRace(h)
+	g.onReadBufferFree = h
 }
 
 // OnWriteBufferRelease registers callback for write buffer memory release.
@@ -278,7 +279,7 @@ func (g *Engine) BeforeRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.beforeReadOnNoRace(h)
+	g.beforeRead = h
 }
 
 // AfterRead registers callback after syscall.Read
@@ -287,7 +288,7 @@ func (g *Engine) AfterRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.afterReadOnNoRace(h)
+	g.afterRead = h
 }
 
 // BeforeWrite registers callback befor syscall.Write and syscall.Writev
@@ -296,7 +297,7 @@ func (g *Engine) BeforeWrite(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.beforeWriteOnNoRace(h)
+	g.beforeWrite = h
 }
 
 // OnStop registers callback before Engine is stopped.
@@ -304,12 +305,12 @@ func (g *Engine) OnStop(h func()) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onStopOnNoRace(h)
+	g.onStop = h
 }
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
 func (g *Engine) PollerBuffer(c *Conn) []byte {
-	return noRaceGetReadBufferFromPoller(c)
+	return c.p.ReadBuffer
 }
 
 func (g *Engine) initHandlers() {

@@ -12,7 +12,7 @@ lint:
 	golangci-lint run $(PACKAGE_DIRS)
 
 test:
-	$(GO) test -race -v $(PACKAGES)
+	$(GO) test -v $(PACKAGES)
 
 clean:
 	rm -f bin/autobahn_server

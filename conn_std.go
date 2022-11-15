@@ -144,7 +144,8 @@ func (c *Conn) readUDP(b []byte) (int, error) {
 			uc.SetReadDeadline(time.Now().Add(g.udpReadTimeout))
 		}
 		if !ok {
-			noRaceConnOperation(g, uc, noRaceConnOpAdd)
+			p := g.pollers[c.Hash()%len(g.pollers)]
+			p.addConn(uc)
 		}
 		dstConn = uc
 	}
@@ -271,7 +272,7 @@ func (c *Conn) Close() error {
 
 		c.mux.Unlock()
 		if c.p.g != nil {
-			noRaceConnOperation(c.p.g, c, noRaceConnOpDel)
+			c.p.deleteConn(c)
 		}
 		return err
 	}

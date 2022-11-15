@@ -56,7 +56,7 @@ type Conn struct {
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
-	return noRaceGetFdOnConn(c)
+	return c.fd
 }
 
 // Read implements Read.
@@ -238,8 +238,6 @@ func (c *Conn) CloseWithError(err error) error {
 }
 
 // LocalAddr implements LocalAddr.
-//
-//go:norace
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
 }
@@ -371,7 +369,7 @@ func (c *Conn) SetSession(session interface{}) {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		noRaceConnOperation(c.p.g, c, noRaceConnOpMod)
+		c.p.modWrite(c)
 	}
 }
 
@@ -564,7 +562,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	if c.p.g != nil {
-		noRaceConnOperation(c.p.g, c, noRaceConnOpDel)
+		c.p.deleteConn(c)
 	}
 
 	switch c.typ {

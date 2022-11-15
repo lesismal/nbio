@@ -22,7 +22,6 @@ func init() {
 	}
 }
 
-//go:norace
 func dupStdConn(conn net.Conn) (*Conn, error) {
 	sc, ok := conn.(interface {
 		SyscallConn() (syscall.RawConn, error)
@@ -78,11 +77,7 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 			Zone: lAddrUDP.Zone,
 		}
 
-		// use `for loop` instead of `copy` or `append` to avoid race warning, still don't know why, maybe fake warning.
-		// copy(newLAddr.IP, lAddrUDP.IP)
-		for i := range newLAddr.IP {
-			newLAddr.IP[i] = lAddrUDP.IP[i]
-		}
+		copy(newLAddr.IP, lAddrUDP.IP)
 
 		c.lAddr = &newLAddr
 		// c.lAddr = lAddrUDP

@@ -199,8 +199,8 @@ type Engine struct {
 	mux   sync.Mutex
 	conns map[uintptr]struct{}
 
-	tlsBuffers   [][]byte
-	getTLSBuffer func(c *nbio.Conn) []byte
+	tlsBuffers [][]byte
+	// getTLSBuffer func(c *nbio.Conn) []byte
 
 	emptyRequest *http.Request
 	BaseCtx      context.Context
@@ -455,39 +455,34 @@ Exit:
 }
 
 // InitTLSBuffers .
-func (e *Engine) InitTLSBuffers() {
-	if e.tlsBuffers != nil {
-		return
-	}
-	e.tlsBuffers = make([][]byte, e.NParser)
-	for i := 0; i < e.NParser; i++ {
-		noRaceInitTlsBufferFormEngine(e, i)
-	}
+// func (e *Engine) InitTLSBuffers() {
+// 	if e.tlsBuffers != nil {
+// 		return
+// 	}
+// 	e.tlsBuffers = make([][]byte, e.NParser)
+// 	for i := 0; i < e.NParser; i++ {
+// 		e.tlsBuffers[i] = make([]byte, e.ReadBufferSize)
+// 	}
 
-	e.getTLSBuffer = func(c *nbio.Conn) []byte {
-		return noRaceGetTlsBufferFromEngine(e, c)
-	}
+// 	e.getTLSBuffer = func(c *nbio.Conn) []byte {
+// 		return e.tlsBuffers[uint64(c.Hash())%uint64(e.NParser)]
+// 	}
 
-	if runtime.GOOS == "windows" {
-		bufferMux := sync.Mutex{}
-		buffers := map[*nbio.Conn][]byte{}
-		e.getTLSBuffer = func(c *nbio.Conn) []byte {
-			bufferMux.Lock()
-			defer bufferMux.Unlock()
-			buf, ok := buffers[c]
-			if !ok {
-				buf = make([]byte, 4096)
-				buffers[c] = buf
-			}
-			return buf
-		}
-	}
-}
-
-// TLSBuffer .
-func (e *Engine) TLSBuffer(c *nbio.Conn) []byte {
-	return e.getTLSBuffer(c)
-}
+// 	if runtime.GOOS == "windows" {
+// 		bufferMux := sync.Mutex{}
+// 		buffers := map[*nbio.Conn][]byte{}
+// 		e.getTLSBuffer = func(c *nbio.Conn) []byte {
+// 			bufferMux.Lock()
+// 			defer bufferMux.Unlock()
+// 			buf, ok := buffers[c]
+// 			if !ok {
+// 				buf = make([]byte, 4096)
+// 				buffers[c] = buf
+// 			}
+// 			return buf
+// 		}
+// 	}
+// }
 
 // DataHandler .
 func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
@@ -915,10 +910,10 @@ func NewEngine(conf Config) *Engine {
 		Cancel:       cancel,
 	}
 
-	shouldSupportTLS := !conf.SupportServerOnly || len(conf.AddrsTLS) > 0
-	if shouldSupportTLS {
-		engine.InitTLSBuffers()
-	}
+	// shouldSupportTLS := !conf.SupportServerOnly || len(conf.AddrsTLS) > 0
+	// if shouldSupportTLS {
+	// 	engine.InitTLSBuffers()
+	// }
 
 	// g.OnOpen(engine.ServerOnOpen)
 	g.OnClose(func(c *nbio.Conn, err error) {
