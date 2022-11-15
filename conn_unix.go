@@ -369,7 +369,7 @@ func (c *Conn) SetSession(session interface{}) {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		c.p.modWrite(c)
+		c.p.modWrite(c.fd)
 	}
 }
 

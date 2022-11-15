@@ -119,7 +119,7 @@ func (p *poller) acceptorLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	p.shutdown = b
+	p.shutdown = false
 	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
@@ -129,7 +129,7 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			p := g.pollers[c.Hash()%len(g.pollers)]
+			p := p.g.pollers[c.Hash()%len(p.g.pollers)]
 			c.p = p
 			p.addConn(c)
 		} else {
