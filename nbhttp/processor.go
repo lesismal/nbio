@@ -66,7 +66,7 @@ func releaseClientResponse(res *http.Response) {
 			br.Close()
 			bodyReaderPool.Put(br)
 		}
-		noRaceSetResponse(res, emptyClientResponse)
+		*res = emptyClientResponse
 		clientResponsePool.Put(res)
 	}
 }

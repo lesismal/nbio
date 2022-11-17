@@ -140,7 +140,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
 		var err error
 		var addr = g.addrs[index%len(g.addrs)]
-		p.listener, err = net.Listen(g.network, addr)
+		p.listener, err = g.listen(g.network, addr)
 		if err != nil {
 			return nil, err
 		}

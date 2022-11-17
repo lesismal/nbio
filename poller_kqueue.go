@@ -57,11 +57,12 @@ type poller struct {
 }
 
 func (p *poller) addConn(c *Conn) {
+	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
 	fd := c.fd
-	noRaceAddConnOnPoller(p, fd, c)
+	p.g.connsUnix[fd] = c
 	p.addRead(c.fd)
 }
 
@@ -76,7 +77,9 @@ func (p *poller) deleteConn(c *Conn) {
 	fd := c.fd
 
 	if c.typ != ConnTypeUDPClientFromRead {
-		noRaceDeleteConnElemOnPoller(p, fd, c)
+		if c == p.g.connsUnix[fd] {
+			p.g.connsUnix[fd] = nil
+		}
 		p.deleteEvent(fd)
 	}
 
@@ -178,7 +181,7 @@ func (p *poller) acceptorLoop() {
 	}
 
 	p.shutdown = false
-	for !noRaceLoadShutdown(p) {
+	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
 			c, err := NBConn(conn)
@@ -186,7 +189,7 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			noRaceConnOperation(p.g, c, noRaceConnOpAdd)
+			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
 				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
@@ -208,8 +211,8 @@ func (p *poller) readWriteLoop() {
 	var events = make([]syscall.Kevent_t, 1024)
 	var changes []syscall.Kevent_t
 
-	noRaceSetShutdown(p, false)
-	for !noRaceLoadShutdown(p) {
+	p.shutdown = false
+	for !p.shutdown {
 		p.mux.Lock()
 		changes = p.eventList
 		p.eventList = nil
@@ -231,7 +234,7 @@ func (p *poller) readWriteLoop() {
 
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
-	noRaceSetShutdown(p, true)
+	p.shutdown = true
 	if p.listener != nil {
 		p.listener.Close()
 		if p.unixSockAddr != "" {
@@ -248,7 +251,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 		}
 
 		addr := g.addrs[index%len(g.addrs)]
-		ln, err := net.Listen(g.network, addr)
+		ln, err := g.listen(g.network, addr)
 		if err != nil {
 			return nil, err
 		}

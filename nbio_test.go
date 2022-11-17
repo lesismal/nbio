@@ -158,6 +158,9 @@ func TestTimeout(t *testing.T) {
 	var begin time.Time
 	var timeout = time.Second
 	g.OnOpen(func(c *Conn) {
+		c.IsTCP()
+		c.IsUDP()
+		c.IsUnix()
 		begin = time.Now()
 		c.SetReadDeadline(begin.Add(timeout))
 	})
@@ -244,7 +247,7 @@ func TestFuzz(t *testing.T) {
 
 func TestUDP(t *testing.T) {
 	g := NewEngine(Config{})
-	timeout := time.Second * 1
+	timeout := time.Second / 5
 	chTimeout := make(chan *Conn, 1)
 	g.OnOpen(func(c *Conn) {
 		log.Printf("onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
@@ -295,7 +298,10 @@ func TestUDP(t *testing.T) {
 	}
 
 	connTimeout := newClientConn()
-	connTimeout.Write([]byte("test timeout"))
+	n, err := connTimeout.Write([]byte("test timeout"))
+	if err != nil {
+		log.Fatalf("write udp failed: %v, %v", n, err)
+	}
 	defer connTimeout.Close()
 	begin := time.Now()
 	select {
@@ -348,6 +354,9 @@ func TestUDP(t *testing.T) {
 	var fromClientStr = "from client"
 	var fromServerStr = "from server"
 	g.OnOpen(func(c *Conn) {
+		c.IsTCP()
+		c.IsUDP()
+		c.IsUnix()
 		log.Println("onOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
 		c.SetReadDeadline(time.Now().Add(timeout))
 	})
@@ -378,6 +387,72 @@ func TestUDP(t *testing.T) {
 	<-done
 	lisConn.Close()
 	time.Sleep(timeout * 2)
+}
+
+func TestUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		return
+	}
+
+	unixAddr := "./test.unix"
+	defer os.Remove(unixAddr)
+	g := NewEngine(Config{
+		Network: "unix",
+		Addrs:   []string{unixAddr},
+	})
+	var connSvr *Conn
+	var connCli *Conn
+	g.OnOpen(func(c *Conn) {
+		if connSvr == nil {
+			connSvr = c
+		}
+		c.Type()
+		c.IsTCP()
+		c.IsUDP()
+		c.IsUnix()
+		log.Printf("unix onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
+	g.OnData(func(c *Conn, data []byte) {
+		log.Println("unix onData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		if c == connSvr {
+			_, err := c.Write([]byte("world"))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		if c == connCli && string(data) == "world" {
+			c.Close()
+		}
+	})
+	chClose := make(chan *Conn, 2)
+	g.OnClose(func(c *Conn, err error) {
+		log.Println("unix onClose:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		chClose <- c
+	})
+
+	err := g.Start()
+	if err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer g.Stop()
+
+	c, err := net.Dial("unix", unixAddr)
+	if err != nil {
+		t.Fatalf("unix Dial: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	}
+	defer c.Close()
+	time.Sleep(time.Second / 10)
+	buf := []byte("hello")
+	connCli, err = g.AddConn(c)
+	if err != nil {
+		t.Fatalf("unix AddConn: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	}
+	_, err = connCli.Write(buf)
+	if err != nil {
+		t.Fatalf("unix Write: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
+	}
+	<-chClose
+	<-chClose
 }
 
 func TestStop(t *testing.T) {

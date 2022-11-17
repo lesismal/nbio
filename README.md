@@ -69,7 +69,7 @@
 - [x] TCP/UDP supported
 - [x] TLS supported
 - [x] HTTP/HTTPS 1.x supported
-- [x] Websocket supported, [Passes the Autobahn Test Suite](https://lesismal.github.io/nbio/websocket), `OnOpen/OnMessage/OnClose` order guaranteed
+- [x] Websocket supported, [Passes the Autobahn Test Suite](https://lesismal.github.io/nbio/websocket/autobahn), `OnOpen/OnMessage/OnClose` order guaranteed
 
 ### Interface
 - [x] Implements a non-blocking net.Conn(except windows)

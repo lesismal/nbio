@@ -60,21 +60,22 @@ type poller struct {
 }
 
 func (p *poller) addConn(c *Conn) {
+	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
 	fd := c.fd
-	noRaceAddConnOnPoller(p, fd, c)
+	p.g.connsUnix[fd] = c
 	err := p.addRead(fd)
 	if err != nil {
-		noRaceAddConnOnPoller(p, fd, nil)
+		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
 }
 
 func (p *poller) getConn(fd int) *Conn {
-	return noRaceGetConnOnPoller(p, fd)
+	return p.g.connsUnix[fd]
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -84,7 +85,9 @@ func (p *poller) deleteConn(c *Conn) {
 	fd := c.fd
 
 	if c.typ != ConnTypeUDPClientFromRead {
-		noRaceDeleteConnElemOnPoller(p, fd, c)
+		if c == p.g.connsUnix[fd] {
+			p.g.connsUnix[fd] = nil
+		}
 		p.deleteEvent(fd)
 	}
 
@@ -116,8 +119,8 @@ func (p *poller) acceptorLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	noRaceSetShutdown(p, false)
-	for !noRaceLoadShutdown(p) {
+	p.shutdown = false
+	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
 			var c *Conn
@@ -126,7 +129,7 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			noRaceConnOperation(p.g, c, noRaceConnOpAdd)
+			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
 			var ne net.Error
 			if ok := errors.As(err, &ne); ok && ne.Timeout() {
@@ -153,9 +156,8 @@ func (p *poller) readWriteLoop() {
 		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
-	noRaceSetShutdown(p, false)
-
-	for !noRaceLoadShutdown(p) {
+	p.shutdown = false
+	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
 			return
@@ -212,7 +214,7 @@ func (p *poller) readWriteLoop() {
 					}
 				} else {
 					syscall.Close(fd)
-					p.deleteEvent(fd)
+					// p.deleteEvent(fd)
 				}
 			}
 		}
@@ -221,7 +223,7 @@ func (p *poller) readWriteLoop() {
 
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
-	noRaceSetShutdown(p, true)
+	p.shutdown = true
 	if p.listener != nil {
 		p.listener.Close()
 		if p.unixSockAddr != "" {
@@ -266,7 +268,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 		}
 
 		addr := g.addrs[index%len(g.addrs)]
-		ln, err := net.Listen(g.network, addr)
+		ln, err := g.listen(g.network, addr)
 		if err != nil {
 			return nil, err
 		}

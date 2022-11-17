@@ -84,7 +84,12 @@ func (wr *WebsocketReader) CompressionEnabled() bool {
 
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
-	wr := &Upgrader{
+	return NewWebsocketReader()
+}
+
+// NewWebsocketReader .
+func NewWebsocketReader() *WebsocketReader {
+	wr := &WebsocketReader{
 		Engine: DefaultEngine,
 		// BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
 		// BlockingModAsyncWrite:     false,
@@ -252,7 +257,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
 		parser.Reader = wr
-		wr.conn = newConn(wr, conn, subprotocol, compress)
+		wr.conn = NewConn(wr, conn, subprotocol, compress, false)
 		wr.conn.Engine = parser.Engine
 		wr.Engine = parser.Engine
 	case *tls.Conn:
@@ -263,20 +268,15 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 			}
 			parser.Reader = wr
-			wr.conn = newConn(wr, conn, subprotocol, compress)
-			wr.conn.Engine = wr.Engine
+			wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
 			wr.isBlockingMod = true
-			if wr.BlockingModAsyncWrite {
-				wr.conn.chAsyncWrite = make(chan []byte, 4096)
-			}
-
 		} else {
 			parser, ok = nbc.Session().(*nbhttp.Parser)
 			if !ok {
 				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 			}
 			parser.Reader = wr
-			wr.conn = newConn(wr, conn, subprotocol, compress)
+			wr.conn = NewConn(wr, conn, subprotocol, compress, false)
 			wr.conn.Engine = parser.Engine
 			wr.Engine = parser.Engine
 		}
@@ -286,12 +286,8 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			parser = nbResonse.Parser
 			parser.Reader = wr
 		}
-		wr.conn = newConn(wr, conn, subprotocol, compress)
-		wr.conn.Engine = wr.Engine
+		wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
 		wr.isBlockingMod = true
-		if wr.BlockingModAsyncWrite {
-			wr.conn.chAsyncWrite = make(chan []byte, 4096)
-		}
 	}
 
 	buf := mempool.Malloc(1024)[0:0]
@@ -351,46 +347,62 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 
 	if wr.isBlockingMod {
 		if wr.BlockingModAsyncWrite {
-			go wr.blockingModWriteLoop()
+			go wr.BlockingModWriteLoop()
 		}
 		if parser == nil {
-			go wr.blockingModReadLoop()
+			go wr.BlockingModReadLoop()
 		}
 	}
 
 	return wr.conn, nil
 }
 
-func (wr *WebsocketReader) blockingModReadLoop() {
-	conn := wr.conn
-	bufSize := wr.BlockingModReadBufferSize
+// SetConn .
+func (wr *WebsocketReader) SetConn(conn *Conn) {
+	wr.conn = conn
+}
+
+// SetBlockingMod .
+func (wr *WebsocketReader) SetBlockingMod(blocking bool) {
+	wr.isBlockingMod = blocking
+}
+
+// BlockingModReadLoop .
+func (wr *WebsocketReader) BlockingModReadLoop() {
+	var (
+		n       int
+		err     error
+		buf     []byte
+		conn    = wr.conn
+		bufSize = wr.BlockingModReadBufferSize
+	)
+
 	if bufSize <= 0 {
 		bufSize = DefaultBlockingReadBufferSize
 	}
-	buf := make([]byte, bufSize)
+	buf = make([]byte, bufSize)
 
 	defer func() {
-		conn.Close()
+		wr.Close(nil, err)
 		if wr.BlockingModAsyncWrite && conn.chAsyncWrite != nil {
 			close(conn.chAsyncWrite)
 		}
 	}()
 
 	for {
-		n, err := conn.Read(buf)
+		n, err = conn.Read(buf)
 		if err != nil {
-			conn.onClose(conn, err)
 			break
 		}
 		err = wr.Read(nil, buf[:n])
 		if err != nil {
-			conn.onClose(conn, err)
 			break
 		}
 	}
 }
 
-func (wr *WebsocketReader) blockingModWriteLoop() {
+// BlockingModWriteLoop .
+func (wr *WebsocketReader) BlockingModWriteLoop() {
 	conn := wr.conn
 	defer conn.Close()
 
@@ -559,8 +571,8 @@ func (wr *WebsocketReader) Read(p *nbhttp.Parser, data []byte) error {
 // Close .
 func (wr *WebsocketReader) Close(p *nbhttp.Parser, err error) {
 	if wr.conn != nil {
-		wr.conn.onClose(wr.conn, err)
 		wr.conn.Close()
+		wr.conn.onClose(wr.conn, err)
 	}
 	if wr.buffer != nil {
 		mempool.Free(wr.buffer)

@@ -39,7 +39,6 @@ type Timer struct {
 func New(name string, executor func(f func())) *Timer {
 	t := &Timer{}
 
-	// avoid race warning
 	t.mux.Lock()
 	t.name = name
 	t.executor = executor
@@ -129,7 +128,7 @@ func (t *Timer) removeTimer(it *Item) {
 	}
 }
 
-func (t *Timer) resetTimer(it *Item) {
+func (t *Timer) resetTimer(it *Item, d time.Duration) {
 	t.mux.Lock()
 	defer t.mux.Unlock()
 
@@ -139,6 +138,7 @@ func (t *Timer) resetTimer(it *Item) {
 	}
 
 	if t.items[index] == it {
+		it.expire = time.Now().Add(d)
 		heap.Fix(&t.items, index)
 		if index == 0 || it.index == 0 {
 			t.trigger.Reset(time.Until(t.items[0].expire))
@@ -242,18 +242,8 @@ func (h *timerHeap) Pop() interface{} {
 	n := len(old)
 	x := old[n-1]
 	old[n-1] = nil // avoid memory leak
-	noRaceUpdateLittleHeap(h, noRaceModifyLittleHeap(old, 0, n-1))
+	*h = old[0 : n-1]
 	return x
-}
-
-//go:norace
-func noRaceUpdateLittleHeap(ptr *timerHeap, ts timerHeap) {
-	*ptr = ts
-}
-
-//go:norace
-func noRaceModifyLittleHeap(ts timerHeap, start, end int) timerHeap {
-	return ts[start:end]
 }
 
 // Item is a heap timer item.
@@ -271,6 +261,5 @@ func (it *Item) Stop() {
 
 // Reset resets timer.
 func (it *Item) Reset(timeout time.Duration) {
-	it.expire = time.Now().Add(timeout)
-	it.parent.resetTimer(it)
+	it.parent.resetTimer(it, timeout)
 }

@@ -29,6 +29,7 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
+			g.addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
 	case "udp", "udp4", "udp6":
@@ -40,13 +41,14 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
-			ln, err := net.ListenUDP("udp", addr)
+			ln, err := g.listenUDP("udp", addr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
 				}
 				return err
 			}
+			g.addrs[i] = ln.LocalAddr().String()
 			udpListeners = append(udpListeners, ln)
 		}
 	}
@@ -65,8 +67,17 @@ func (g *Engine) Start() error {
 		}
 		g.pollers[i] = p
 	}
-	noRacePollerRun(g)
-	noRaceListenerRun(g)
+
+	for i := 0; i < g.pollerNum; i++ {
+		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
+		g.Add(1)
+		go g.pollers[i].start()
+	}
+
+	for _, l := range g.listeners {
+		g.Add(1)
+		go l.start()
+	}
 
 	for _, ln := range udpListeners {
 		_, err := g.AddConn(ln)
@@ -112,12 +123,20 @@ func NewEngine(conf Config) *Engine {
 	if conf.MaxConnReadTimesPerEventLoop <= 0 {
 		conf.MaxConnReadTimesPerEventLoop = DefaultMaxConnReadTimesPerEventLoop
 	}
+	if conf.Listen == nil {
+		conf.Listen = net.Listen
+	}
+	if conf.ListenUDP == nil {
+		conf.ListenUDP = net.ListenUDP
+	}
 
 	g := &Engine{
 		Timer:                        timer.New(conf.Name, conf.TimerExecute),
 		Name:                         conf.Name,
 		network:                      conf.Network,
 		addrs:                        conf.Addrs,
+		listen:                       conf.Listen,
+		listenUDP:                    conf.ListenUDP,
 		pollerNum:                    conf.NPoller,
 		readBufferSize:               conf.ReadBufferSize,
 		maxWriteBufferSize:           conf.MaxWriteBufferSize,

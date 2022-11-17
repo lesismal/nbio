@@ -7,8 +7,10 @@ package nbio
 import (
 	"context"
 	"net"
+	"runtime"
 	"sync"
 	"time"
+	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/timer"
@@ -75,6 +77,12 @@ type Config struct {
 
 	// TimerExecute sets the executor for timer callbacks.
 	TimerExecute func(f func())
+
+	// Listen is used to create listener for Engine.
+	Listen func(network, addr string) (net.Listener, error)
+
+	// ListenUDP is used to create udp listener for Engine.
+	ListenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 }
 
 // Gopher keeps old type to compatible with new name Engine.
@@ -98,8 +106,11 @@ type Engine struct {
 
 	wgConn sync.WaitGroup
 
-	network                      string
-	addrs                        []string
+	network   string
+	addrs     []string
+	listen    func(network, addr string) (net.Listener, error)
+	listenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
+
 	pollerNum                    int
 	readBufferSize               int
 	maxWriteBufferSize           int
@@ -196,7 +207,8 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 		return nil, err
 	}
 
-	noRaceConnOperation(g, c, noRaceConnOpAdd)
+	p := g.pollers[c.Hash()%len(g.pollers)]
+	p.addConn(c)
 	return c, nil
 }
 
@@ -205,10 +217,10 @@ func (g *Engine) OnOpen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onOpenOnNoRace(func(c *Conn) {
+	g.onOpen = func(c *Conn) {
 		g.wgConn.Add(1)
 		h(c)
-	})
+	}
 }
 
 // OnClose registers callback for disconnected.
@@ -216,17 +228,17 @@ func (g *Engine) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onCloseOnNoRace(func(c *Conn, err error) {
+	g.onClose = func(c *Conn, err error) {
 		// g.Async(func() {
 		defer g.wgConn.Done()
 		h(c, err)
 		// })
-	})
+	}
 }
 
 // OnRead registers callback for reading event.
 func (g *Engine) OnRead(h func(c *Conn)) {
-	g.onReadOnNoRace(h)
+	g.onRead = h
 }
 
 // OnData registers callback for data.
@@ -234,7 +246,7 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onDataOnNoRace(h)
+	g.onData = h
 }
 
 // OnReadBufferAlloc registers callback for memory allocating.
@@ -242,7 +254,7 @@ func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onReadBufferAllocOnNoRace(h)
+	g.onReadBufferAlloc = h
 }
 
 // OnReadBufferFree registers callback for memory release.
@@ -250,7 +262,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onReadBufferFreeOnNoRace(h)
+	g.onReadBufferFree = h
 }
 
 // OnWriteBufferRelease registers callback for write buffer memory release.
@@ -267,7 +279,7 @@ func (g *Engine) BeforeRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.beforeReadOnNoRace(h)
+	g.beforeRead = h
 }
 
 // AfterRead registers callback after syscall.Read
@@ -276,7 +288,7 @@ func (g *Engine) AfterRead(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.afterReadOnNoRace(h)
+	g.afterRead = h
 }
 
 // BeforeWrite registers callback befor syscall.Write and syscall.Writev
@@ -285,7 +297,7 @@ func (g *Engine) BeforeWrite(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.beforeWriteOnNoRace(h)
+	g.beforeWrite = h
 }
 
 // OnStop registers callback before Engine is stopped.
@@ -293,12 +305,12 @@ func (g *Engine) OnStop(h func()) {
 	if h == nil {
 		panic("invalid nil handler")
 	}
-	g.onStopOnNoRace(h)
+	g.onStop = h
 }
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
 func (g *Engine) PollerBuffer(c *Conn) []byte {
-	return noRaceGetReadBufferFromPoller(c)
+	return c.p.ReadBuffer
 }
 
 func (g *Engine) initHandlers() {
@@ -323,6 +335,14 @@ func (g *Engine) initHandlers() {
 
 	if g.Execute == nil {
 		g.Execute = func(f func()) {
+			defer func() {
+				if err := recover(); err != nil {
+					const size = 64 << 10
+					buf := make([]byte, size)
+					buf = buf[:runtime.Stack(buf, false)]
+					logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+				}
+			}()
 			f()
 		}
 	}

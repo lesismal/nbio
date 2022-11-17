@@ -56,7 +56,7 @@ type Conn struct {
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
-	return noRaceGetFdOnConn(c)
+	return c.fd
 }
 
 // Read implements Read.
@@ -102,8 +102,8 @@ func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 
 func (c *Conn) doRead(b []byte) (*Conn, int, error) {
 	switch c.typ {
-	case ConnTypeTCP:
-		return c.readTCP(b)
+	case ConnTypeTCP, ConnTypeUnix:
+		return c.readStream(b)
 	case ConnTypeUDPServer, ConnTypeUDPClientFromDial:
 		return c.readUDP(b)
 	case ConnTypeUDPClientFromRead:
@@ -112,7 +112,7 @@ func (c *Conn) doRead(b []byte) (*Conn, int, error) {
 	return c, 0, errors.New("invalid udp conn for reading")
 }
 
-func (c *Conn) readTCP(b []byte) (*Conn, int, error) {
+func (c *Conn) readStream(b []byte) (*Conn, int, error) {
 	nread, err := syscall.Read(c.fd, b)
 	return c, nread, err
 }
@@ -211,7 +211,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	return n, err
 }
 
-func (c *Conn) writeTCP(b []byte) (int, error) {
+func (c *Conn) writeStream(b []byte) (int, error) {
 	return syscall.Write(c.fd, b)
 }
 
@@ -238,8 +238,6 @@ func (c *Conn) CloseWithError(err error) error {
 }
 
 // LocalAddr implements LocalAddr.
-//
-//go:norace
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
 }
@@ -371,7 +369,7 @@ func (c *Conn) SetSession(session interface{}) {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		noRaceConnOperation(c.p.g, c, noRaceConnOpMod)
+		c.p.modWrite(c.fd)
 	}
 }
 
@@ -510,8 +508,8 @@ func (c *Conn) doWrite(b []byte) (int, error) {
 	var err error
 	var nread int
 	switch c.typ {
-	case ConnTypeTCP:
-		nread, err = c.writeTCP(b)
+	case ConnTypeTCP, ConnTypeUnix:
+		nread, err = c.writeStream(b)
 	case ConnTypeUDPServer:
 	case ConnTypeUDPClientFromDial:
 		nread, err = c.writeUDPClientFromDial(b)
@@ -564,11 +562,11 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	}
 
 	if c.p.g != nil {
-		noRaceConnOperation(c.p.g, c, noRaceConnOpDel)
+		c.p.deleteConn(c)
 	}
 
 	switch c.typ {
-	case ConnTypeTCP:
+	case ConnTypeTCP, ConnTypeUnix:
 		err = syscall.Close(c.fd)
 	case ConnTypeUDPServer, ConnTypeUDPClientFromDial, ConnTypeUDPClientFromRead:
 		err = c.connUDP.Close()
