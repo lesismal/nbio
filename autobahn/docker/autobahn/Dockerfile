@@ -1,9 +1,6 @@
-FROM alpine:3.12
+FROM python:3.10-alpine3.16
 
-RUN apk add --no-cache python2 python2-dev gcc build-base musl-dev libffi-dev openssl-dev && \
-	python -m ensurepip && \
-	pip install --upgrade pip && \
-	pip install --no-python-version-warning autobahntestsuite
+RUN pip install autobahntestsuite
 
 VOLUME /config
 VOLUME /report
@@ -11,4 +8,4 @@ VOLUME /report
 ENV modeEnv=${mode}
 ENV specEnv=${spec}
 
-ENTRYPOINT ["/usr/bin/wstest","--mode", "${modeEnv}","--spec","${specEnv}"]
+ENTRYPOINT ["/usr/local/bin/wstest","--mode", "${modeEnv}","--spec","${specEnv}"]
