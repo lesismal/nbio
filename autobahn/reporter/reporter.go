@@ -263,3 +263,9 @@ var index = template.Must(template.New("").Parse(`
 </body>
 </html>
 `))
+
+func sortBySegment(s []string) {
+	sort.Slice(s, func(i, j int) bool {
+		return compareBySegment(s[i], s[j]) < 0
+	})
+}

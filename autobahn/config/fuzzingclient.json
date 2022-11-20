@@ -1,5 +1,5 @@
 {
-	"outdir": "./report/output",
+	"outdir": "./reports",
 	"servers": [
 		{
 			"agent": "non-tls",

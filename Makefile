@@ -15,14 +15,20 @@ test:
 	$(GO) test -v $(PACKAGES)
 
 clean:
-	rm -f bin/autobahn_server
-	rm -fr autobahn/report/*
-	
-bin/reporter:
-	go build -o bin/reporter ./autobahn
+	rm -rf ./autobahn/bin/*
+	rm -rf ./autobahn/report/*
 
-autobahn: clean bin/reporter
-	./autobahn/script/test.sh --build fuzzingclient config/client_tests.json autobahn/server -o server.test 
-	bin/reporter $(PWD)/autobahn/report/output/index.json
+autobahn/init:
+	mkdir -p ./autobahn/bin
+
+autobahn/nbio_server:
+	$(GO) build -o ./autobahn/bin/nbio_autobahn_server ./autobahn/server
+
+autobahn/nbio_reporter:
+	$(GO) build -o ./autobahn/bin/nbio_autobahn_reporter ./autobahn/reporter
+
+autobahn: clean autobahn/init autobahn/nbio_server autobahn/nbio_reporter
+	./autobahn/script/run_autobahn.sh
 
 .PHONY: all vet lint test clean  autobahn
+
