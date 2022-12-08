@@ -141,10 +141,13 @@ type Config struct {
 	// DisableSendfile .
 	DisableSendfile bool
 
-	// ReleaseWebsocketPayload automatically release data buffer after function each call to websocket OnMessage and OnDataFrame
+	// ReleaseWebsocketPayload automatically release data buffer after function each call to websocket OnMessage or OnDataFrame.
 	ReleaseWebsocketPayload bool
 
-	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd
+	// RetainHTTPBody represents whether to automatically release HTTP body's buffer after calling HTTP handler.
+	RetainHTTPBody bool
+
+	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd.
 	MaxConnReadTimesPerEventLoop int
 
 	// Handler sets HTTP handler for Engine.
@@ -188,6 +191,8 @@ type Engine struct {
 	*Config
 
 	CheckUtf8 func(data []byte) bool
+
+	shutdown bool
 
 	listenerMux *lmux.ListenerMux
 	listeners   []net.Listener
@@ -262,7 +267,7 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(net
 			// ln.Close()
 			e.WaitGroup.Done()
 		}()
-		for {
+		for !e.shutdown {
 			conn, err := ln.Accept()
 			if err == nil {
 				addConn(conn, tlsConfig, decrease)
@@ -272,7 +277,9 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(net
 					logging.Error("Accept failed: temporary error, retrying...")
 					time.Sleep(time.Second / 20)
 				} else {
-					logging.Error("Accept failed: %v, exit...", err)
+					if !e.shutdown {
+						logging.Error("Accept failed: %v, exit...", err)
+					}
 					break
 				}
 			}
@@ -400,12 +407,14 @@ func (e *Engine) Start() error {
 
 // Stop .
 func (e *Engine) Stop() {
+	e.shutdown = true
 	e.stopListeners()
 	e.Engine.Stop()
 }
 
 // Shutdown .
 func (e *Engine) Shutdown(ctx context.Context) error {
+	e.shutdown = true
 	e.stopListeners()
 
 	pollIntervalBase := time.Millisecond
