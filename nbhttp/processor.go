@@ -42,13 +42,16 @@ var (
 func releaseRequest(req *http.Request, retainHTTPBody bool) {
 	if req != nil {
 		if req.Body != nil {
-			br := req.Body.(*BodyReader)
-			if retainHTTPBody {
-				br.Reset()
-			} else {
+			if br, ok := req.Body.(*BodyReader); ok {
+				if retainHTTPBody {
+					br.Reset()
+				} else {
+					br.Close()
+				}
+				bodyReaderPool.Put(br)
+			} else if !retainHTTPBody {
 				br.Close()
 			}
-			bodyReaderPool.Put(br)
 		}
 		// fast gc for fields
 		*req = emptyRequest
