@@ -29,6 +29,7 @@ func New(maxOnlineA int) *ListenerMux {
 
 // ListenerMux manages listeners and handle the connection dispatching logic.
 type ListenerMux struct {
+	shutdown   bool
 	listeners  map[net.Listener]listenerAB
 	chClose    chan struct{}
 	onlineA    int32
@@ -67,10 +68,10 @@ func (lm *ListenerMux) Start() {
 	if lm == nil {
 		return
 	}
-
+	lm.shutdown = false
 	for k, v := range lm.listeners {
 		go func(l net.Listener, listenerA *ChanListener, listenerB *ChanListener) {
-			for {
+			for !lm.shutdown {
 				c, err := l.Accept()
 				if err != nil {
 					var ne net.Error
@@ -79,8 +80,12 @@ func (lm *ListenerMux) Start() {
 						time.Sleep(time.Second / 20)
 						continue
 					} else {
-						logging.Error("Accept failed: %v, exit...", err)
-						break
+						if !lm.shutdown {
+							logging.Error("Accept failed: %v, exit...", err)
+						}
+						listenerA.chEvent <- event{err: nil, conn: c}
+						listenerB.chEvent <- event{err: nil, conn: c}
+						return
 					}
 				}
 				if atomic.AddInt32(&lm.onlineA, 1) <= lm.maxOnlineA {
@@ -99,6 +104,7 @@ func (lm *ListenerMux) Stop() {
 	if lm == nil {
 		return
 	}
+	lm.shutdown = true
 	for l, ab := range lm.listeners {
 		l.Close()
 		ab.a.Close()

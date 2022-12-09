@@ -84,6 +84,15 @@ func (br *BodyReader) Close() error {
 	return nil
 }
 
+// Reset resets fields of BodyReader but not reput the buffer to the pool.
+func (br *BodyReader) Reset() error {
+	if br.buffer != nil {
+		br.buffer = nil
+		br.index = 0
+	}
+	return nil
+}
+
 // NewBodyReader creates a BodyReader.
 func NewBodyReader(data []byte) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)

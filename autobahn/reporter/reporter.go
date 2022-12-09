@@ -216,18 +216,18 @@ func compareBySegment(a, b string) int {
 		if ax == bx {
 			continue
 		}
-		return ax - bx
+		return int(ax - bx)
 	}
 	return len(b) - len(a)
 }
 
-func mustInt(s string) int {
+func mustInt(s string) int64 {
 	const bits = 32 << (^uint(0) >> 63)
 	x, err := strconv.ParseInt(s, 10, bits)
 	if err != nil {
 		panic(err)
 	}
-	return int(x)
+	return x
 }
 
 func min(a, b int) int {
@@ -239,10 +239,11 @@ func min(a, b int) int {
 
 func handlerIndex() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
 		if *verbose {
-			log.Printf("reqeust to %v", r.URL.Path)
+			log.Printf("reqeust to %s", path)
 		}
-		if r.URL.Path != "/" {
+		if path != "/" {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}

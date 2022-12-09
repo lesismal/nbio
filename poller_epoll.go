@@ -136,7 +136,9 @@ func (p *poller) acceptorLoop() {
 				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
-				logging.Error("NBIO[%v][%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+				if !p.shutdown {
+					logging.Error("NBIO[%v][%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
+				}
 				break
 			}
 		}

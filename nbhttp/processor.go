@@ -39,12 +39,19 @@ var (
 	}
 )
 
-func releaseRequest(req *http.Request) {
+func releaseRequest(req *http.Request, retainHTTPBody bool) {
 	if req != nil {
 		if req.Body != nil {
-			br := req.Body.(*BodyReader)
-			br.Close()
-			bodyReaderPool.Put(br)
+			if br, ok := req.Body.(*BodyReader); ok {
+				if retainHTTPBody {
+					br.Reset()
+				} else {
+					br.Close()
+				}
+				bodyReaderPool.Put(br)
+			} else if !retainHTTPBody {
+				br.Close()
+			}
 		}
 		// fast gc for fields
 		*req = emptyRequest
@@ -258,7 +265,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		p.handler.ServeHTTP(response, request)
 		p.flushResponse(response)
 	}) {
-		releaseRequest(request)
+		releaseRequest(request, p.parser.Engine.RetainHTTPBody)
 	}
 }
 
@@ -269,7 +276,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 			res.eoncodeHead()
 			if err := res.flushTrailer(p.conn); err != nil {
 				p.conn.Close()
-				releaseRequest(req)
+				releaseRequest(req, p.parser.Engine.RetainHTTPBody)
 				releaseResponse(res)
 				return
 			}
@@ -280,7 +287,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
 			}
 		}
-		releaseRequest(req)
+		releaseRequest(req, p.parser.Engine.RetainHTTPBody)
 		releaseResponse(res)
 	}
 }
@@ -288,7 +295,7 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 // Close .
 func (p *ServerProcessor) Close(parser *Parser, err error) {
 	if p.request != nil {
-		releaseRequest(p.request)
+		releaseRequest(p.request, parser.Engine.RetainHTTPBody)
 		p.request = nil
 	}
 }
