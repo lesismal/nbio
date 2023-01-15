@@ -83,8 +83,8 @@ func (lm *ListenerMux) Start() {
 						if !lm.shutdown {
 							logging.Error("Accept failed: %v, exit...", err)
 						}
-						listenerA.chEvent <- event{err: nil, conn: c}
-						listenerB.chEvent <- event{err: nil, conn: c}
+						listenerA.chEvent <- event{err: err, conn: c}
+						listenerB.chEvent <- event{err: err, conn: c}
 						return
 					}
 				}

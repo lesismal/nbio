@@ -7,7 +7,6 @@ package nbhttp
 import (
 	"context"
 	"errors"
-	"math/rand"
 	"net"
 	"net/http"
 	"runtime"
@@ -202,7 +201,7 @@ type Engine struct {
 	_onStop  func()
 
 	mux   sync.Mutex
-	conns map[uintptr]struct{}
+	conns map[net.Conn]struct{}
 
 	// tlsBuffers [][]byte
 	// getTLSBuffer func(c *nbio.Conn) []byte
@@ -234,28 +233,10 @@ func (e *Engine) Online() int {
 	return len(e.conns)
 }
 
-func (e *Engine) closeIdleConns(chCloseQueue chan *nbio.Conn) {
-	e.mux.Lock()
-	defer e.mux.Unlock()
-	for v := range e.conns {
-		c := *((**nbio.Conn)(unsafe.Pointer(&v)))
-		sess := c.Session()
-		if sess != nil {
-			if c.ExecuteLen() == 0 {
-				select {
-				case chCloseQueue <- c:
-				default:
-				}
-			}
-		}
-	}
-}
-
 func (e *Engine) closeAllConns() {
 	e.mux.Lock()
 	defer e.mux.Unlock()
-	for v := range e.conns {
-		c := *((**nbio.Conn)(unsafe.Pointer(&v)))
+	for c := range e.conns {
 		c.Close()
 	}
 }
@@ -269,7 +250,7 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(net
 		}()
 		for !e.shutdown {
 			conn, err := ln.Accept()
-			if err == nil {
+			if err == nil && !e.shutdown {
 				addConn(conn, tlsConfig, decrease)
 			} else {
 				var ne net.Error
@@ -417,43 +398,23 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 	e.shutdown = true
 	e.stopListeners()
 
-	pollIntervalBase := time.Millisecond
-	shutdownPollIntervalMax := time.Millisecond * 200
-	nextPollInterval := func() time.Duration {
-		interval := pollIntervalBase + time.Duration(rand.Intn(int(pollIntervalBase/10)))
-		pollIntervalBase *= 2
-		if pollIntervalBase > shutdownPollIntervalMax {
-			pollIntervalBase = shutdownPollIntervalMax
-		}
-		return interval
-	}
-
 	if e.Cancel != nil {
 		e.Cancel()
 	}
 
-	chCloseQueue := make(chan *nbio.Conn, 1024)
 	defer e.closeAllConns()
-	defer close(chCloseQueue)
-
-	go func() {
-		for c := range chCloseQueue {
-			c.Close()
-		}
-	}()
-
-	timer := time.NewTimer(nextPollInterval())
-	defer timer.Stop()
+	ticker := time.NewTicker(time.Millisecond * 200)
+	defer ticker.Stop()
 	for {
-		e.closeIdleConns(chCloseQueue)
+		e.closeAllConns()
 		select {
 		case <-ctx.Done():
+			logging.Info("NBIO[%v] shutdown timeout", e.Engine.Name)
 			return ctx.Err()
-		case <-timer.C:
+		case <-ticker.C:
 			if len(e.conns) == 0 {
 				goto Exit
 			}
-			timer.Reset(nextPollInterval())
 		}
 	}
 
@@ -575,7 +536,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 		c.Close()
 		return
 	}
-	engine.conns[uintptr(unsafe.Pointer(nbc))] = struct{}{}
+	engine.conns[nbc] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 	processor := NewServerProcessor(nbc, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
@@ -599,7 +560,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 	}
 	switch vt := conn.(type) {
 	case *net.TCPConn:
-		engine.conns[uintptr(unsafe.Pointer(vt))] = struct{}{}
+		engine.conns[vt] = struct{}{}
 	default:
 		engine.mux.Unlock()
 		conn.Close()
@@ -643,7 +604,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 		nbc.Close()
 		return
 	}
-	engine.conns[uintptr(unsafe.Pointer(nbc))] = struct{}{}
+	engine.conns[nbc] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 
@@ -674,7 +635,7 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 
 	switch vt := conn.(type) {
 	case *net.TCPConn:
-		engine.conns[uintptr(unsafe.Pointer(vt))] = struct{}{}
+		engine.conns[vt] = struct{}{}
 	default:
 		engine.mux.Unlock()
 		conn.Close()
@@ -716,15 +677,17 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 	)
 
 	defer func() {
+		// go func() {
 		parser.Close(err)
 		engine.mux.Lock()
 		switch vt := conn.(type) {
 		case *net.TCPConn:
-			delete(engine.conns, uintptr(unsafe.Pointer(vt)))
+			delete(engine.conns, vt)
 		}
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
 		decrease()
+		// }()
 	}()
 
 	for {
@@ -744,22 +707,18 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 	)
 
 	defer func() {
-		if err := recover(); err != nil {
-			const size = 64 << 10
-			buf := make([]byte, size)
-			buf = buf[:runtime.Stack(buf, false)]
-			logging.Error("readTLSConnBlocking failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-		}
+		// go func() {
 		parser.Close(err)
 		tlsConn.Close()
 		engine.mux.Lock()
 		switch vt := conn.(type) {
 		case *net.TCPConn:
-			delete(engine.conns, uintptr(unsafe.Pointer(vt)))
+			delete(engine.conns, vt)
 		}
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
 		decrease()
+		// }()
 	}()
 
 	for {
@@ -911,7 +870,7 @@ func NewEngine(conf Config) *Engine {
 		_onClose:      func(c net.Conn, err error) {},
 		_onStop:       func() {},
 		CheckUtf8:     utf8.Valid,
-		conns:         map[uintptr]struct{}{},
+		conns:         map[net.Conn]struct{}{},
 		ExecuteClient: clientExecutor,
 
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
@@ -933,7 +892,7 @@ func NewEngine(conf Config) *Engine {
 			}
 			engine._onClose(c, err)
 			engine.mux.Lock()
-			delete(engine.conns, uintptr(unsafe.Pointer(c)))
+			delete(engine.conns, c)
 			engine.mux.Unlock()
 		})
 	})
