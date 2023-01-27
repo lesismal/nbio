@@ -128,6 +128,9 @@ type Config struct {
 	// MessageHandlerTaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
 	// MessageHandlerTaskIdleTime time.Duration
 
+	// WriteTimeout represents Conn's write time out when response to a HTTP request.
+	WriteTimeout time.Duration
+
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
 

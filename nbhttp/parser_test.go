@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -105,6 +106,12 @@ func TestClientParserTrailer(t *testing.T) {
 
 func testParser(t *testing.T, isClient bool, data []byte) error {
 	parser := newParser(isClient)
+	defer func() {
+		c := parser.Processor.Conn()
+		if c != nil {
+			c.Close()
+		}
+	}()
 	err := parser.Read(data)
 	if err != nil {
 		t.Fatal(err)
@@ -129,15 +136,20 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		nRequest++
 	})
-	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
+	conn := newConn()
+	defer conn.Close()
+	processor := NewServerProcessor(conn, mux, DefaultKeepaliveTime, false)
 	if isClient {
 		processor = NewClientProcessor(nil, func(*http.Response, error) {
 			nRequest++
 		})
 	}
-	svr := &Server{}
+	engine := NewEngine(Config{})
 	parser = NewParser(processor, isClient, maxReadSize, nil)
-	parser.Engine = svr.Engine
+	if sp, ok := processor.(*ServerProcessor); ok {
+		sp.parser = parser
+	}
+	parser.Engine = engine
 	tBegin := time.Now()
 	loop := 10000
 	for i := 0; i < loop; i++ {
@@ -165,23 +177,44 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 }
 
 func newParser(isClient bool) *Parser {
-	svr := &Server{}
+	engine := NewEngine(Config{})
 	maxReadSize := 1024 * 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response, error) {})
 		parser := NewParser(processor, isClient, maxReadSize, nil)
-		parser.Engine = svr.Engine
+		parser.Engine = engine
 		return parser
 	}
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", pirntMessage)
-	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
-
+	conn := newConn()
+	processor := NewServerProcessor(conn, mux, DefaultKeepaliveTime, false)
 	parser := NewParser(processor, isClient, maxReadSize, nil)
-	parser.Engine = svr.Engine
+	parser.Engine = engine
+	processor.(*ServerProcessor).parser = parser
 	return parser
 }
 
+func newConn() net.Conn {
+	var conn net.Conn
+	for i := 0; i < 1000; i++ {
+		addr := fmt.Sprintf("127.0.0.1:%d", 8000+i)
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			continue
+		}
+		go func() {
+			defer ln.Close()
+			ln.Accept()
+		}()
+		conn, err = net.Dial("tcp", addr)
+		if err != nil {
+			panic(err)
+		}
+		break
+	}
+	return conn
+}
 func pirntMessage(w http.ResponseWriter, request *http.Request) {
 	fmt.Printf("----------------------------------------------------------------\n")
 	fmt.Println("OnRequest")
@@ -236,7 +269,9 @@ func BenchmarkServerProcessor(b *testing.B) {
 	isClient := false
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
-	processor := NewServerProcessor(nil, mux, DefaultKeepaliveTime, false)
+	conn := newConn()
+	defer conn.Close()
+	processor := NewServerProcessor(conn, mux, DefaultKeepaliveTime, false)
 	parser := NewParser(processor, isClient, maxReadSize, nil)
 
 	b.ReportAllocs()
