@@ -608,7 +608,8 @@ func (u *udpConn) Close() error {
 		parent.mux.Lock()
 		delete(parent.connUDP.conns, u.rAddrStr)
 		parent.mux.Unlock()
-	} else {
+	} else {		
+		syscall.Close(u.parent.fd)
 		for _, c := range u.conns {
 			c.Close()
 		}
