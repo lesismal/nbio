@@ -62,6 +62,7 @@ const defaultNetwork = "tcp"
 type ConfAddr struct {
 	Network   string
 	Addr      string
+	NListener int
 	TLSConfig *tls.Config
 	pAddr     *string
 }
@@ -101,6 +102,9 @@ type Config struct {
 
 	// MaxLoad represents the max online num, it's set to 10k by default.
 	MaxLoad int
+
+	// NListener represents listner goroutine num for each ConfAddr, it's set to 1 by default.
+	NListener int
 
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
@@ -286,38 +290,40 @@ func (e *Engine) startListeners() error {
 			if network == "" {
 				network = defaultNetwork
 			}
-			ln, err := e.Listen(network, conf.Addr)
-			if err != nil {
-				for _, l := range e.listeners {
-					l.Close()
+			for j := 0; j < conf.NListener; j++ {
+				ln, err := e.Listen(network, conf.Addr)
+				if err != nil {
+					for _, l := range e.listeners {
+						l.Close()
+					}
+					return err
 				}
-				return err
-			}
-			conf.Addr = ln.Addr().String()
-			if conf.pAddr != nil {
-				*conf.pAddr = conf.Addr
-			}
-			logging.Info("Serve     TLS On: [%v@%v]", conf.Network, conf.Addr)
+				conf.Addr = ln.Addr().String()
+				if conf.pAddr != nil {
+					*conf.pAddr = conf.Addr
+				}
+				logging.Info("Serve     TLS On: [%v@%v]", conf.Network, conf.Addr)
 
-			tlsConfig := conf.TLSConfig
-			if tlsConfig == nil {
-				tlsConfig = e.TLSConfig
+				tlsConfig := conf.TLSConfig
 				if tlsConfig == nil {
-					tlsConfig = &tls.Config{}
+					tlsConfig = e.TLSConfig
+					if tlsConfig == nil {
+						tlsConfig = &tls.Config{}
+					}
 				}
-			}
 
-			switch e.IOMod {
-			case IOModMixed:
-				lnA, lnB := e.listenerMux.Mux(ln)
-				e.listen(lnA, tlsConfig, e.AddConnTLSBlocking, lnA.Decrease)
-				e.listen(lnB, tlsConfig, e.AddConnTLSNonBlocking, func() {})
-			case IOModBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, tlsConfig, e.AddConnTLSBlocking, func() {})
-			case IOModNonBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+				switch e.IOMod {
+				case IOModMixed:
+					lnA, lnB := e.listenerMux.Mux(ln)
+					e.listen(lnA, tlsConfig, e.AddConnTLSBlocking, lnA.Decrease)
+					e.listen(lnB, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+				case IOModBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, tlsConfig, e.AddConnTLSBlocking, func() {})
+				case IOModNonBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+				}
 			}
 		}
 	}
@@ -332,31 +338,33 @@ func (e *Engine) startListeners() error {
 			if network == "" {
 				network = defaultNetwork
 			}
-			ln, err := e.Listen(network, conf.Addr)
-			if err != nil {
-				for _, l := range e.listeners {
-					l.Close()
+			for j := 0; j < conf.NListener; j++ {
+				ln, err := e.Listen(network, conf.Addr)
+				if err != nil {
+					for _, l := range e.listeners {
+						l.Close()
+					}
+					return err
 				}
-				return err
-			}
-			conf.Addr = ln.Addr().String()
-			if conf.pAddr != nil {
-				*conf.pAddr = conf.Addr
-			}
+				conf.Addr = ln.Addr().String()
+				if conf.pAddr != nil {
+					*conf.pAddr = conf.Addr
+				}
 
-			logging.Info("Serve  NonTLS On: [%v@%v]", conf.Network, conf.Addr)
+				logging.Info("Serve  NonTLS On: [%v@%v]", conf.Network, conf.Addr)
 
-			switch e.IOMod {
-			case IOModMixed:
-				lnA, lnB := e.listenerMux.Mux(ln)
-				e.listen(lnA, nil, e.AddConnNonTLSBlocking, lnA.Decrease)
-				e.listen(lnB, nil, e.AddConnNonTLSNonBlocking, func() {})
-			case IOModBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, nil, e.AddConnNonTLSBlocking, func() {})
-			case IOModNonBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, nil, e.AddConnNonTLSNonBlocking, func() {})
+				switch e.IOMod {
+				case IOModMixed:
+					lnA, lnB := e.listenerMux.Mux(ln)
+					e.listen(lnA, nil, e.AddConnNonTLSBlocking, lnA.Decrease)
+					e.listen(lnB, nil, e.AddConnNonTLSNonBlocking, func() {})
+				case IOModBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, nil, e.AddConnNonTLSBlocking, func() {})
+				case IOModNonBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, nil, e.AddConnNonTLSNonBlocking, func() {})
+				}
 			}
 		}
 	}
@@ -859,11 +867,24 @@ func NewEngine(conf Config) *Engine {
 	g := nbio.NewEngine(gopherConf)
 	g.Execute = serverExecutor
 
+	// init non-tls addr configs
 	for i, addr := range conf.Addrs {
-		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.Addrs[i]})
+		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.Addrs[i], NListener: conf.NListener})
 	}
+	for i := range conf.AddrConfigs {
+		if conf.AddrConfigs[i].NListener <= 0 {
+			conf.AddrConfigs[i].NListener = 1
+		}
+	}
+
+	// init tls addr configs
 	for i, addr := range conf.AddrsTLS {
-		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.AddrsTLS[i]})
+		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.AddrsTLS[i], NListener: conf.NListener})
+	}
+	for i := range conf.AddrConfigsTLS {
+		if conf.AddrConfigsTLS[i].NListener <= 0 {
+			conf.AddrConfigsTLS[i].NListener = 1
+		}
 	}
 
 	engine := &Engine{
