@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"html/template"
 	"log"
 	"net/http"
@@ -241,7 +242,7 @@ func handlerIndex() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		if *verbose {
-			log.Printf("reqeust to %s", path)
+			log.Printf("reqeust to %s", html.EscapeString(path))
 		}
 		if path != "/" {
 			w.WriteHeader(http.StatusNotFound)
