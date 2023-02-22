@@ -9,6 +9,7 @@ package nbio
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
