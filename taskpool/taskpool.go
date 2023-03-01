@@ -29,7 +29,9 @@ func (tp *TaskPool) Go(f func()) {
 			for {
 				select {
 				case f = <-tp.chQqueue:
-					tp.caller(f)
+					if f != nil {
+						tp.caller(f)
+					}
 				default:
 					return
 				}
@@ -82,7 +84,9 @@ func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
 		for {
 			select {
 			case f := <-tp.chQqueue:
-				tp.caller(f)
+				if f != nil {
+					tp.caller(f)
+				}
 			case <-tp.chClose:
 				return
 			}
