@@ -12,73 +12,81 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
-// MixedPool .
-type MixedPool struct {
-	*FixedNoOrderPool
-	cuncurrent int32
-	nativeSize int32
-	call       func(f func())
-}
-
-func (mp *MixedPool) callWithRecover(f func()) {
-	defer func() {
-		if err := recover(); err != nil {
-			const size = 64 << 10
-			buf := make([]byte, size)
-			buf = buf[:runtime.Stack(buf, false)]
-			logging.Error("taskpool call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-		}
-		atomic.AddInt32(&mp.cuncurrent, -1)
-	}()
-	f()
-}
-
-func (mp *MixedPool) callWitoutRecover(f func()) {
-	defer atomic.AddInt32(&mp.cuncurrent, -1)
-	f()
+// TaskPool .
+type TaskPool struct {
+	concurrent    int64
+	maxConcurrent int64
+	chQqueue      chan func()
+	chClose       chan struct{}
+	caller        func(f func())
 }
 
 // Go .
-func (mp *MixedPool) Go(f func()) {
-	if atomic.AddInt32(&mp.cuncurrent, 1) <= mp.nativeSize {
+func (tp *TaskPool) Go(f func()) {
+	if atomic.AddInt64(&tp.concurrent, 1) < tp.maxConcurrent {
 		go func() {
-			mp.call(f)
-			for len(mp.chTask) > 0 {
+			tp.caller(f)
+			for {
 				select {
-				case f = <-mp.chTask:
-					mp.call(f)
+				case f = <-tp.chQqueue:
+					tp.caller(f)
 				default:
 					return
 				}
 			}
 		}()
-	} else {
-		atomic.AddInt32(&mp.cuncurrent, -1)
-		mp.FixedNoOrderPool.Go(f)
+		return
 	}
-}
 
-// GoByIndex .
-func (mp *MixedPool) GoByIndex(index int, f func()) {
-	mp.Go(f)
+	atomic.AddInt64(&tp.concurrent, -1)
+	select {
+	case tp.chQqueue <- f:
+	case <-tp.chClose:
+	}
 }
 
 // Stop .
-func (mp *MixedPool) Stop() {
-	close(mp.chTask)
+func (tp *TaskPool) Stop() {
+	atomic.AddInt64(&tp.concurrent, tp.maxConcurrent)
+	close(tp.chClose)
 }
 
-// NewMixedPool .
-func NewMixedPool(nativeSize int, fixedSize int, bufferSize int, v ...interface{}) *MixedPool {
-	mp := &MixedPool{
-		FixedNoOrderPool: NewFixedNoOrderPool(fixedSize, bufferSize),
-		nativeSize:       int32(nativeSize),
+// New .
+func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
+	tp := &TaskPool{
+		maxConcurrent: int64(maxConcurrent - 1),
+		chQqueue:      make(chan func(), chQqueueSize),
+		chClose:       make(chan struct{}),
 	}
-	mp.call = mp.callWithRecover
+	tp.caller = func(f func()) {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				logging.Error("taskpool call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+			atomic.AddInt64(&tp.concurrent, -1)
+		}()
+		f()
+	}
 	if len(v) > 0 {
-		if withoutRecover, ok := v[0].(bool); ok && withoutRecover {
-			mp.call = mp.callWitoutRecover
+		if caller, ok := v[0].(func(f func())); ok {
+			tp.caller = func(f func()) {
+				defer atomic.AddInt64(&tp.concurrent, -1)
+				caller(f)
+			}
 		}
 	}
-	return mp
+	go func() {
+		for {
+			select {
+			case f := <-tp.chQqueue:
+				tp.caller(f)
+			case <-tp.chClose:
+				return
+			}
+		}
+	}()
+	return tp
 }

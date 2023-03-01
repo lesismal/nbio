@@ -814,18 +814,18 @@ func NewEngine(conf Config) *Engine {
 	conf.Handler = handler
 
 	var serverExecutor = conf.ServerExecutor
-	var messageHandlerExecutePool *taskpool.MixedPool
+	var messageHandlerExecutePool *taskpool.TaskPool
 	if serverExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024, true)
+		messageHandlerExecutePool = taskpool.New(nativeSize, 1024*1024, true)
 		serverExecutor = messageHandlerExecutePool.Go
 	}
 
 	var clientExecutor = conf.ClientExecutor
-	var clientExecutePool *taskpool.MixedPool
+	var clientExecutePool *taskpool.TaskPool
 	var goExecutor = func(f func()) {
 		go func() { // avoid deadlock
 			defer func() {
@@ -841,7 +841,7 @@ func NewEngine(conf Config) *Engine {
 	}
 	if clientExecutor == nil {
 		if !conf.SupportServerOnly {
-			clientExecutePool = taskpool.NewMixedPool(runtime.NumCPU()*1024-1, 1, 1024*1024)
+			clientExecutePool = taskpool.New(runtime.NumCPU()*1024-1, 1, 1024*1024)
 			clientExecutor = clientExecutePool.Go
 		} else {
 			clientExecutor = goExecutor
