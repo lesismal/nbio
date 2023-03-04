@@ -176,8 +176,10 @@ func (g *Engine) Stop() {
 
 	g.Timer.Stop()
 
+	g.connsUnix = []*Conn{}
 	for i := 0; i < g.pollerNum; i++ {
 		g.pollers[i].stop()
+		g.pollers[i].ReadBuffer = []byte{}
 	}
 
 	g.Wait()
