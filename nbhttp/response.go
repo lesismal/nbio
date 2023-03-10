@@ -354,12 +354,15 @@ func (res *Response) flushTrailer(conn io.Writer) error {
 
 	data := res.buffer
 	res.buffer = nil
-	if data == nil {
-		data = mempool.Malloc(0)
-	}
 	if len(res.trailer) == 0 {
+		if data == nil {
+			data = mempool.Malloc(0)
+		}
 		data = mempool.AppendString(data, "0\r\n\r\n")
 	} else {
+		if data == nil {
+			data = mempool.Malloc(512)[0:0]
+		}
 		data = mempool.AppendString(data, "0\r\n")
 		for k, v := range res.trailer {
 			data = mempool.AppendString(data, k)

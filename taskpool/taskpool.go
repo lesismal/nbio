@@ -5,106 +5,92 @@
 package taskpool
 
 import (
-	"errors"
-	"sync"
+	"runtime"
 	"sync/atomic"
-	"time"
+	"unsafe"
+
+	"github.com/lesismal/nbio/logging"
 )
-
-var (
-	// ErrStopped .
-	ErrStopped = errors.New("stopped")
-)
-
-// runner .
-type runner struct {
-	parent *TaskPool
-}
-
-func (r *runner) taskLoop(maxIdleTime time.Duration, chTask <-chan func(), chClose <-chan struct{}, f func()) {
-	defer func() {
-		r.parent.wg.Done()
-		<-r.parent.chRunner
-	}()
-
-	call(f)
-
-	timer := time.NewTimer(maxIdleTime)
-	defer timer.Stop()
-	for r.parent.running {
-		select {
-		case f := <-chTask:
-			call(f)
-			timer.Reset(maxIdleTime)
-		case <-timer.C:
-			return
-		case <-chClose:
-			return
-		}
-	}
-}
 
 // TaskPool .
 type TaskPool struct {
-	wg      *sync.WaitGroup
-	running bool
-	stopped int32
-
-	chTask   chan func()
-	chRunner chan struct{}
-	chClose  chan struct{}
-
-	maxIdleTime time.Duration
-}
-
-func (tp *TaskPool) push(f func()) {
-	select {
-	case tp.chTask <- f:
-	case tp.chRunner <- struct{}{}:
-		r := &runner{parent: tp}
-		tp.wg.Add(1)
-		go r.taskLoop(tp.maxIdleTime, tp.chTask, tp.chClose, f)
-	case <-tp.chClose:
-	}
+	concurrent    int64
+	maxConcurrent int64
+	chQqueue      chan func()
+	chClose       chan struct{}
+	caller        func(f func())
 }
 
 // Go .
 func (tp *TaskPool) Go(f func()) {
-	// if atomic.LoadInt32(&tp.stopped) == 1 {
-	// 	return
-	// }
-	tp.push(f)
-}
+	if atomic.AddInt64(&tp.concurrent, 1) < tp.maxConcurrent {
+		go func() {
+			tp.caller(f)
+			for {
+				select {
+				case f = <-tp.chQqueue:
+					if f != nil {
+						tp.caller(f)
+					}
+				default:
+					return
+				}
+			}
+		}()
+		return
+	}
 
-// GoByIndex .
-func (tp *TaskPool) GoByIndex(index int, f func()) {
-	tp.Go(f)
+	atomic.AddInt64(&tp.concurrent, -1)
+	select {
+	case tp.chQqueue <- f:
+	case <-tp.chClose:
+	}
 }
 
 // Stop .
 func (tp *TaskPool) Stop() {
-	if atomic.CompareAndSwapInt32(&tp.stopped, 0, 1) {
-		tp.running = false
-		close(tp.chClose)
-		tp.wg.Done()
-		tp.wg.Wait()
-	}
+	atomic.AddInt64(&tp.concurrent, tp.maxConcurrent)
+	close(tp.chClose)
 }
 
 // New .
-func New(size int, maxIdleTime time.Duration) *TaskPool {
-	if maxIdleTime <= time.Second {
-		maxIdleTime = time.Second * 60
-	}
+func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
 	tp := &TaskPool{
-		wg:          &sync.WaitGroup{},
-		running:     true,
-		chTask:      make(chan func(), 1024),
-		chRunner:    make(chan struct{}, size),
-		chClose:     make(chan struct{}),
-		maxIdleTime: maxIdleTime,
+		maxConcurrent: int64(maxConcurrent - 1),
+		chQqueue:      make(chan func(), chQqueueSize),
+		chClose:       make(chan struct{}),
 	}
-	tp.wg.Add(1)
-
+	tp.caller = func(f func()) {
+		defer func() {
+			if err := recover(); err != nil {
+				const size = 64 << 10
+				buf := make([]byte, size)
+				buf = buf[:runtime.Stack(buf, false)]
+				logging.Error("taskpool call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			}
+			atomic.AddInt64(&tp.concurrent, -1)
+		}()
+		f()
+	}
+	if len(v) > 0 {
+		if caller, ok := v[0].(func(f func())); ok {
+			tp.caller = func(f func()) {
+				defer atomic.AddInt64(&tp.concurrent, -1)
+				caller(f)
+			}
+		}
+	}
+	go func() {
+		for {
+			select {
+			case f := <-tp.chQqueue:
+				if f != nil {
+					tp.caller(f)
+				}
+			case <-tp.chClose:
+				return
+			}
+		}
+	}()
 	return tp
 }

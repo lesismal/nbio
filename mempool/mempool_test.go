@@ -5,7 +5,7 @@ import (
 )
 
 func TestMemPool(t *testing.T) {
-	pool := New(64, 64*1024)
+	pool := New(1024*1024*1024, 1024*1024*1024)
 	for i := 0; i < 1024*1024; i++ {
 		buf := pool.Malloc(i)
 		if len(buf) != i {

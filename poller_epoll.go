@@ -9,6 +9,7 @@ package nbio
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -60,11 +61,15 @@ type poller struct {
 }
 
 func (p *poller) addConn(c *Conn) {
+	fd := c.fd
+	if fd >= len(p.g.connsUnix) {
+		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
+		return
+	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
-	fd := c.fd
 	p.g.connsUnix[fd] = c
 	err := p.addRead(fd)
 	if err != nil {

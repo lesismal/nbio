@@ -168,6 +168,9 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 	}
 
 	sendRequest := func() {
+		if c.Engine.WriteTimeout > 0 {
+			c.conn.SetWriteDeadline(time.Now().Add(c.Engine.WriteTimeout))
+		}
 		err := req.Write(c.conn)
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)

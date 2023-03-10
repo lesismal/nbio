@@ -218,6 +218,9 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 
 	if p.conn != nil {
 		request.RemoteAddr = p.remoteAddr
+		if parser.Engine.WriteTimeout > 0 {
+			p.conn.SetWriteDeadline(time.Now().Add(parser.Engine.WriteTimeout))
+		}
 	}
 
 	if request.URL.Host == "" {
@@ -334,7 +337,10 @@ type ClientProcessor struct {
 
 // Conn .
 func (p *ClientProcessor) Conn() net.Conn {
-	return p.conn.conn
+	if p.conn != nil {
+		return p.conn.conn
+	}
+	return nil
 }
 
 // OnMethod .

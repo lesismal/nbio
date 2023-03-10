@@ -62,6 +62,7 @@ const defaultNetwork = "tcp"
 type ConfAddr struct {
 	Network   string
 	Addr      string
+	NListener int
 	TLSConfig *tls.Config
 	pAddr     *string
 }
@@ -102,6 +103,9 @@ type Config struct {
 	// MaxLoad represents the max online num, it's set to 10k by default.
 	MaxLoad int
 
+	// NListener represents listner goroutine num for each ConfAddr, it's set to 1 by default.
+	NListener int
+
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
@@ -127,6 +131,9 @@ type Config struct {
 
 	// MessageHandlerTaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
 	// MessageHandlerTaskIdleTime time.Duration
+
+	// WriteTimeout represents Conn's write time out when response to a HTTP request.
+	WriteTimeout time.Duration
 
 	// KeepaliveTime represents Conn's ReadDeadline when waiting for a new request, it's set to 120s by default.
 	KeepaliveTime time.Duration
@@ -283,38 +290,40 @@ func (e *Engine) startListeners() error {
 			if network == "" {
 				network = defaultNetwork
 			}
-			ln, err := e.Listen(network, conf.Addr)
-			if err != nil {
-				for _, l := range e.listeners {
-					l.Close()
+			for j := 0; j < conf.NListener; j++ {
+				ln, err := e.Listen(network, conf.Addr)
+				if err != nil {
+					for _, l := range e.listeners {
+						l.Close()
+					}
+					return err
 				}
-				return err
-			}
-			conf.Addr = ln.Addr().String()
-			if conf.pAddr != nil {
-				*conf.pAddr = conf.Addr
-			}
-			logging.Info("Serve     TLS On: [%v@%v]", conf.Network, conf.Addr)
+				conf.Addr = ln.Addr().String()
+				if conf.pAddr != nil {
+					*conf.pAddr = conf.Addr
+				}
+				logging.Info("Serve     TLS On: [%v@%v]", conf.Network, conf.Addr)
 
-			tlsConfig := conf.TLSConfig
-			if tlsConfig == nil {
-				tlsConfig = e.TLSConfig
+				tlsConfig := conf.TLSConfig
 				if tlsConfig == nil {
-					tlsConfig = &tls.Config{}
+					tlsConfig = e.TLSConfig
+					if tlsConfig == nil {
+						tlsConfig = &tls.Config{}
+					}
 				}
-			}
 
-			switch e.IOMod {
-			case IOModMixed:
-				lnA, lnB := e.listenerMux.Mux(ln)
-				e.listen(lnA, tlsConfig, e.AddConnTLSBlocking, lnA.Decrease)
-				e.listen(lnB, tlsConfig, e.AddConnTLSNonBlocking, func() {})
-			case IOModBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, tlsConfig, e.AddConnTLSBlocking, func() {})
-			case IOModNonBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+				switch e.IOMod {
+				case IOModMixed:
+					lnA, lnB := e.listenerMux.Mux(ln)
+					e.listen(lnA, tlsConfig, e.AddConnTLSBlocking, lnA.Decrease)
+					e.listen(lnB, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+				case IOModBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, tlsConfig, e.AddConnTLSBlocking, func() {})
+				case IOModNonBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, tlsConfig, e.AddConnTLSNonBlocking, func() {})
+				}
 			}
 		}
 	}
@@ -329,31 +338,33 @@ func (e *Engine) startListeners() error {
 			if network == "" {
 				network = defaultNetwork
 			}
-			ln, err := e.Listen(network, conf.Addr)
-			if err != nil {
-				for _, l := range e.listeners {
-					l.Close()
+			for j := 0; j < conf.NListener; j++ {
+				ln, err := e.Listen(network, conf.Addr)
+				if err != nil {
+					for _, l := range e.listeners {
+						l.Close()
+					}
+					return err
 				}
-				return err
-			}
-			conf.Addr = ln.Addr().String()
-			if conf.pAddr != nil {
-				*conf.pAddr = conf.Addr
-			}
+				conf.Addr = ln.Addr().String()
+				if conf.pAddr != nil {
+					*conf.pAddr = conf.Addr
+				}
 
-			logging.Info("Serve  NonTLS On: [%v@%v]", conf.Network, conf.Addr)
+				logging.Info("Serve  NonTLS On: [%v@%v]", conf.Network, conf.Addr)
 
-			switch e.IOMod {
-			case IOModMixed:
-				lnA, lnB := e.listenerMux.Mux(ln)
-				e.listen(lnA, nil, e.AddConnNonTLSBlocking, lnA.Decrease)
-				e.listen(lnB, nil, e.AddConnNonTLSNonBlocking, func() {})
-			case IOModBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, nil, e.AddConnNonTLSBlocking, func() {})
-			case IOModNonBlocking:
-				e.listeners = append(e.listeners, ln)
-				e.listen(ln, nil, e.AddConnNonTLSNonBlocking, func() {})
+				switch e.IOMod {
+				case IOModMixed:
+					lnA, lnB := e.listenerMux.Mux(ln)
+					e.listen(lnA, nil, e.AddConnNonTLSBlocking, lnA.Decrease)
+					e.listen(lnB, nil, e.AddConnNonTLSNonBlocking, func() {})
+				case IOModBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, nil, e.AddConnNonTLSBlocking, func() {})
+				case IOModNonBlocking:
+					e.listeners = append(e.listeners, ln)
+					e.listen(ln, nil, e.AddConnNonTLSNonBlocking, func() {})
+				}
 			}
 		}
 	}
@@ -803,18 +814,18 @@ func NewEngine(conf Config) *Engine {
 	conf.Handler = handler
 
 	var serverExecutor = conf.ServerExecutor
-	var messageHandlerExecutePool *taskpool.MixedPool
+	var messageHandlerExecutePool *taskpool.TaskPool
 	if serverExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
-		messageHandlerExecutePool = taskpool.NewMixedPool(nativeSize, 1, 1024*1024, true)
+		messageHandlerExecutePool = taskpool.New(nativeSize, 1024*1024, true)
 		serverExecutor = messageHandlerExecutePool.Go
 	}
 
 	var clientExecutor = conf.ClientExecutor
-	var clientExecutePool *taskpool.MixedPool
+	var clientExecutePool *taskpool.TaskPool
 	var goExecutor = func(f func()) {
 		go func() { // avoid deadlock
 			defer func() {
@@ -830,7 +841,7 @@ func NewEngine(conf Config) *Engine {
 	}
 	if clientExecutor == nil {
 		if !conf.SupportServerOnly {
-			clientExecutePool = taskpool.NewMixedPool(runtime.NumCPU()*1024-1, 1, 1024*1024)
+			clientExecutePool = taskpool.New(runtime.NumCPU()*1024-1, 1, 1024*1024)
 			clientExecutor = clientExecutePool.Go
 		} else {
 			clientExecutor = goExecutor
@@ -856,11 +867,24 @@ func NewEngine(conf Config) *Engine {
 	g := nbio.NewEngine(gopherConf)
 	g.Execute = serverExecutor
 
+	// init non-tls addr configs
 	for i, addr := range conf.Addrs {
-		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.Addrs[i]})
+		conf.AddrConfigs = append(conf.AddrConfigs, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.Addrs[i], NListener: conf.NListener})
 	}
+	for i := range conf.AddrConfigs {
+		if conf.AddrConfigs[i].NListener <= 0 {
+			conf.AddrConfigs[i].NListener = 1
+		}
+	}
+
+	// init tls addr configs
 	for i, addr := range conf.AddrsTLS {
-		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.AddrsTLS[i]})
+		conf.AddrConfigsTLS = append(conf.AddrConfigsTLS, ConfAddr{Network: conf.Network, Addr: addr, pAddr: &conf.AddrsTLS[i], NListener: conf.NListener})
+	}
+	for i := range conf.AddrConfigsTLS {
+		if conf.AddrConfigsTLS[i].NListener <= 0 {
+			conf.AddrConfigsTLS[i].NListener = 1
+		}
 	}
 
 	engine := &Engine{
