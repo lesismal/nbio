@@ -40,7 +40,7 @@ type Config struct {
 	// Name describes your gopher name for logging, it's set to "NB" by default.
 	Name string
 
-	// Network is the listening protocol, used with Addrs toghter.
+	// Network is the listening protocol, used with Addrs together.
 	// tcp* supported only by now, there's no plan for other protocol such as udp,
 	// because it's too easy to write udp server/client.
 	Network string
