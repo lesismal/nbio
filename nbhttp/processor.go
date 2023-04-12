@@ -50,7 +50,7 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 				}
 				bodyReaderPool.Put(br)
 			} else if !retainHTTPBody {
-				br.Close()
+				req.Body.Close()
 			}
 		}
 		// fast gc for fields
