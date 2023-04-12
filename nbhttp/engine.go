@@ -820,7 +820,7 @@ func NewEngine(conf Config) *Engine {
 			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
-		messageHandlerExecutePool = taskpool.New(nativeSize, 1024*1024, true)
+		messageHandlerExecutePool = taskpool.New(nativeSize, 1024*64)
 		serverExecutor = messageHandlerExecutePool.Go
 	}
 
@@ -841,7 +841,7 @@ func NewEngine(conf Config) *Engine {
 	}
 	if clientExecutor == nil {
 		if !conf.SupportServerOnly {
-			clientExecutePool = taskpool.New(runtime.NumCPU()*1024-1, 1, 1024*1024)
+			clientExecutePool = taskpool.New(runtime.NumCPU()*1024-1, 1024*64)
 			clientExecutor = clientExecutePool.Go
 		} else {
 			clientExecutor = goExecutor
