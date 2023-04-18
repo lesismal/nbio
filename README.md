@@ -26,24 +26,25 @@
 ## Contents
 
 - [NBIO - NON-BLOCKING IO](#nbio---non-blocking-io)
-  - [Contents](#contents)
-  - [Features](#features)
-  - [Installation](#installation)
-  - [Quick Start](#quick-start)
-  - [TCP Echo Examples](#tcp-echo-examples)
-  - [UDP Echo Examples](#udp-echo-examples)
-  - [Bind User Session With Conn](#bind-user-session-with-conn)
-  - [SetDeadline/SetReadDeadline/SetWriteDeadline](#setdeadlinesetreaddeadlinesetwritedeadline)
-  - [TLS Examples](#tls-examples)
-  - [HTTP Examples](#http-examples)
-  - [HTTPS Examples](#https-examples)
-  - [Websocket Examples](#websocket-examples)
-  - [Websocket TLS Examples](#websocket-tls-examples)
-  - [Use With Other STD Based Frameworkds](#use-with-other-std-based-frameworkds)
-  - [Magics For HTTP and Websocket](#magics-for-http-and-websocket)
-    - [Different IOMod](#different-iomod)
-    - [Using Websocket With Std Server](#using-websocket-with-std-server)
-  - [More Examples](#more-examples)
+	- [Contents](#contents)
+	- [Features](#features)
+		- [Cross Platform](#cross-platform)
+		- [Protocols Supported](#protocols-supported)
+		- [Interfaces](#interfaces)
+	- [Quick Start](#quick-start)
+	- [TCP Echo Examples](#tcp-echo-examples)
+	- [UDP Echo Examples](#udp-echo-examples)
+	- [TLS Examples](#tls-examples)
+	- [HTTP Examples](#http-examples)
+	- [HTTPS Examples](#https-examples)
+	- [Websocket Examples](#websocket-examples)
+	- [Websocket TLS Examples](#websocket-tls-examples)
+	- [Use With Other STD Based Frameworkds](#use-with-other-std-based-frameworkds)
+	- [Magics For HTTP and Websocket](#magics-for-http-and-websocket)
+		- [Different IOMod](#different-iomod)
+		- [Using Websocket With Std Server](#using-websocket-with-std-server)
+	- [More Examples](#more-examples)
+	- [Credits](#credits)
 
 ## Features
 ### Cross Platform
@@ -150,11 +151,11 @@ func main() {
 
 ### Different IOMod
 
-| IOMod  | Remarks |
-| ------------- |:-------------:|
-| IOModNonBlocking     | There's no difference between this IOMod and the old version with no IOMod. All the connections will be handled by poller.     |
-| IOModBlocking      |  All the connections will be handled by at least one goroutine, for websocket, we can set Upgrader.BlockingModAsyncWrite=true to handle writting with a separated goroutine and then avoid Head-of-line blocking on broadcasting scenarios.    |
-| IOModMixed      | We set the Engine.MaxBlockingOnline, if the online num is smaller than it, the new connection will be handled by single goroutine as IOModBlocking, else the new connection will be handled by poller.     |
+| IOMod            |                                                                                                                  Remarks                                                                                                                   |
+| ---------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| IOModNonBlocking |                                                         There's no difference between this IOMod and the old version with no IOMod. All the connections will be handled by poller.                                                         |
+| IOModBlocking    | All the connections will be handled by at least one goroutine, for websocket, we can set Upgrader.BlockingModAsyncWrite=true to handle writting with a separated goroutine and then avoid Head-of-line blocking on broadcasting scenarios. |
+| IOModMixed       |                   We set the Engine.MaxBlockingOnline, if the online num is smaller than it, the new connection will be handled by single goroutine as IOModBlocking, else the new connection will be handled by poller.                   |
 
 The `IOModBlocking` aims to improve the performance for low online service, it runs faster than std. 
 The `IOModMixed` aims to keep a balance between performance and cpu/mem cost in different scenarios: when there are not too many online connections, it performs better than std, or else it can serve lots of online connections and keep healthy.
@@ -198,3 +199,9 @@ func main() {
 ## More Examples
 
 - [nbio-examples](https://github.com/lesismal/nbio-examples)
+
+
+## Credits
+- [xtaci/gaio](https://github.com/xtaci/gaio)
+- [gorilla/websocket](https://github.com/gorilla/websocket)
+- [crossbario/autobahn](https://github.com/crossbario)
