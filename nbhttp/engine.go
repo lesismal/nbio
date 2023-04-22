@@ -26,7 +26,7 @@ import (
 const (
 	// IOModNonBlocking represents that the server serve all the connections by nbio poller goroutines to handle io events.
 	IOModNonBlocking = 0
-	// IOModBlocking represents that the server serve each connection with one goroutien at least to handle reading.
+	// IOModBlocking represents that the server serve each connection with one goroutine at least to handle reading.
 	IOModBlocking = 1
 	// IOModMixed represents that the server creates listener mux to handle different connections, 1 listener will be dispatch to two ChanListener:
 	// If ChanListener A's online is less than its max online num, the new connection will be dispatch to this listener A and served by single goroutine;
