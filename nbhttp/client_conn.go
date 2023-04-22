@@ -266,7 +266,9 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			} else {
 				tlsConfig = tlsConfig.Clone()
 			}
-			tlsConfig.ServerName = req.URL.Host
+			if tlsConfig.ServerName == "" {
+				tlsConfig.ServerName = host
+			}
 			tlsConn := tls.NewConn(netConn, tlsConfig, true, false, mempool.DefaultMemPool)
 			err = tlsConn.Handshake()
 			if err != nil {

@@ -148,7 +148,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 	var res *http.Response
 	var errCh chan error
 	if asyncHandler == nil {
-		errCh = make(chan error)
+		errCh = make(chan error, 1)
 	}
 
 	cliConn := &nbhttp.ClientConn{
