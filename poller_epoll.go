@@ -302,7 +302,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	r0, _, e0 := syscall.Syscall(syscall.SYS_EVENTFD2, 0, syscall.O_NONBLOCK, 0)
 	if e0 != 0 {
 		syscall.Close(fd)
-		return nil, err
+		return nil, e0
 	}
 
 	err = syscall.EpollCtl(fd, syscall.EPOLL_CTL_ADD, int(r0),
