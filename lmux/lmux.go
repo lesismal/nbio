@@ -63,7 +63,7 @@ func (lm *ListenerMux) Mux(l net.Listener) (*ChanListener, *ChanListener) {
 	return ab.a, ab.b
 }
 
-// Start starts to accpet and dispatch the connections to ChanListener A or B.
+// Start starts to accept and dispatch the connections to ChanListener A or B.
 func (lm *ListenerMux) Start() {
 	if lm == nil {
 		return
