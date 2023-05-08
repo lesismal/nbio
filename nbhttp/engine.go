@@ -400,6 +400,11 @@ func (e *Engine) Start() error {
 // Stop .
 func (e *Engine) Stop() {
 	e.shutdown = true
+
+	if e.Cancel != nil {
+		e.Cancel()
+	}
+
 	e.stopListeners()
 	e.Engine.Stop()
 }

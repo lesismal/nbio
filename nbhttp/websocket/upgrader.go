@@ -384,9 +384,6 @@ func (wr *WebsocketReader) BlockingModReadLoop() {
 
 	defer func() {
 		wr.Close(nil, err)
-		if wr.BlockingModAsyncWrite && conn.chAsyncWrite != nil {
-			close(conn.chAsyncWrite)
-		}
 	}()
 
 	for {

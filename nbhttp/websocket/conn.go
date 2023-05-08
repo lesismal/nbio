@@ -111,30 +111,20 @@ func validCloseCode(code int) bool {
 
 // OnClose .
 func (c *Conn) OnClose(h func(*Conn, error)) {
-	if h != nil {
-		c.onClose = func(c *Conn, err error) {
-			c.mux.Lock()
-			defer c.mux.Unlock()
-			if !c.onCloseCalled {
-				c.onCloseCalled = true
-				// if c.chAsyncWrite != nil {
-				// 	close(c.chAsyncWrite)
-				// c.chAsyncWrite = nil
-				// }
-				h(c, err)
+	if h == nil {
+		h = func(*Conn, error) {}
+	}
+	c.onClose = func(c *Conn, err error) {
+		c.mux.Lock()
+		defer c.mux.Unlock()
+		if !c.onCloseCalled {
+			c.onCloseCalled = true
+			if c.chAsyncWrite != nil {
+				close(c.chAsyncWrite)
+				c.chAsyncWrite = nil
 			}
+			h(c, err)
 		}
-
-		// now all the upgrade, frames/messages and close are called in order
-		// nbc, ok := c.Conn.(*nbio.Conn)
-		// if ok {
-		// 	nbc.Lock()
-		// 	defer nbc.Unlock()
-		// 	closed, err := nbc.IsClosed()
-		// 	if closed {
-		// 		c.onClose(c, err)
-		// 	}
-		// }
 	}
 }
 
