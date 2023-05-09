@@ -37,4 +37,3 @@ cleanup() {
 ./autobahn/bin/autobahn_reporter ${PWD}/autobahn/report/index.json
 
 cleanup
-
