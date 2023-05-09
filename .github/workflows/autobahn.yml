@@ -1,39 +1,40 @@
-name: CI
+name: Autobahn
 
 on:
   push:
-    branches: 
+    branches:
       - master
       - dev
   pull_request:
-    branches: 
+    branches:
       - master
       - dev
-      
+
 jobs:
-  test:
+  Autobahn:
     strategy:
       matrix:
         os: [ ubuntu-latest ]
         go: [ 1.18.x ]
     runs-on: ${{ matrix.os }}
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Setup Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: ${{ matrix.go }}
-    - name: Autobahn
-      env:
-        CRYPTOGRAPHY_ALLOW_OPENSSL_102: yes
-      run: |
-        make test autobahn
-    - name: Autobahn Report Artifact
-      if: >-
-        startsWith(matrix.os, 'ubuntu')
-      uses: actions/upload-artifact@v2
-      with:
-        name: autobahn report ${{ matrix.go }} ${{ matrix.os }}
-        path: autobahn/report
-        retention-days: 7
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Autobahn Test
+        env:
+          CRYPTOGRAPHY_ALLOW_OPENSSL_102: yes
+        run: |
+          chmod +x ./autobahn/script/run.sh & ./autobahn/script/run.sh
+      - name: Autobahn Report Artifact
+        if: >-
+          startsWith(matrix.os, 'ubuntu')
+        uses: actions/upload-artifact@v2
+
+        with:
+          name: autobahn report ${{ matrix.go }} ${{ matrix.os }}
+          path: autobahn/report
+          retention-days: 7
