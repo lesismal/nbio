@@ -1,5 +1,5 @@
-github.com/lesismal/llib v1.1.10 h1:6k6OYfp5+CYEK2nGAytpC6l9FO+nNs7gA/mpK+lPUkI=
-github.com/lesismal/llib v1.1.10/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
+github.com/lesismal/llib v1.1.11 h1:4m5LViUfKQ8AZHcT221mjFtjk+/70E+2L/h3DAAzuW0=
+github.com/lesismal/llib v1.1.11/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 golang.org/x/crypto v0.0.0-20190308221718-c2843e01d9a2/go.mod h1:djNgcEr1/C05ACkg1iLfiJU5Ep61QUkGW8qpdssI0+w=
 golang.org/x/crypto v0.0.0-20210513122933-cd7d49e622d5/go.mod h1:P+XmwS30IXTQdn5tA2iutPOUgjI07+tq3H3K9MVA1s8=
