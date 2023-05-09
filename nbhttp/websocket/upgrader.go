@@ -11,11 +11,9 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"runtime"
 	"strings"
 	"time"
 	"unicode/utf8"
-	"unsafe"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
@@ -282,24 +280,14 @@ func (wr *WebsocketReader) UpgradeAndTransfer(w http.ResponseWriter, r *http.Req
 	}
 
 	engine := wr.Engine
-	parser := &nbhttp.Parser{Execute: func(f func()) bool {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
-		return true
-	}}
+
 	switch vt := conn.(type) {
 	case *net.TCPConn:
 		nbc, err := nbio.NBConn(vt)
 		if err != nil {
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
+		parser := &nbhttp.Parser{Execute: nbc.Execute}
 		nbc.OnData(func(c *nbio.Conn, data []byte) {
 			err := wr.Read(parser, data)
 			if err != nil {
@@ -319,6 +307,7 @@ func (wr *WebsocketReader) UpgradeAndTransfer(w http.ResponseWriter, r *http.Req
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
 		vt.ResetRawInput()
+		parser := &nbhttp.Parser{Execute: nbc.Execute}
 		nbc.OnData(func(c *nbio.Conn, data []byte) {
 			defer vt.ResetOrFreeBuffer()
 
