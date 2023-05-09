@@ -18,17 +18,8 @@ clean:
 	rm -rf ./autobahn/bin/*
 	rm -rf ./autobahn/report/*
 
-autobahn/init:
-	mkdir -p ./autobahn/bin
-
-autobahn/nbio_server:
-	$(GO) build -o ./autobahn/bin/nbio_autobahn_server ./autobahn/server
-
-autobahn/nbio_reporter:
-	$(GO) build -o ./autobahn/bin/nbio_autobahn_reporter ./autobahn/reporter
-
-autobahn: clean autobahn/init autobahn/nbio_server autobahn/nbio_reporter
-	./autobahn/script/run_autobahn.sh
+autobahn:
+	chmod +x ./autobahn/script/run.sh & ./autobahn/script/run.sh
 
 .PHONY: all vet lint test clean  autobahn
 
