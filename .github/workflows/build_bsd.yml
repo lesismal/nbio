@@ -1,4 +1,4 @@
-name: build-macos
+name: Build-BSD
 
 on:
   push:
@@ -14,8 +14,8 @@ env:
   GO111MODULE: off
 
 jobs:
-  test:
-    name: build-macos
+  Build-BSD:
+    name: Build-BSD
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +27,7 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: ${{ matrix.go }}
-      - name: checkout code
+      - name: checkout
         uses: actions/checkout@v2
       - name: go env
         run: |

@@ -302,7 +302,7 @@ func (e *Engine) startListeners() error {
 				if conf.pAddr != nil {
 					*conf.pAddr = conf.Addr
 				}
-				logging.Info("Serve     TLS On: [%v@%v]", conf.Network, conf.Addr)
+				logging.Info("Serve HTTPS On: [%v@%v]", conf.Network, conf.Addr)
 
 				tlsConfig := conf.TLSConfig
 				if tlsConfig == nil {
@@ -351,7 +351,7 @@ func (e *Engine) startListeners() error {
 					*conf.pAddr = conf.Addr
 				}
 
-				logging.Info("Serve  NonTLS On: [%v@%v]", conf.Network, conf.Addr)
+				logging.Info("Serve HTTP On: [%v@%v]", conf.Network, conf.Addr)
 
 				switch e.IOMod {
 				case IOModMixed:
@@ -400,6 +400,11 @@ func (e *Engine) Start() error {
 // Stop .
 func (e *Engine) Stop() {
 	e.shutdown = true
+
+	if e.Cancel != nil {
+		e.Cancel()
+	}
+
 	e.stopListeners()
 	e.Engine.Stop()
 }
