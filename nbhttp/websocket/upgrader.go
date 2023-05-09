@@ -265,7 +265,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 	return wr.conn, nil
 }
 
-func (wr *WebsocketReader) UpgradeAndTransfer(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
+func (wr *WebsocketReader) UpgradeAndTransferStdConnToPoller(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
 	challengeKey, subprotocol, compress, err := wr.commCheck(w, r, responseHeader)
 	if err != nil {
 		return nil, err
