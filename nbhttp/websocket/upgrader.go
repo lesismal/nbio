@@ -288,6 +288,7 @@ func (wr *WebsocketReader) UpgradeAndTransfer(w http.ResponseWriter, r *http.Req
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
 		parser := &nbhttp.Parser{Execute: nbc.Execute}
+		nbc.SetSession(wr)
 		nbc.OnData(func(c *nbio.Conn, data []byte) {
 			err := wr.Read(parser, data)
 			if err != nil {
@@ -306,6 +307,7 @@ func (wr *WebsocketReader) UpgradeAndTransfer(w http.ResponseWriter, r *http.Req
 		if err != nil {
 			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 		}
+		nbc.SetSession(wr)
 		vt.ResetRawInput()
 		parser := &nbhttp.Parser{Execute: nbc.Execute}
 		nbc.OnData(func(c *nbio.Conn, data []byte) {
