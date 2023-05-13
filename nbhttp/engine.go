@@ -536,6 +536,21 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
+// AddConnTLSNonBlocking .
+func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
+	engine.mux.Lock()
+	if len(engine.conns) >= engine.MaxLoad {
+		engine.mux.Unlock()
+		nbc.Close()
+		return ErrServiceOverload
+	}
+	engine.conns[nbc] = struct{}{}
+	engine.mux.Unlock()
+	engine._onOpen(nbc)
+	engine.AddConn(nbc)
+	return nil
+}
+
 // AddConnNonTLSNonBlocking .
 func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(c)
@@ -915,9 +930,14 @@ func NewEngine(conf Config) *Engine {
 	// g.OnOpen(engine.ServerOnOpen)
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
-			parser, ok := c.Session().(*Parser)
-			if ok && parser != nil {
-				parser.Close(err)
+			switch vt := c.Session().(type) {
+			case *Parser:
+				vt.Close(err)
+			case interface {
+				Close(*Parser, error)
+			}:
+				vt.Close(nil, err)
+			default:
 			}
 			engine._onClose(c, err)
 			engine.mux.Lock()
