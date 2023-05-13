@@ -636,9 +636,10 @@ func (wr *WebsocketReader) Read(p *nbhttp.Parser, data []byte) error {
 				if wr.messageHandler != nil {
 					if wr.compress {
 						if wr.Engine.WebsocketDecompressor != nil {
+							var b []byte
 							decompressor := wr.Engine.WebsocketDecompressor()
 							defer decompressor.Close()
-							b, err := decompressor.Decompress(wr.message)
+							b, err = decompressor.Decompress(wr.message)
 							if err != nil {
 								break
 							}
