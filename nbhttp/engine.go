@@ -189,6 +189,17 @@ type Config struct {
 	MaxBlockingOnline int
 	// BlockingReadBufferSize represents read buffer size of blocking mod.
 	BlockingReadBufferSize int
+
+	// WebsocketCompressor .
+	WebsocketCompressor func() interface {
+		Compress([]byte) []byte
+		Close()
+	}
+	// WebsocketDecompressor .
+	WebsocketDecompressor func() interface {
+		Decompress([]byte) ([]byte, error)
+		Close()
+	}
 }
 
 // Engine .

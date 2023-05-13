@@ -635,14 +635,25 @@ func (wr *WebsocketReader) Read(p *nbhttp.Parser, data []byte) error {
 			if fin {
 				if wr.messageHandler != nil {
 					if wr.compress {
-						var b []byte
-						rc := decompressReader(io.MultiReader(bytes.NewBuffer(wr.message), strings.NewReader(flateReaderTail)))
-						b, err = wr.readAll(rc, len(wr.message)*2)
-						wr.Engine.BodyAllocator.Free(wr.message)
-						wr.message = b
-						rc.Close()
-						if err != nil {
-							break
+						if wr.Engine.WebsocketDecompressor != nil {
+							decompressor := wr.Engine.WebsocketDecompressor()
+							defer decompressor.Close()
+							b, err := decompressor.Decompress(wr.message)
+							if err != nil {
+								break
+							}
+							wr.Engine.BodyAllocator.Free(wr.message)
+							wr.message = b
+						} else {
+							var b []byte
+							rc := decompressReader(io.MultiReader(bytes.NewBuffer(wr.message), strings.NewReader(flateReaderTail)))
+							b, err = wr.readAll(rc, len(wr.message)*2)
+							wr.Engine.BodyAllocator.Free(wr.message)
+							wr.message = b
+							rc.Close()
+							if err != nil {
+								break
+							}
 						}
 					}
 					wr.handleMessage(p, wr.opcode, wr.message)
