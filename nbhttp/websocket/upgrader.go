@@ -209,13 +209,14 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 	}
 
+	var nbc *nbio.Conn
 	var engine = wr.Engine
 	var parser *nbhttp.Parser
 	var transferConn bool
 	if len(args) > 0 {
-		if b, ok := args[0].(bool); ok {
-			transferConn = b
-		}
+		var b bool
+		b, ok = args[0].(bool)
+		transferConn = ok && b
 	}
 	switch vt := conn.(type) {
 	case *nbio.Conn:
@@ -230,19 +231,19 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		wr.Engine = parser.Engine
 	case *tls.Conn:
 		// Scenario 2: llib's *tls.Conn.
-		nbc, ok := vt.Conn().(*nbio.Conn)
+		nbc, ok = vt.Conn().(*nbio.Conn)
 		if !ok {
 			// 2.1 The conn may be from std's http.Server.Serve(llib's tls.Listener),
 			//     or from nbhttp.Engine's IOModBlocking/Mixed(blocking part).
 			if transferConn {
 				// 2.1.1 Transfer the conn to poller.
-				nbc, err := nbio.NBConn(vt.Conn())
+				nbc, err = nbio.NBConn(vt.Conn())
 				if err != nil {
 					return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 				}
 				nbc.SetSession(wr)
 				vt.ResetRawInput()
-				parser := &nbhttp.Parser{Execute: nbc.Execute}
+				parser = &nbhttp.Parser{Execute: nbc.Execute}
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
 					defer func() {
 						if err := recover(); err != nil {
@@ -254,20 +255,22 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 					}()
 					defer vt.ResetOrFreeBuffer()
 
-					readed := data
-					buffer := data
+					var nread int
+					var readed = data
+					var buffer = data
+					var errRead error
 					for {
-						_, nread, err := vt.AppendAndRead(readed, buffer)
+						_, nread, errRead = vt.AppendAndRead(readed, buffer)
 						readed = nil
-						if err != nil {
+						if errRead != nil {
 							c.CloseWithError(err)
 							return
 						}
 						if nread > 0 {
-							err := wr.Read(parser, buffer[:nread])
+							errRead = wr.Read(parser, buffer[:nread])
 							if err != nil {
-								logging.Debug("WebsocketReader.Read failed: %v", err)
-								c.CloseWithError(err)
+								logging.Debug("WebsocketReader.Read failed: %v", errRead)
+								c.CloseWithError(errRead)
 								return
 							}
 						}
@@ -285,7 +288,8 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 				wr.conn = NewConn(wr, vt, subprotocol, compress, false)
 			} else {
 				// 2.1.2 Don't transfer the conn to poller.
-				nbResonse, ok := w.(*nbhttp.Response)
+				var nbResonse *nbhttp.Response
+				nbResonse, ok = w.(*nbhttp.Response)
 				if ok {
 					parser = nbResonse.Parser
 					parser.Reader = wr
@@ -308,11 +312,11 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		// Scenario 3: std's *net.TCPConn.
 		if transferConn {
 			// 3.1 Transfer the conn to poller.
-			nbc, err := nbio.NBConn(vt)
+			nbc, err = nbio.NBConn(vt)
 			if err != nil {
 				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
 			}
-			parser := &nbhttp.Parser{Execute: nbc.Execute}
+			parser = &nbhttp.Parser{Execute: nbc.Execute}
 			nbc.SetSession(wr)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
 				defer func() {
@@ -324,10 +328,10 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 					}
 				}()
 
-				err := wr.Read(parser, data)
-				if err != nil {
-					logging.Debug("WebsocketReader.Read failed: %v", err)
-					c.CloseWithError(err)
+				errRead := wr.Read(parser, data)
+				if errRead != nil {
+					logging.Debug("WebsocketReader.Read failed: %v", errRead)
+					c.CloseWithError(errRead)
 					return
 				}
 			})
@@ -342,7 +346,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
 		}
 	default:
-		// Scenario 4: Unkonwn conn type, mostly is std's *tls.Conn, from std's http.Server.
+		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
 		nbResonse, ok := w.(*nbhttp.Response)
 		if ok {
 			parser = nbResonse.Parser
