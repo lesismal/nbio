@@ -218,6 +218,15 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		b, ok = args[0].(bool)
 		transferConn = ok && b
 	}
+
+	getParser := func() {
+		var nbResonse *nbhttp.Response
+		nbResonse, ok = w.(*nbhttp.Response)
+		if ok {
+			parser = nbResonse.Parser
+			parser.Reader = wr
+		}
+	}
 	switch vt := conn.(type) {
 	case *nbio.Conn:
 		// Scenario 1: *nbio.Conn, handled by nbhttp.Engine.
@@ -288,12 +297,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 				wr.conn = NewConn(wr, vt, subprotocol, compress, false)
 			} else {
 				// 2.1.2 Don't transfer the conn to poller.
-				var nbResonse *nbhttp.Response
-				nbResonse, ok = w.(*nbhttp.Response)
-				if ok {
-					parser = nbResonse.Parser
-					parser.Reader = wr
-				}
+				getParser()
 				wr.isBlockingMod = true
 				wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
 			}
@@ -342,16 +346,13 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			wr.conn = NewConn(wr, nbc, subprotocol, compress, false)
 		} else {
 			// 3.2 Don't transfer the conn to poller.
+			getParser()
 			wr.isBlockingMod = true
 			wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
 		}
 	default:
 		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
-		nbResonse, ok := w.(*nbhttp.Response)
-		if ok {
-			parser = nbResonse.Parser
-			parser.Reader = wr
-		}
+		getParser()
 		wr.isBlockingMod = true
 		wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
 	}
