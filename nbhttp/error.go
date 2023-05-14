@@ -89,3 +89,7 @@ var (
 	// ErrClientClosed .
 	ErrClientClosed = errors.New("http client closed")
 )
+
+var (
+	ErrServiceOverload = errors.New("service overload")
+)

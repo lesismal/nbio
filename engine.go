@@ -18,7 +18,7 @@ import (
 
 const (
 	// DefaultReadBufferSize .
-	DefaultReadBufferSize = 1024 * 32
+	DefaultReadBufferSize = 1024 * 64
 
 	// DefaultMaxWriteBufferSize .
 	DefaultMaxWriteBufferSize = 1024 * 1024
