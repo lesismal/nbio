@@ -11,9 +11,11 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 	"unicode/utf8"
+	"unsafe"
 
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
@@ -192,25 +194,209 @@ func (wr *WebsocketReader) SetCompressionLevel(level int) error {
 }
 
 // Upgrade .
-func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (net.Conn, error) {
+func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header, args ...interface{}) (*Conn, error) {
+	challengeKey, subprotocol, compress, err := wr.commCheck(w, r, responseHeader)
+	if err != nil {
+		return nil, err
+	}
+
+	h, ok := w.(http.Hijacker)
+	if !ok {
+		return nil, wr.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
+	}
+	conn, _, err := h.Hijack()
+	if err != nil {
+		return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+	}
+
+	var nbc *nbio.Conn
+	var engine = wr.Engine
+	var parser *nbhttp.Parser
+	var transferConn bool
+	if len(args) > 0 {
+		var b bool
+		b, ok = args[0].(bool)
+		transferConn = ok && b
+	}
+	switch vt := conn.(type) {
+	case *nbio.Conn:
+		// Scenario 1: *nbio.Conn, handled by nbhttp.Engine.
+		parser, ok = vt.Session().(*nbhttp.Parser)
+		if !ok {
+			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+		}
+		parser.Reader = wr
+		wr.conn = NewConn(wr, conn, subprotocol, compress, false)
+		wr.conn.Engine = parser.Engine
+		wr.Engine = parser.Engine
+	case *tls.Conn:
+		// Scenario 2: llib's *tls.Conn.
+		nbc, ok = vt.Conn().(*nbio.Conn)
+		if !ok {
+			// 2.1 The conn may be from std's http.Server.Serve(llib's tls.Listener),
+			//     or from nbhttp.Engine's IOModBlocking/Mixed(blocking part).
+			if transferConn {
+				// 2.1.1 Transfer the conn to poller.
+				nbc, err = nbio.NBConn(vt.Conn())
+				if err != nil {
+					return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+				}
+				nbc.SetSession(wr)
+				vt.ResetRawInput()
+				parser = &nbhttp.Parser{Execute: nbc.Execute}
+				nbc.OnData(func(c *nbio.Conn, data []byte) {
+					defer func() {
+						if err := recover(); err != nil {
+							const size = 64 << 10
+							buf := make([]byte, size)
+							buf = buf[:runtime.Stack(buf, false)]
+							logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+						}
+					}()
+					defer vt.ResetOrFreeBuffer()
+
+					var nread int
+					var readed = data
+					var buffer = data
+					var errRead error
+					for {
+						_, nread, errRead = vt.AppendAndRead(readed, buffer)
+						readed = nil
+						if errRead != nil {
+							c.CloseWithError(err)
+							return
+						}
+						if nread > 0 {
+							errRead = wr.Read(parser, buffer[:nread])
+							if err != nil {
+								logging.Debug("WebsocketReader.Read failed: %v", errRead)
+								c.CloseWithError(errRead)
+								return
+							}
+						}
+						if nread == 0 {
+							return
+						}
+					}
+				})
+				nonblock := true
+				vt.ResetConn(nbc, nonblock)
+				err = engine.AddTransferredConn(nbc)
+				if err != nil {
+					return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+				}
+				wr.conn = NewConn(wr, vt, subprotocol, compress, false)
+			} else {
+				// 2.1.2 Don't transfer the conn to poller.
+				var nbResonse *nbhttp.Response
+				nbResonse, ok = w.(*nbhttp.Response)
+				if ok {
+					parser = nbResonse.Parser
+					parser.Reader = wr
+				}
+				wr.isBlockingMod = true
+				wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
+			}
+		} else {
+			// 2.2 The conn is from nbio poller.
+			parser, ok = nbc.Session().(*nbhttp.Parser)
+			if !ok {
+				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+			}
+			parser.Reader = wr
+			wr.conn = NewConn(wr, conn, subprotocol, compress, false)
+			wr.conn.Engine = parser.Engine
+			wr.Engine = parser.Engine
+		}
+	case *net.TCPConn:
+		// Scenario 3: std's *net.TCPConn.
+		if transferConn {
+			// 3.1 Transfer the conn to poller.
+			nbc, err = nbio.NBConn(vt)
+			if err != nil {
+				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+			}
+			parser = &nbhttp.Parser{Execute: nbc.Execute}
+			nbc.SetSession(wr)
+			nbc.OnData(func(c *nbio.Conn, data []byte) {
+				defer func() {
+					if err := recover(); err != nil {
+						const size = 64 << 10
+						buf := make([]byte, size)
+						buf = buf[:runtime.Stack(buf, false)]
+						logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+					}
+				}()
+
+				errRead := wr.Read(parser, data)
+				if errRead != nil {
+					logging.Debug("WebsocketReader.Read failed: %v", errRead)
+					c.CloseWithError(errRead)
+					return
+				}
+			})
+			err = engine.AddTransferredConn(nbc)
+			if err != nil {
+				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
+			}
+			wr.conn = NewConn(wr, nbc, subprotocol, compress, false)
+		} else {
+			// 3.2 Don't transfer the conn to poller.
+			wr.isBlockingMod = true
+			wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
+		}
+	default:
+		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
+		nbResonse, ok := w.(*nbhttp.Response)
+		if ok {
+			parser = nbResonse.Parser
+			parser.Reader = wr
+		}
+		wr.isBlockingMod = true
+		wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
+	}
+
+	err = wr.commResponse(wr.conn.Conn, responseHeader, challengeKey, subprotocol, compress)
+	if err != nil {
+		return nil, err
+	}
+
+	if wr.isBlockingMod {
+		if wr.BlockingModAsyncWrite {
+			go wr.BlockingModWriteLoop()
+		}
+		if parser == nil {
+			go wr.BlockingModReadLoop()
+		}
+	}
+
+	return wr.conn, nil
+}
+
+func (wr *WebsocketReader) UpgradeAndTransferConnToPoller(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
+	const trasferConn = true
+	return wr.Upgrade(w, r, responseHeader, trasferConn)
+}
+
+func (wr *WebsocketReader) commCheck(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (string, string, bool, error) {
 	if !headerContains(r.Header, "Connection", "upgrade") {
-		return nil, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
+		return "", "", false, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}
 
 	if !headerContains(r.Header, "Upgrade", "websocket") {
-		return nil, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
+		return "", "", false, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
 	}
 
 	if r.Method != "GET" {
-		return nil, wr.returnError(w, r, http.StatusMethodNotAllowed, ErrUpgradeMethodIsGet)
+		return "", "", false, wr.returnError(w, r, http.StatusMethodNotAllowed, ErrUpgradeMethodIsGet)
 	}
 
 	if !headerContains(r.Header, "Sec-Websocket-Version", "13") {
-		return nil, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeInvalidWebsocketVersion)
+		return "", "", false, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeInvalidWebsocketVersion)
 	}
 
 	if _, ok := responseHeader["Sec-Websocket-Extensions"]; ok {
-		return nil, wr.returnError(w, r, http.StatusInternalServerError, ErrUpgradeUnsupportedExtensions)
+		return "", "", false, wr.returnError(w, r, http.StatusInternalServerError, ErrUpgradeUnsupportedExtensions)
 	}
 
 	checkOrigin := wr.CheckOrigin
@@ -218,12 +404,12 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		checkOrigin = checkSameOrigin
 	}
 	if !checkOrigin(r) {
-		return nil, wr.returnError(w, r, http.StatusForbidden, ErrUpgradeOriginNotAllowed)
+		return "", "", false, wr.returnError(w, r, http.StatusForbidden, ErrUpgradeOriginNotAllowed)
 	}
 
 	challengeKey := r.Header.Get("Sec-Websocket-Key")
 	if challengeKey == "" {
-		return nil, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeMissingWebsocketKey)
+		return "", "", false, wr.returnError(w, r, http.StatusBadRequest, ErrUpgradeMissingWebsocketKey)
 	}
 
 	subprotocol := wr.selectSubprotocol(r, responseHeader)
@@ -239,57 +425,10 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 			break
 		}
 	}
+	return challengeKey, subprotocol, compress, nil
+}
 
-	h, ok := w.(http.Hijacker)
-	if !ok {
-		return nil, wr.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
-	}
-	conn, _, err := h.Hijack()
-	if err != nil {
-		return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
-	}
-
-	var parser *nbhttp.Parser
-	switch vt := conn.(type) {
-	case *nbio.Conn:
-		parser, ok = vt.Session().(*nbhttp.Parser)
-		if !ok {
-			return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
-		}
-		parser.Reader = wr
-		wr.conn = NewConn(wr, conn, subprotocol, compress, false)
-		wr.conn.Engine = parser.Engine
-		wr.Engine = parser.Engine
-	case *tls.Conn:
-		nbc, ok := vt.Conn().(*nbio.Conn)
-		if !ok {
-			parser, ok = vt.Session().(*nbhttp.Parser)
-			if !ok {
-				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
-			}
-			parser.Reader = wr
-			wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
-			wr.isBlockingMod = true
-		} else {
-			parser, ok = nbc.Session().(*nbhttp.Parser)
-			if !ok {
-				return nil, wr.returnError(w, r, http.StatusInternalServerError, err)
-			}
-			parser.Reader = wr
-			wr.conn = NewConn(wr, conn, subprotocol, compress, false)
-			wr.conn.Engine = parser.Engine
-			wr.Engine = parser.Engine
-		}
-	default:
-		nbResonse, ok := w.(*nbhttp.Response)
-		if ok {
-			parser = nbResonse.Parser
-			parser.Reader = wr
-		}
-		wr.conn = NewConn(wr, conn, subprotocol, compress, wr.BlockingModAsyncWrite)
-		wr.isBlockingMod = true
-	}
-
+func (wr *WebsocketReader) commResponse(conn net.Conn, responseHeader http.Header, challengeKey, subprotocol string, compress bool) error {
 	buf := mempool.Malloc(1024)[0:0]
 	buf = mempool.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
 	buf = mempool.Append(buf, acceptKeyBytes(challengeKey)...)
@@ -326,11 +465,11 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 		conn.SetWriteDeadline(time.Now().Add(wr.HandshakeTimeout))
 	}
 
-	_, err = conn.Write(buf)
+	_, err := conn.Write(buf)
 	mempool.Free(buf)
 	if err != nil {
 		conn.Close()
-		return nil, err
+		return err
 	}
 
 	if wr.KeepaliveTime <= 0 {
@@ -345,16 +484,7 @@ func (wr *WebsocketReader) Upgrade(w http.ResponseWriter, r *http.Request, respo
 
 	wr.conn.OnClose(wr.onClose)
 
-	if wr.isBlockingMod {
-		if wr.BlockingModAsyncWrite {
-			go wr.BlockingModWriteLoop()
-		}
-		if parser == nil {
-			go wr.BlockingModReadLoop()
-		}
-	}
-
-	return wr.conn, nil
+	return nil
 }
 
 // SetConn .
@@ -505,14 +635,26 @@ func (wr *WebsocketReader) Read(p *nbhttp.Parser, data []byte) error {
 			if fin {
 				if wr.messageHandler != nil {
 					if wr.compress {
-						var b []byte
-						rc := decompressReader(io.MultiReader(bytes.NewBuffer(wr.message), strings.NewReader(flateReaderTail)))
-						b, err = wr.readAll(rc, len(wr.message)*2)
-						wr.Engine.BodyAllocator.Free(wr.message)
-						wr.message = b
-						rc.Close()
-						if err != nil {
-							break
+						if wr.Engine.WebsocketDecompressor != nil {
+							var b []byte
+							decompressor := wr.Engine.WebsocketDecompressor()
+							defer decompressor.Close()
+							b, err = decompressor.Decompress(wr.message)
+							if err != nil {
+								break
+							}
+							wr.Engine.BodyAllocator.Free(wr.message)
+							wr.message = b
+						} else {
+							var b []byte
+							rc := decompressReader(io.MultiReader(bytes.NewBuffer(wr.message), strings.NewReader(flateReaderTail)))
+							b, err = wr.readAll(rc, len(wr.message)*2)
+							wr.Engine.BodyAllocator.Free(wr.message)
+							wr.message = b
+							rc.Close()
+							if err != nil {
+								break
+							}
 						}
 					}
 					wr.handleMessage(p, wr.opcode, wr.message)
