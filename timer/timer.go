@@ -190,7 +190,9 @@ func (t *Timer) loop() {
 				}
 				now := time.Now()
 				it := t.items[0]
-				if now.After(it.expire) {
+
+				// if the item is expired, remove item from heap, then call `f()` registered.
+				if it.expire.After(now) {
 					heap.Remove(&t.items, it.index)
 					t.mux.Unlock()
 					if t.executor != nil {
