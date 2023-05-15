@@ -25,6 +25,7 @@ type TaskPool struct {
 func (tp *TaskPool) Go(f func()) {
 	if atomic.AddInt64(&tp.concurrent, 1) < tp.maxConcurrent {
 		go func() {
+			defer atomic.AddInt64(&tp.concurrent, -1)
 			tp.caller(f)
 			for {
 				select {
@@ -68,7 +69,6 @@ func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
 				buf = buf[:runtime.Stack(buf, false)]
 				logging.Error("taskpool call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 			}
-			atomic.AddInt64(&tp.concurrent, -1)
 		}()
 		f()
 	}
