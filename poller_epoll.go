@@ -166,6 +166,14 @@ func (p *poller) readWriteLoop() {
 		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
+	resetEvent := func(c *Conn) {}
+
+	if p.g.epollMod == EPOLLET && p.g.epollOneshot == EPOLLONESHOT {
+		resetEvent := func(c *Conn) {
+			c.ResetPollerEvent()
+		}
+	}
+
 	p.shutdown = false
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
@@ -219,6 +227,7 @@ func (p *poller) readWriteLoop() {
 									break
 								}
 							}
+							resetEvent(c)
 						} else {
 							p.g.onRead(c)
 						}
