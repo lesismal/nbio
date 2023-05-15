@@ -161,17 +161,10 @@ func (p *poller) readWriteLoop() {
 
 	msec := -1
 	events := make([]syscall.EpollEvent, 1024)
+	isOneshot := p.g.epollMod == EPOLLET && p.g.epollOneshot == EPOLLONESHOT
 
 	if p.g.onRead == nil && p.g.epollMod == EPOLLET {
 		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
-	}
-
-	resetEvent := func(c *Conn) {}
-
-	if p.g.epollMod == EPOLLET && p.g.epollOneshot == EPOLLONESHOT {
-		resetEvent := func(c *Conn) {
-			c.ResetPollerEvent()
-		}
 	}
 
 	p.shutdown = false
@@ -227,7 +220,9 @@ func (p *poller) readWriteLoop() {
 									break
 								}
 							}
-							resetEvent(c)
+							if isOneshot {
+								c.ResetPollerEvent()
+							}
 						} else {
 							p.g.onRead(c)
 						}
