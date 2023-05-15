@@ -13,7 +13,7 @@ func TestTimer(t *testing.T) {
 	tg.Start()
 	defer tg.Stop()
 
-	timeout := time.Second / 100
+	timeout := time.Second / 50
 
 	testAsync(tg)
 	testTimerNormal(tg, timeout)

@@ -945,9 +945,9 @@ func NewEngine(conf Config) *Engine {
 			case *Parser:
 				vt.Close(err)
 			case interface {
-				Close(*Parser, error)
+				CloseAndClean(error)
 			}:
-				vt.Close(nil, err)
+				vt.CloseAndClean(err)
 			default:
 			}
 			engine._onClose(c, err)
