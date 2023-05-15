@@ -606,10 +606,10 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 			go func() {
 				i := 0
 				for {
-					buf := c.sendQueue[i]
+					b := c.sendQueue[i]
 					c.sendQueue[i] = nil
-					_, err := c.Conn.Write(buf)
-					mempool.Free(buf)
+					_, err := c.Conn.Write(b)
+					mempool.Free(b)
 					if err != nil {
 						c.sendQueue = c.sendQueue[i:]
 						return
