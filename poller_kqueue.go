@@ -25,6 +25,9 @@ const (
 
 	// EPOLLET .
 	EPOLLET = 1
+
+	// EPOLLONESHOT .
+	EPOLLONESHOT = 0
 )
 
 const (
@@ -302,4 +305,8 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	}
 
 	return p, nil
+}
+
+func (c *Conn) ResetPollerEvent() {
+
 }

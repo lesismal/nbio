@@ -143,6 +143,7 @@ func NewEngine(conf Config) *Engine {
 		maxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
 		udpReadTimeout:               conf.UDPReadTimeout,
 		epollMod:                     conf.EpollMod,
+		epollOneshot:                 conf.EPOLLONESHOT,
 		lockListener:                 conf.LockListener,
 		lockPoller:                   conf.LockPoller,
 		listeners:                    make([]*poller, len(conf.Addrs))[0:0],

@@ -56,12 +56,13 @@ type Conn struct {
 
 	session interface{}
 
-	chAsyncWrite chan []byte
+	sendQueue     [][]byte
+	sendQueueSize int
 
 	subprotocol string
 
+	closed                   bool
 	isClient                 bool
-	onCloseCalled            bool
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	isBlockingMod            bool
@@ -75,6 +76,16 @@ type Conn struct {
 // Close .
 func (c *Conn) Close() error {
 	return c.Conn.Close()
+}
+
+func (c *Conn) clearSendQueue() {
+	c.mux.Lock()
+	sendQueue := c.sendQueue
+	c.sendQueue = [][]byte{}
+	c.mux.Unlock()
+	for _, buf := range sendQueue {
+		mempool.Free(buf)
+	}
 }
 
 // CompressionEnabled .
@@ -414,30 +425,24 @@ func (c *Conn) EnableCompression(enable bool) {
 	c.enableCompression = enable
 }
 
-// OnClose .
 func (c *Conn) OnClose(h func(*Conn, error)) {
 	if h == nil {
 		h = func(*Conn, error) {}
 	}
 	c.onClose = func(c *Conn, err error) {
 		c.mux.Lock()
-		defer c.mux.Unlock()
-		if !c.onCloseCalled {
-			c.onCloseCalled = true
-			if c.chAsyncWrite != nil {
-				close(c.chAsyncWrite)
-				c.chAsyncWrite = nil
-			}
+		closed := c.closed
+		c.closed = true
+		c.mux.Unlock()
+		if !closed {
 			h(c, err)
+			c.clearSendQueue()
 		}
 	}
 }
 
 // WriteMessage .
 func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
 	switch messageType {
 	case TextMessage:
 	case BinaryMessage:
@@ -580,15 +585,56 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		buf[0] |= byte(0x80)
 	}
 
-	if c.chAsyncWrite != nil {
-		select {
-		case c.chAsyncWrite <- buf:
-		default:
+	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+		mempool.Free(buf)
+		return net.ErrClosed
+	}
+
+	if c.sendQueue != nil {
+		if c.sendQueueSize > 0 && len(c.sendQueue) >= c.sendQueueSize {
+			c.mux.Unlock()
 			mempool.Free(buf)
 			return ErrMessageSendQuqueIsFull
 		}
+		c.sendQueue = append(c.sendQueue, buf)
+		isHead := (len(c.sendQueue) == 1)
+		c.mux.Unlock()
+
+		if isHead {
+			go func() {
+				i := 0
+				for {
+					buf := c.sendQueue[i]
+					c.sendQueue[i] = nil
+					_, err := c.Conn.Write(buf)
+					mempool.Free(buf)
+					if err != nil {
+						c.sendQueue = c.sendQueue[i:]
+						return
+					}
+
+					i++
+					c.mux.Lock()
+					if c.closed {
+						c.sendQueue = c.sendQueue[i:]
+						c.mux.Unlock()
+						return
+					}
+					if len(c.sendQueue) == i {
+						c.sendQueue = c.sendQueue[0:0]
+						c.mux.Unlock()
+						return
+					}
+
+					c.mux.Unlock()
+				}
+			}()
+		}
 		return nil
 	}
+	c.mux.Unlock()
 
 	_, err := c.Conn.Write(buf)
 	mempool.Free(buf)
@@ -626,7 +672,8 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 	}
 	wsc.OnClose(u.onClose)
 	if asyncWrite {
-		wsc.chAsyncWrite = make(chan []byte, 64)
+		wsc.sendQueue = make([][]byte, 16)[:0]
+		wsc.sendQueueSize = u.BlockingModAsyncWriteQueueSize
 	}
 	return wsc
 }
@@ -654,19 +701,6 @@ func (c *Conn) BlockingModReadLoop(bufSize int) {
 			break
 		}
 		err = c.Read(nil, buf[:n])
-		if err != nil {
-			break
-		}
-	}
-}
-
-// BlockingModWriteLoop .
-func (c *Conn) BlockingModWriteLoop() {
-	defer c.Close()
-
-	for data := range c.chAsyncWrite {
-		_, err := c.Conn.Write(data)
-		mempool.Free(data)
 		if err != nil {
 			break
 		}

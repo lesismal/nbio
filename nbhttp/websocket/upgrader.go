@@ -63,9 +63,10 @@ type Upgrader struct {
 	Subprotocols []string
 	CheckOrigin  func(r *http.Request) bool
 
-	HandshakeTimeout          time.Duration
-	BlockingModReadBufferSize int
-	BlockingModAsyncWrite     bool
+	HandshakeTimeout               time.Duration
+	BlockingModReadBufferSize      int
+	BlockingModAsyncWriteQueueSize int
+	BlockingModAsyncWrite          bool
 }
 
 // NewUpgrader .
@@ -235,6 +236,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				}
 				vt.ResetRawInput()
 				parser = &nbhttp.Parser{Execute: nbc.Execute}
+				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
+					parser.Execute = nbhttp.SyncExecutor
+				}
 				wsc = NewConn(u, vt, subprotocol, compress, false)
 				nbc.SetSession(wsc)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -303,6 +307,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 			}
 			parser = &nbhttp.Parser{Execute: nbc.Execute}
+			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
+				parser.Execute = nbhttp.SyncExecutor
+			}
 			wsc = NewConn(u, nbc, subprotocol, compress, false)
 			nbc.SetSession(wsc)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -349,9 +356,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if wsc.isBlockingMod {
-		if u.BlockingModAsyncWrite {
-			go wsc.BlockingModWriteLoop()
-		}
 		if parser == nil {
 			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
 		}
