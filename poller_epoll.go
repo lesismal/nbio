@@ -247,20 +247,19 @@ func (p *poller) stop() {
 }
 
 func (p *poller) addRead(fd int) error {
-	switch p.g.epollMod {
-	case EPOLLET:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET | p.g.epollOneshot})
-	default:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_ADD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN})
-	}
+	return p.setRead(fd, syscall.EPOLL_CTL_ADD)
 }
 
 func (p *poller) resetRead(fd int) error {
+	return p.setRead(fd, syscall.EPOLL_CTL_MOD)
+}
+
+func (p *poller) setRead(fd int, op int) error {
 	switch p.g.epollMod {
 	case EPOLLET:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET | p.g.epollOneshot})
+		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET | p.g.epollOneshot})
 	default:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN})
+		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN})
 	}
 }
 
