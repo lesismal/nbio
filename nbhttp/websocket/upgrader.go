@@ -27,10 +27,10 @@ var (
 	// DefaultBlockingReadBufferSize .
 	DefaultBlockingReadBufferSize = 1024 * 4
 
-	// DefaultBlockingModAsyncWrite represents whether create a goroutine to handle writing:
-	// true : create a goroutine to recv buffers and write to conn, default is true;
-	// false: write buffer to the conn directely.
-	DefaultBlockingModAsyncWrite = false
+	// DefaultBlockingModAsyncWrite represents whether use a goroutine to handle writing:
+	// true: use dynamic goroutine to handle writing
+	// false: write buffer to the conn directely
+	DefaultBlockingModAsyncWrite = true
 
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
@@ -75,9 +75,9 @@ func NewUpgrader() *Upgrader {
 		commonFields: commonFields{
 			Engine:           DefaultEngine,
 			compressionLevel: defaultCompressionLevel,
-			// BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
-			// BlockingModAsyncWrite:     false,
 		},
+		BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
+		BlockingModAsyncWrite:     DefaultBlockingModAsyncWrite,
 	}
 	u.pingMessageHandler = func(c *Conn, data string) {
 		if len(data) > 125 {
