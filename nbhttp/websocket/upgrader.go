@@ -27,10 +27,12 @@ var (
 	// DefaultBlockingReadBufferSize .
 	DefaultBlockingReadBufferSize = 1024 * 4
 
-	// DefaultBlockingModAsyncWrite represents whether use a goroutine to handle writing:
-	// true: use dynamic goroutine to handle writing
-	// false: write buffer to the conn directely
+	// DefaultBlockingModAsyncWrite .
 	DefaultBlockingModAsyncWrite = true
+
+	DefaultBlockingModSendQueueInitSize = 4
+
+	DefaultBlockingModSendQueueMaxSize = 0
 
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
@@ -60,13 +62,30 @@ type commonFields struct {
 type Upgrader struct {
 	commonFields
 
+	// Subprotocols .
 	Subprotocols []string
-	CheckOrigin  func(r *http.Request) bool
 
-	HandshakeTimeout               time.Duration
-	BlockingModReadBufferSize      int
-	BlockingModAsyncWriteQueueSize int
-	BlockingModAsyncWrite          bool
+	// CheckOrigin .
+	CheckOrigin func(r *http.Request) bool
+
+	// HandshakeTimeout represents the timeout duration during websocket handshake.
+	HandshakeTimeout time.Duration
+
+	// BlockingModReadBufferSize represents the read buffer size of a Conn if it's in blocking mod.
+	BlockingModReadBufferSize int
+
+	// BlockingModAsyncWrite represents whether use a goroutine to handle writing:
+	// true: use dynamic goroutine to handle writing.
+	// false: write buffer to the conn directely.
+	BlockingModAsyncWrite bool
+
+	// BlockingModSendQueueInitSize represents the init size of a Conn's send queue,
+	// only takes effect when `BlockingModAsyncWrite` is true.
+	BlockingModSendQueueInitSize int
+
+	// BlockingModSendQueueInitSize represents the max size of a Conn's send queue,
+	// only takes effect when `BlockingModAsyncWrite` is true.
+	BlockingModSendQueueMaxSize int
 }
 
 // NewUpgrader .
@@ -76,8 +95,10 @@ func NewUpgrader() *Upgrader {
 			Engine:           DefaultEngine,
 			compressionLevel: defaultCompressionLevel,
 		},
-		BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
-		BlockingModAsyncWrite:     DefaultBlockingModAsyncWrite,
+		BlockingModReadBufferSize:    DefaultBlockingReadBufferSize,
+		BlockingModAsyncWrite:        DefaultBlockingModAsyncWrite,
+		BlockingModSendQueueInitSize: DefaultBlockingModSendQueueInitSize,
+		BlockingModSendQueueMaxSize:  DefaultBlockingModSendQueueMaxSize,
 	}
 	u.pingMessageHandler = func(c *Conn, data string) {
 		if len(data) > 125 {
