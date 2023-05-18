@@ -123,7 +123,6 @@ func NewUpgrader() *Upgrader {
 		c.WriteMessage(CloseMessage, buf)
 		mempool.Free(buf)
 	}
-	u.OnClose(nil)
 
 	return u
 }

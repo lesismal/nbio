@@ -78,16 +78,6 @@ func (c *Conn) Close() error {
 	return c.Conn.Close()
 }
 
-func (c *Conn) clearSendQueue() {
-	c.mux.Lock()
-	sendQueue := c.sendQueue
-	c.sendQueue = [][]byte{}
-	c.mux.Unlock()
-	for _, buf := range sendQueue {
-		mempool.Free(buf)
-	}
-}
-
 // CompressionEnabled .
 func (c *Conn) CompressionEnabled() bool {
 	return c.compress
@@ -426,19 +416,7 @@ func (c *Conn) EnableCompression(enable bool) {
 }
 
 func (c *Conn) OnClose(h func(*Conn, error)) {
-	if h == nil {
-		h = func(*Conn, error) {}
-	}
-	c.onClose = func(c *Conn, err error) {
-		c.mux.Lock()
-		closed := c.closed
-		c.closed = true
-		c.mux.Unlock()
-		if !closed {
-			h(c, err)
-			c.clearSendQueue()
-		}
-	}
+	c.onClose = h
 }
 
 // WriteMessage .
@@ -606,10 +584,8 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 			go func() {
 				i := 0
 				for {
-					b := c.sendQueue[i]
-					c.sendQueue[i] = nil
-					_, err := c.Conn.Write(b)
-					mempool.Free(b)
+					_, err := c.Conn.Write(buf)
+					mempool.Free(buf)
 					if err != nil {
 						c.sendQueue = c.sendQueue[i:]
 						return
@@ -618,7 +594,10 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					i++
 					c.mux.Lock()
 					if c.closed {
-						c.sendQueue = c.sendQueue[i:]
+						for j := i; i < len(c.sendQueue); j++ {
+							mempool.Free(c.sendQueue[j])
+						}
+						c.sendQueue = nil
 						c.mux.Unlock()
 						return
 					}
@@ -627,6 +606,9 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 						c.mux.Unlock()
 						return
 					}
+
+					buf = c.sendQueue[i]
+					c.sendQueue[i] = nil
 
 					c.mux.Unlock()
 				}
@@ -670,7 +652,6 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 		subprotocol:              subprotocol,
 		remoteCompressionEnabled: remoteCompressionEnabled,
 	}
-	wsc.OnClose(u.onClose)
 	if asyncWrite {
 		wsc.sendQueue = make([][]byte, u.BlockingModSendQueueInitSize)[:0]
 		wsc.sendQueueSize = u.BlockingModSendQueueMaxSize
@@ -762,10 +743,22 @@ func (c *Conn) readAll(r io.Reader, size int) ([]byte, error) {
 
 // Close .
 func (c *Conn) CloseAndClean(err error) {
+	c.mux.Lock()
+	closed := c.closed
+	c.closed = true
+	c.mux.Unlock()
+	if closed {
+		return
+	}
+
 	if c.Conn != nil {
 		c.Conn.Close()
+	}
+
+	if c.onClose != nil {
 		c.onClose(c, err)
 	}
+
 	if c.buffer != nil {
 		mempool.Free(c.buffer)
 		c.buffer = nil
