@@ -61,6 +61,7 @@ type Conn struct {
 
 	subprotocol string
 
+	closeErr                 error
 	closed                   bool
 	isClient                 bool
 	remoteCompressionEnabled bool
@@ -498,6 +499,45 @@ func (w *writeBuffer) Close() error {
 	return nil
 }
 
+// CloseAndClean .
+func (c *Conn) CloseAndClean(err error) {
+	c.mux.Lock()
+	closed := c.closed
+	c.closed = true
+	c.mux.Unlock()
+	if closed {
+		return
+	}
+
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
+
+	if c.onClose != nil {
+		c.onClose(c, c.closeErr)
+	}
+
+	if c.buffer != nil {
+		mempool.Free(c.buffer)
+		c.buffer = nil
+	}
+	if c.message != nil {
+		mempool.Free(c.message)
+		c.message = nil
+	}
+
+	for i, b := range c.sendQueue {
+		if b != nil {
+			mempool.Free(b)
+			c.sendQueue[i] = nil
+		}
+	}
+}
+
 // WriteFrame .
 func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
 	return c.writeFrame(messageType, sendOpcode, fin, data, false)
@@ -584,20 +624,18 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 			go func() {
 				i := 0
 				for {
+					c.sendQueue[i] = nil
 					_, err := c.Conn.Write(buf)
 					mempool.Free(buf)
 					if err != nil {
-						c.sendQueue = c.sendQueue[i:]
+						c.closeErr = err
+						c.Close()
 						return
 					}
 
 					i++
 					c.mux.Lock()
 					if c.closed {
-						for j := i; i < len(c.sendQueue); j++ {
-							mempool.Free(c.sendQueue[j])
-						}
-						c.sendQueue = nil
 						c.mux.Unlock()
 						return
 					}
@@ -608,9 +646,12 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					}
 
 					buf = c.sendQueue[i]
-					c.sendQueue[i] = nil
 
 					c.mux.Unlock()
+
+					if buf == nil {
+						return
+					}
 				}
 			}()
 		}
@@ -738,34 +779,6 @@ func (c *Conn) readAll(r io.Reader, size int) ([]byte, error) {
 			}
 			buf = c.Engine.BodyAllocator.Append(buf, make([]byte, al)...)[:l]
 		}
-	}
-}
-
-// Close .
-func (c *Conn) CloseAndClean(err error) {
-	c.mux.Lock()
-	closed := c.closed
-	c.closed = true
-	c.mux.Unlock()
-	if closed {
-		return
-	}
-
-	if c.Conn != nil {
-		c.Conn.Close()
-	}
-
-	if c.onClose != nil {
-		c.onClose(c, err)
-	}
-
-	if c.buffer != nil {
-		mempool.Free(c.buffer)
-		c.buffer = nil
-	}
-	if c.message != nil {
-		mempool.Free(c.message)
-		c.message = nil
 	}
 }
 
