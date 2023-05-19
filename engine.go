@@ -72,6 +72,9 @@ type Config struct {
 	// EpollMod sets the epoll mod, EPOLLLT by default.
 	EpollMod uint32
 
+	// EPOLLONESHOT .
+	EPOLLONESHOT uint32
+
 	// UDPReadTimeout sets the timeout for udp sessions.
 	UDPReadTimeout time.Duration
 
@@ -117,6 +120,7 @@ type Engine struct {
 	maxConnReadTimesPerEventLoop int
 	udpReadTimeout               time.Duration
 	epollMod                     uint32
+	epollOneshot                 uint32
 	lockListener                 bool
 	lockPoller                   bool
 

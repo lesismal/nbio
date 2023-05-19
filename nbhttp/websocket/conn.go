@@ -56,12 +56,14 @@ type Conn struct {
 
 	session interface{}
 
-	chAsyncWrite chan []byte
+	sendQueue     [][]byte
+	sendQueueSize int
 
 	subprotocol string
 
+	closeErr                 error
+	closed                   bool
 	isClient                 bool
-	onCloseCalled            bool
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	isBlockingMod            bool
@@ -414,30 +416,12 @@ func (c *Conn) EnableCompression(enable bool) {
 	c.enableCompression = enable
 }
 
-// OnClose .
 func (c *Conn) OnClose(h func(*Conn, error)) {
-	if h == nil {
-		h = func(*Conn, error) {}
-	}
-	c.onClose = func(c *Conn, err error) {
-		c.mux.Lock()
-		defer c.mux.Unlock()
-		if !c.onCloseCalled {
-			c.onCloseCalled = true
-			if c.chAsyncWrite != nil {
-				close(c.chAsyncWrite)
-				c.chAsyncWrite = nil
-			}
-			h(c, err)
-		}
-	}
+	c.onClose = h
 }
 
 // WriteMessage .
 func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
-	c.mux.Lock()
-	defer c.mux.Unlock()
-
 	switch messageType {
 	case TextMessage:
 	case BinaryMessage:
@@ -515,6 +499,45 @@ func (w *writeBuffer) Close() error {
 	return nil
 }
 
+// CloseAndClean .
+func (c *Conn) CloseAndClean(err error) {
+	c.mux.Lock()
+	closed := c.closed
+	c.closed = true
+	c.mux.Unlock()
+	if closed {
+		return
+	}
+
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+
+	if c.Conn != nil {
+		c.Conn.Close()
+	}
+
+	if c.onClose != nil {
+		c.onClose(c, c.closeErr)
+	}
+
+	if c.buffer != nil {
+		mempool.Free(c.buffer)
+		c.buffer = nil
+	}
+	if c.message != nil {
+		mempool.Free(c.message)
+		c.message = nil
+	}
+
+	for i, b := range c.sendQueue {
+		if b != nil {
+			mempool.Free(b)
+			c.sendQueue[i] = nil
+		}
+	}
+}
+
 // WriteFrame .
 func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
 	return c.writeFrame(messageType, sendOpcode, fin, data, false)
@@ -580,15 +603,61 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		buf[0] |= byte(0x80)
 	}
 
-	if c.chAsyncWrite != nil {
-		select {
-		case c.chAsyncWrite <- buf:
-		default:
+	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+		mempool.Free(buf)
+		return net.ErrClosed
+	}
+
+	if c.sendQueue != nil {
+		if c.sendQueueSize > 0 && len(c.sendQueue) >= c.sendQueueSize {
+			c.mux.Unlock()
 			mempool.Free(buf)
 			return ErrMessageSendQuqueIsFull
 		}
+		c.sendQueue = append(c.sendQueue, buf)
+		isHead := (len(c.sendQueue) == 1)
+		c.mux.Unlock()
+
+		if isHead {
+			go func() {
+				i := 0
+				for {
+					c.sendQueue[i] = nil
+					_, err := c.Conn.Write(buf)
+					mempool.Free(buf)
+					if err != nil {
+						c.closeErr = err
+						c.Close()
+						return
+					}
+
+					i++
+					c.mux.Lock()
+					if c.closed {
+						c.mux.Unlock()
+						return
+					}
+					if len(c.sendQueue) == i {
+						c.sendQueue = c.sendQueue[0:0]
+						c.mux.Unlock()
+						return
+					}
+
+					buf = c.sendQueue[i]
+
+					c.mux.Unlock()
+
+					if buf == nil {
+						return
+					}
+				}
+			}()
+		}
 		return nil
 	}
+	c.mux.Unlock()
 
 	_, err := c.Conn.Write(buf)
 	mempool.Free(buf)
@@ -624,9 +693,9 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 		subprotocol:              subprotocol,
 		remoteCompressionEnabled: remoteCompressionEnabled,
 	}
-	wsc.OnClose(u.onClose)
 	if asyncWrite {
-		wsc.chAsyncWrite = make(chan []byte, 64)
+		wsc.sendQueue = make([][]byte, u.BlockingModSendQueueInitSize)[:0]
+		wsc.sendQueueSize = u.BlockingModSendQueueMaxSize
 	}
 	return wsc
 }
@@ -654,19 +723,6 @@ func (c *Conn) BlockingModReadLoop(bufSize int) {
 			break
 		}
 		err = c.Read(nil, buf[:n])
-		if err != nil {
-			break
-		}
-	}
-}
-
-// BlockingModWriteLoop .
-func (c *Conn) BlockingModWriteLoop() {
-	defer c.Close()
-
-	for data := range c.chAsyncWrite {
-		_, err := c.Conn.Write(data)
-		mempool.Free(data)
 		if err != nil {
 			break
 		}
@@ -723,22 +779,6 @@ func (c *Conn) readAll(r io.Reader, size int) ([]byte, error) {
 			}
 			buf = c.Engine.BodyAllocator.Append(buf, make([]byte, al)...)[:l]
 		}
-	}
-}
-
-// Close .
-func (c *Conn) CloseAndClean(err error) {
-	if c.Conn != nil {
-		c.Conn.Close()
-		c.onClose(c, err)
-	}
-	if c.buffer != nil {
-		mempool.Free(c.buffer)
-		c.buffer = nil
-	}
-	if c.message != nil {
-		mempool.Free(c.message)
-		c.message = nil
 	}
 }
 

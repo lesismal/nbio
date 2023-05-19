@@ -27,10 +27,12 @@ var (
 	// DefaultBlockingReadBufferSize .
 	DefaultBlockingReadBufferSize = 1024 * 4
 
-	// DefaultBlockingModAsyncWrite represents whether create a goroutine to handle writing:
-	// true : create a goroutine to recv buffers and write to conn, default is true;
-	// false: write buffer to the conn directely.
-	DefaultBlockingModAsyncWrite = false
+	// DefaultBlockingModAsyncWrite .
+	DefaultBlockingModAsyncWrite = true
+
+	DefaultBlockingModSendQueueInitSize = 4
+
+	DefaultBlockingModSendQueueMaxSize = 0
 
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
@@ -60,12 +62,30 @@ type commonFields struct {
 type Upgrader struct {
 	commonFields
 
+	// Subprotocols .
 	Subprotocols []string
-	CheckOrigin  func(r *http.Request) bool
 
-	HandshakeTimeout          time.Duration
+	// CheckOrigin .
+	CheckOrigin func(r *http.Request) bool
+
+	// HandshakeTimeout represents the timeout duration during websocket handshake.
+	HandshakeTimeout time.Duration
+
+	// BlockingModReadBufferSize represents the read buffer size of a Conn if it's in blocking mod.
 	BlockingModReadBufferSize int
-	BlockingModAsyncWrite     bool
+
+	// BlockingModAsyncWrite represents whether use a goroutine to handle writing:
+	// true: use dynamic goroutine to handle writing.
+	// false: write buffer to the conn directely.
+	BlockingModAsyncWrite bool
+
+	// BlockingModSendQueueInitSize represents the init size of a Conn's send queue,
+	// only takes effect when `BlockingModAsyncWrite` is true.
+	BlockingModSendQueueInitSize int
+
+	// BlockingModSendQueueInitSize represents the max size of a Conn's send queue,
+	// only takes effect when `BlockingModAsyncWrite` is true.
+	BlockingModSendQueueMaxSize int
 }
 
 // NewUpgrader .
@@ -74,9 +94,11 @@ func NewUpgrader() *Upgrader {
 		commonFields: commonFields{
 			Engine:           DefaultEngine,
 			compressionLevel: defaultCompressionLevel,
-			// BlockingModReadBufferSize: DefaultBlockingReadBufferSize,
-			// BlockingModAsyncWrite:     false,
 		},
+		BlockingModReadBufferSize:    DefaultBlockingReadBufferSize,
+		BlockingModAsyncWrite:        DefaultBlockingModAsyncWrite,
+		BlockingModSendQueueInitSize: DefaultBlockingModSendQueueInitSize,
+		BlockingModSendQueueMaxSize:  DefaultBlockingModSendQueueMaxSize,
 	}
 	u.pingMessageHandler = func(c *Conn, data string) {
 		if len(data) > 125 {
@@ -101,7 +123,6 @@ func NewUpgrader() *Upgrader {
 		c.WriteMessage(CloseMessage, buf)
 		mempool.Free(buf)
 	}
-	u.OnClose(nil)
 
 	return u
 }
@@ -235,6 +256,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				}
 				vt.ResetRawInput()
 				parser = &nbhttp.Parser{Execute: nbc.Execute}
+				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
+					parser.Execute = nbhttp.SyncExecutor
+				}
 				wsc = NewConn(u, vt, subprotocol, compress, false)
 				nbc.SetSession(wsc)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -303,6 +327,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 			}
 			parser = &nbhttp.Parser{Execute: nbc.Execute}
+			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
+				parser.Execute = nbhttp.SyncExecutor
+			}
 			wsc = NewConn(u, nbc, subprotocol, compress, false)
 			nbc.SetSession(wsc)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -349,9 +376,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if wsc.isBlockingMod {
-		if u.BlockingModAsyncWrite {
-			go wsc.BlockingModWriteLoop()
-		}
 		if parser == nil {
 			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
 		}
