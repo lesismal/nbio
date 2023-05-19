@@ -12,10 +12,16 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
+const (
+	runningFlag = iota
+	closedFlag
+)
+
 // TaskPool .
 type TaskPool struct {
 	concurrent    int64
 	maxConcurrent int64
+	closed        int64
 	chQqueue      chan func()
 	chClose       chan struct{}
 	caller        func(f func())
@@ -23,15 +29,20 @@ type TaskPool struct {
 
 // Go .
 func (tp *TaskPool) Go(f func()) {
+	if f == nil {
+		return
+	}
+	if tp.isClosed() {
+		return
+	}
+
 	if atomic.AddInt64(&tp.concurrent, 1) < tp.maxConcurrent {
 		go func() {
 			tp.caller(f)
 			for {
 				select {
 				case f = <-tp.chQqueue:
-					if f != nil {
-						tp.caller(f)
-					}
+					tp.caller(f)
 				default:
 					return
 				}
@@ -47,9 +58,20 @@ func (tp *TaskPool) Go(f func()) {
 	}
 }
 
+func (tp *TaskPool) isClosed() bool {
+	return atomic.LoadInt64(&tp.closed) == closedFlag
+}
+
+func (tp *TaskPool) setClosed() bool {
+	return atomic.CompareAndSwapInt64(&tp.closed, runningFlag, closedFlag)
+}
+
 // Stop .
 func (tp *TaskPool) Stop() {
-	atomic.AddInt64(&tp.concurrent, tp.maxConcurrent)
+	if !tp.setClosed() {
+		return
+	}
+
 	close(tp.chClose)
 }
 
@@ -84,9 +106,7 @@ func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
 		for {
 			select {
 			case f := <-tp.chQqueue:
-				if f != nil {
-					tp.caller(f)
-				}
+				tp.caller(f)
 			case <-tp.chClose:
 				return
 			}
