@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -159,7 +160,7 @@ type Config struct {
 	// Handler sets HTTP handler for Engine.
 	Handler http.Handler
 
-	// ServerExecutor sets the executor for server callbacks.
+	// ServerExecutor sets the executor for data reading callbacks.
 	ServerExecutor func(f func())
 
 	// ClientExecutor sets the executor for client callbacks.
@@ -189,6 +190,14 @@ type Config struct {
 	MaxBlockingOnline int
 	// BlockingReadBufferSize represents read buffer size of blocking mod.
 	BlockingReadBufferSize int
+
+	// EpollMod .
+	EpollMod uint32
+	// EPOLLONESHOT .
+	EPOLLONESHOT uint32
+
+	// ReadBufferPool .
+	ReadBufferPool mempool.Allocator
 
 	// WebsocketCompressor .
 	WebsocketCompressor func() interface {
@@ -229,6 +238,8 @@ type Engine struct {
 	Cancel       func()
 
 	ExecuteClient func(f func())
+
+	isOneshot bool
 }
 
 // OnOpen registers callback for new connection.
@@ -583,6 +594,9 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 	engine._onOpen(nbc)
 	processor := NewServerProcessor(nbc, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	if engine.isOneshot {
+		parser.Execute = SyncExecutor
+	}
 	parser.Engine = engine
 	processor.(*ServerProcessor).parser = parser
 	nbc.SetSession(parser)
@@ -612,18 +626,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 	engine.mux.Unlock()
 	engine._onOpen(conn)
 	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
-	parser := NewParser(processor, false, engine.ReadLimit, func(f func()) bool {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
-		return true
-	})
+	parser := NewParser(processor, false, engine.ReadLimit, SyncExecutor)
 	parser.Engine = engine
 	processor.(*ServerProcessor).parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
@@ -655,6 +658,9 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 	tlsConn := tls.NewConn(nbc, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	if engine.isOneshot {
+		parser.Execute = SyncExecutor
+	}
 	parser.Conn = tlsConn
 	parser.Engine = engine
 	processor.(*ServerProcessor).parser = parser
@@ -691,18 +697,7 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 	isNonBlock := true
 	tlsConn := tls.NewConn(conn, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
-	parser := NewParser(processor, false, engine.ReadLimit, func(f func()) bool {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
-		return true
-	})
+	parser := NewParser(processor, false, engine.ReadLimit, SyncExecutor)
 	parser.Conn = tlsConn
 	parser.Engine = engine
 	processor.(*ServerProcessor).parser = parser
@@ -864,7 +859,7 @@ func NewEngine(conf Config) *Engine {
 					const size = 64 << 10
 					buf := make([]byte, size)
 					buf = buf[:runtime.Stack(buf, false)]
-					logging.Error("clientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+					logging.Error("ClientExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 				}
 			}()
 			f()
@@ -894,6 +889,8 @@ func NewEngine(conf Config) *Engine {
 		LockPoller:                   conf.LockPoller,
 		LockListener:                 conf.LockListener,
 		TimerExecute:                 conf.TimerExecutor,
+		EpollMod:                     conf.EpollMod,
+		EPOLLONESHOT:                 conf.EPOLLONESHOT,
 	}
 	g := nbio.NewEngine(gopherConf)
 	g.Execute = serverExecutor
@@ -945,9 +942,9 @@ func NewEngine(conf Config) *Engine {
 			case *Parser:
 				vt.Close(err)
 			case interface {
-				Close(*Parser, error)
+				CloseAndClean(error)
 			}:
-				vt.Close(nil, err)
+				vt.CloseAndClean(err)
 			default:
 			}
 			engine._onClose(c, err)
@@ -956,14 +953,54 @@ func NewEngine(conf Config) *Engine {
 			engine.mux.Unlock()
 		})
 	})
+
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		if c.DataHandler != nil {
-			c.DataHandler(c, data)
-		}
+		c.DataHandler(c, data)
 	})
-	// g.OnWriteBufferRelease(func(c *nbio.Conn, buffer []byte) {
-	// 	mempool.Free(buffer)
-	// })
+
+	engine.isOneshot = (conf.EpollMod == nbio.EPOLLET && conf.EPOLLONESHOT == nbio.EPOLLONESHOT && runtime.GOOS == "linux")
+	if engine.isOneshot {
+		readBufferPool := conf.ReadBufferPool
+		if readBufferPool == nil {
+			pool, ok := ReadBufferPools.Load(conf.ReadBufferSize)
+			if ok {
+				readBufferPool, ok = pool.(mempool.Allocator)
+			}
+			if !ok {
+				readBufferPool = mempool.New(conf.ReadBufferSize, conf.ReadBufferSize*2)
+				ReadBufferPools.Store(conf.ReadBufferSize, readBufferPool)
+			}
+		}
+
+		g.OnRead(func(c *nbio.Conn) {
+			serverExecutor(func() {
+				buf := readBufferPool.Malloc(conf.ReadBufferSize)
+				defer func() {
+					readBufferPool.Free(buf)
+					c.ResetPollerEvent()
+				}()
+				for {
+					n, err := c.Read(buf)
+					if n > 0 && c.DataHandler != nil {
+						c.DataHandler(c, buf[:n])
+					}
+					if errors.Is(err, syscall.EINTR) {
+						continue
+					}
+					if errors.Is(err, syscall.EAGAIN) {
+						break
+					}
+					if err != nil {
+						c.CloseWithError(err)
+					}
+					if n < len(buf) {
+						return
+					}
+				}
+			})
+		})
+	}
+
 	g.OnStop(func() {
 		engine._onStop()
 		g.Execute = func(f func()) {}
@@ -976,4 +1013,19 @@ func NewEngine(conf Config) *Engine {
 		}
 	})
 	return engine
+}
+
+var ReadBufferPools = &sync.Map{}
+
+func SyncExecutor(f func()) bool {
+	defer func() {
+		if err := recover(); err != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			logging.Error("ProtocolExecutor call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+		}
+	}()
+	f()
+	return true
 }

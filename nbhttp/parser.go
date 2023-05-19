@@ -44,7 +44,10 @@ type Parser struct {
 
 	Processor Processor
 
-	Reader ReadCloser
+	Reader interface {
+		Read(p *Parser, data []byte) error
+		CloseAndClean(err error)
+	}
 
 	Engine *Engine
 
@@ -93,7 +96,7 @@ func (p *Parser) Close(err error) {
 	p.errClose = err
 
 	if p.Reader != nil {
-		p.Reader.Close(p, p.errClose)
+		p.Reader.CloseAndClean(p.errClose)
 	}
 	if p.Processor != nil {
 		p.Processor.Close(p, p.errClose)
