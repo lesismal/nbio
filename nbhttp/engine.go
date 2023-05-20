@@ -562,17 +562,18 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 
 // AddConnTLSNonBlocking .
 func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
+	key, err := conn2String(nbc)
+	if err != nil {
+		return err
+	}
+
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
 		return ErrServiceOverload
 	}
-	s, err := conn2String(nbc)
-	if err != nil {
-		return err
-	}
-	engine.conns[s] = struct{}{}
+	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 	engine.AddConn(nbc)
@@ -589,18 +590,20 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 	if nbc.Session() != nil {
 		return
 	}
+
+	key, err := conn2String(nbc)
+	if err != nil {
+		nbc.Close()
+		return
+	}
+
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
 		return
 	}
-	s, err := conn2String(nbc)
-	if err != nil {
-		nbc.Close()
-		return
-	}
-	engine.conns[s] = struct{}{}
+	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 	processor := NewServerProcessor(nbc, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
@@ -627,13 +630,14 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 	}
 	switch vt := conn.(type) {
 	case *net.TCPConn, *net.UnixConn:
-		s, err := conn2String(vt)
+		key, err := conn2String(vt)
 		if err != nil {
+			engine.mux.Unlock()
 			conn.Close()
 			decrease()
 			return
 		}
-		engine.conns[s] = struct{}{}
+		engine.conns[key] = struct{}{}
 	default:
 		engine.mux.Unlock()
 		conn.Close()
@@ -660,6 +664,12 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 	if nbc.Session() != nil {
 		return
 	}
+	key, err := conn2String(nbc)
+	if err == nil {
+		nbc.Close()
+		return
+	}
+
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
@@ -667,12 +677,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 		return
 	}
 
-	s, err := conn2String(nbc)
-	if err == nil {
-		nbc.Close()
-		return
-	}
-	engine.conns[s] = struct{}{}
+	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(nbc)
 
@@ -706,13 +711,14 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 
 	switch vt := conn.(type) {
 	case *net.TCPConn, *net.UnixConn:
-		s, err := conn2String(vt)
+		key, err := conn2String(vt)
 		if err != nil {
+			engine.mux.Unlock()
 			conn.Close()
 			decrease()
 			return
 		}
-		engine.conns[s] = struct{}{}
+		engine.conns[key] = struct{}{}
 	default:
 		engine.mux.Unlock()
 		conn.Close()
@@ -748,12 +754,8 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 		engine.mux.Lock()
 		switch vt := conn.(type) {
 		case *net.TCPConn, *net.UnixConn:
-			s, err := conn2String(vt)
-			if err != nil {
-				vt.Close()
-				return
-			}
-			delete(engine.conns, s)
+			key, _ := conn2String(vt)
+			delete(engine.conns, key)
 		}
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
@@ -784,12 +786,8 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 		engine.mux.Lock()
 		switch vt := conn.(type) {
 		case *net.TCPConn, *net.UnixConn:
-			s, err := conn2String(vt)
-			if err != nil {
-				vt.Close()
-				return
-			}
-			delete(engine.conns, s)
+			key, _ := conn2String(vt)
+			delete(engine.conns, key)
 		}
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
@@ -988,10 +986,8 @@ func NewEngine(conf Config) *Engine {
 			}
 			engine._onClose(c, err)
 			engine.mux.Lock()
-			s, err := conn2String(c)
-			if err == nil {
-				delete(engine.conns, s)
-			}
+			key, _ := conn2String(c)
+			delete(engine.conns, key)
 			engine.mux.Unlock()
 		})
 	})
