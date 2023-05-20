@@ -564,6 +564,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	key, err := conn2String(nbc)
 	if err != nil {
+		nbc.Close()
 		return err
 	}
 
@@ -588,9 +589,9 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 		return
 	}
 	if nbc.Session() != nil {
+		nbc.Close()
 		return
 	}
-
 	key, err := conn2String(nbc)
 	if err != nil {
 		nbc.Close()
@@ -662,10 +663,11 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 		return
 	}
 	if nbc.Session() != nil {
+		nbc.Close()
 		return
 	}
 	key, err := conn2String(nbc)
-	if err == nil {
+	if err != nil {
 		nbc.Close()
 		return
 	}
