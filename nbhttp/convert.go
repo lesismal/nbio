@@ -13,7 +13,7 @@ import (
 
 const (
 	uintptrSize   = int(unsafe.Sizeof(uintptr(0)))
-	connValueSize = 1 + uintptrSize
+	connValueSize = uintptrSize + 1
 )
 
 const (
@@ -25,9 +25,11 @@ const (
 	connTypLTLS byte = 5
 )
 
-func conn2String(conn net.Conn) (string, error) {
+type connValue [connValueSize]byte
+
+func conn2Array(conn net.Conn) (connValue, error) {
 	var p uintptr
-	var b = make([]byte, connValueSize)
+	var b connValue
 	switch vt := conn.(type) {
 	case *nbio.Conn:
 		p = uintptr(unsafe.Pointer(vt))
@@ -45,7 +47,7 @@ func conn2String(conn net.Conn) (string, error) {
 		p = uintptr(unsafe.Pointer(vt))
 		b[uintptrSize] = connTypLTLS
 	default:
-		return "", fmt.Errorf("invalid conn type: %v", vt)
+		return b, fmt.Errorf("invalid conn type: %v", vt)
 	}
 	switch uintptrSize {
 	case 4:
@@ -53,18 +55,13 @@ func conn2String(conn net.Conn) (string, error) {
 	case 8:
 		binary.LittleEndian.PutUint64(b[:uintptrSize], uint64(p))
 	default:
-		return "", fmt.Errorf("unsupported platform: invalid uintptr size %v", uintptrSize)
+		return b, fmt.Errorf("unsupported platform: invalid uintptr size %v", uintptrSize)
 	}
-	return string(b), nil
+	return b, nil
 }
 
-func string2Conn(s string) (net.Conn, error) {
-	if len(s) != connValueSize {
-		return nil, fmt.Errorf("invalid string length: %v", len(s))
-	}
-
+func array2Conn(b connValue) (net.Conn, error) {
 	var p uintptr
-	var b = []byte(s)
 	switch uintptrSize {
 	case 4:
 		p = uintptr(binary.LittleEndian.Uint32(b[:uintptrSize]))
@@ -76,19 +73,19 @@ func string2Conn(s string) (net.Conn, error) {
 
 	switch b[uintptrSize] {
 	case connTypNBIO:
-		conn := ((*nbio.Conn)(unsafe.Pointer(p)))
+		conn := *((**nbio.Conn)(unsafe.Pointer(&p)))
 		return conn, nil
 	case connTypTCP:
-		conn := ((*net.TCPConn)(unsafe.Pointer(p)))
+		conn := *((**net.TCPConn)(unsafe.Pointer(&p)))
 		return conn, nil
 	case connTypUNIX:
-		conn := ((*net.UnixConn)(unsafe.Pointer(p)))
+		conn := *((**net.UnixConn)(unsafe.Pointer(&p)))
 		return conn, nil
 	case connTypTLS:
-		conn := ((*tls.Conn)(unsafe.Pointer(p)))
+		conn := *((**tls.Conn)(unsafe.Pointer(&p)))
 		return conn, nil
 	case connTypLTLS:
-		conn := ((*ltls.Conn)(unsafe.Pointer(p)))
+		conn := *((**ltls.Conn)(unsafe.Pointer(&p)))
 		return conn, nil
 	default:
 	}

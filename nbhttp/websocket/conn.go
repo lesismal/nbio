@@ -504,10 +504,18 @@ func (c *Conn) CloseAndClean(err error) {
 	c.mux.Lock()
 	closed := c.closed
 	c.closed = true
-	c.mux.Unlock()
 	if closed {
+		c.mux.Unlock()
 		return
+	} else {
+		for i, b := range c.sendQueue {
+			if b != nil {
+				mempool.Free(b)
+				c.sendQueue[i] = nil
+			}
+		}
 	}
+	c.mux.Unlock()
 
 	if c.closeErr == nil {
 		c.closeErr = err
@@ -528,13 +536,6 @@ func (c *Conn) CloseAndClean(err error) {
 	if c.message != nil {
 		mempool.Free(c.message)
 		c.message = nil
-	}
-
-	for i, b := range c.sendQueue {
-		if b != nil {
-			mempool.Free(b)
-			c.sendQueue[i] = nil
-		}
 	}
 }
 
@@ -618,13 +619,15 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		}
 		c.sendQueue = append(c.sendQueue, buf)
 		isHead := (len(c.sendQueue) == 1)
+		if isHead {
+			c.sendQueue[0] = nil
+		}
 		c.mux.Unlock()
 
 		if isHead {
 			go func() {
 				i := 0
 				for {
-					c.sendQueue[i] = nil
 					_, err := c.Conn.Write(buf)
 					mempool.Free(buf)
 					if err != nil {
@@ -639,13 +642,14 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 						c.mux.Unlock()
 						return
 					}
-					if len(c.sendQueue) == i {
-						c.sendQueue = c.sendQueue[0:0]
+					if len(c.sendQueue) <= i {
+						c.sendQueue = c.sendQueue[:0]
 						c.mux.Unlock()
 						return
 					}
 
 					buf = c.sendQueue[i]
+					c.sendQueue[i] = nil
 
 					c.mux.Unlock()
 

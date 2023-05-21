@@ -11,11 +11,11 @@ import (
 
 func TestConn2String(t *testing.T) {
 	var nbc = &nbio.Conn{ReadBuffer: []byte{1, 2, 3, 4}}
-	snbc, err := conn2String(nbc)
+	snbc, err := conn2Array(nbc)
 	if err != nil {
 		t.Fatal(err)
 	}
-	nbc2, err := string2Conn(snbc)
+	nbc2, err := array2Conn(snbc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,11 +24,11 @@ func TestConn2String(t *testing.T) {
 	}
 
 	var tcp = &net.TCPConn{}
-	stcp, err := conn2String(tcp)
+	stcp, err := conn2Array(tcp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tcp2, err := string2Conn(stcp)
+	tcp2, err := array2Conn(stcp)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,11 +37,11 @@ func TestConn2String(t *testing.T) {
 	}
 
 	var unix = &net.UnixConn{}
-	sunix, err := conn2String(unix)
+	sunix, err := conn2Array(unix)
 	if err != nil {
 		t.Fatal(err)
 	}
-	unix2, err := string2Conn(sunix)
+	unix2, err := array2Conn(sunix)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,11 +50,11 @@ func TestConn2String(t *testing.T) {
 	}
 
 	var tls = &tls.Conn{}
-	stls, err := conn2String(tls)
+	stls, err := conn2Array(tls)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tls2, err := string2Conn(stls)
+	tls2, err := array2Conn(stls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,11 +63,11 @@ func TestConn2String(t *testing.T) {
 	}
 
 	var ltls = &ltls.Conn{}
-	sltls, err := conn2String(ltls)
+	sltls, err := conn2Array(ltls)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ltls2, err := string2Conn(sltls)
+	ltls2, err := array2Conn(sltls)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,15 +76,15 @@ func TestConn2String(t *testing.T) {
 	}
 
 	var udp = &net.UDPConn{}
-	_, err = conn2String(udp)
+	_, err = conn2Array(udp)
 	if err == nil {
 		t.Fatal("err is nil")
 	}
-	_, err = string2Conn("aaa")
+	_, err = array2Conn(connValue{'a', 'a', 'a'})
 	if err == nil {
 		t.Fatal("err is nil")
 	}
-	_, err = string2Conn(string(make([]byte, connValueSize)))
+	_, err = array2Conn(connValue{})
 	if err == nil {
 		t.Fatal("err is nil")
 	}
