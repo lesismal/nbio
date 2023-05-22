@@ -38,7 +38,6 @@ const (
 
 // Logger defines log interface.
 type Logger interface {
-	SetLevel(lvl int)
 	Debug(format string, v ...interface{})
 	Info(format string, v ...interface{})
 	Warn(format string, v ...interface{})
@@ -52,11 +51,10 @@ func SetLogger(l Logger) {
 
 // SetLevel sets default logger's priority.
 func SetLevel(lvl int) {
-	switch lvl {
-	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
-		DefaultLogger.SetLevel(lvl)
-	default:
-		fmt.Fprintf(Output, "invalid log level: %v", lvl)
+	if l, ok := DefaultLogger.(interface {
+		SetLevel(lvl int)
+	}); ok {
+		l.SetLevel(lvl)
 	}
 }
 
