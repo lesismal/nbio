@@ -6,6 +6,7 @@ package websocket
 
 import (
 	"errors"
+	"fmt"
 )
 
 var (
@@ -66,3 +67,30 @@ var (
 	// ErrMessageSendQuqueIsFull .
 	ErrMessageSendQuqueIsFull = errors.New("message send queue is full")
 )
+
+// CloseError .
+type CloseError struct {
+	Code   int
+	Reason string
+}
+
+// Error .
+func (ce *CloseError) Error() string {
+	return fmt.Sprintf("websocket: close code=%d and reason=%q", ce.Code, ce.Reason)
+}
+
+// CloseCode .
+func CloseCode(err error) int {
+	if ce, ok := err.(*CloseError); ok {
+		return ce.Code
+	}
+	return -1
+}
+
+// CloseReason .
+func CloseReason(err error) string {
+	if ce, ok := err.(*CloseError); ok {
+		return ce.Reason
+	}
+	return ""
+}
