@@ -75,7 +75,7 @@ type CloseError struct {
 }
 
 // Error .
-func (ce *CloseError) Error() string {
+func (ce CloseError) Error() string {
 	return fmt.Sprintf("websocket: close code=%d and reason=%q", ce.Code, ce.Reason)
 }
 
