@@ -79,6 +79,11 @@ func (c *Conn) IsBlockingMod() bool {
 	return c.isBlockingMod
 }
 
+// IsAsyncWrite .
+func (c *Conn) IsAsyncWrite() bool {
+	return c.sendQueue != nil
+}
+
 // Close .
 func (c *Conn) Close() error {
 	if c.Conn == nil {
