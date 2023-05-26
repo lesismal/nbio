@@ -81,7 +81,8 @@ func (ce *CloseError) Error() string {
 
 // CloseCode .
 func CloseCode(err error) int {
-	if ce, ok := err.(*CloseError); ok {
+	var ce CloseError
+	if errors.As(err, &ce) {
 		return ce.Code
 	}
 	return -1
@@ -89,7 +90,8 @@ func CloseCode(err error) int {
 
 // CloseReason .
 func CloseReason(err error) string {
-	if ce, ok := err.(*CloseError); ok {
+	var ce CloseError
+	if errors.As(err, &ce) {
 		return ce.Reason
 	}
 	return ""
