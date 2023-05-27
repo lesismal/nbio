@@ -74,9 +74,37 @@ type Conn struct {
 	message                  []byte
 }
 
+// IsBlockingMod .
+func (c *Conn) IsBlockingMod() bool {
+	return c.isBlockingMod
+}
+
+// IsAsyncWrite .
+func (c *Conn) IsAsyncWrite() bool {
+	return c.sendQueue != nil
+}
+
 // Close .
 func (c *Conn) Close() error {
+	if c.Conn == nil {
+		return nil
+	}
 	return c.Conn.Close()
+}
+
+// CloseWithError .
+func (c *Conn) CloseWithError(err error) error {
+	c.SetCloseError(err)
+	return c.Conn.Close()
+}
+
+// SetCloseError .
+func (c *Conn) SetCloseError(err error) {
+	c.mux.Lock()
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+	c.mux.Unlock()
 }
 
 // CompressionEnabled .
@@ -154,7 +182,12 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
 				c.WriteMessage(CloseMessage, protoErrorCode)
 			} else {
-				c.closeMessageHandler(c, code, string(data[2:]))
+				reson := string(data[2:])
+				c.SetCloseError(&CloseError{
+					Code:   code,
+					Reason: reson,
+				})
+				c.closeMessageHandler(c, code, reson)
 			}
 		} else {
 			c.WriteMessage(CloseMessage, nil)
@@ -420,6 +453,14 @@ func (c *Conn) OnClose(h func(*Conn, error)) {
 	c.onClose = h
 }
 
+// WriteClose .
+func (c *Conn) WriteClose(code int, reason string) error {
+	buf := make([]byte, 2+len(reason))
+	binary.BigEndian.PutUint16(buf[:2], uint16(code))
+	copy(buf[2:], reason)
+	return c.WriteMessage(CloseMessage, buf)
+}
+
 // WriteMessage .
 func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	switch messageType {
@@ -514,12 +555,12 @@ func (c *Conn) CloseAndClean(err error) {
 				c.sendQueue[i] = nil
 			}
 		}
+
+		if c.closeErr == nil {
+			c.closeErr = err
+		}
 	}
 	c.mux.Unlock()
-
-	if c.closeErr == nil {
-		c.closeErr = err
-	}
 
 	if c.Conn != nil {
 		c.Conn.Close()
@@ -631,8 +672,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					_, err := c.Conn.Write(buf)
 					mempool.Free(buf)
 					if err != nil {
-						c.closeErr = err
-						c.Close()
+						c.CloseWithError(err)
 						return
 					}
 
