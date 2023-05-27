@@ -48,7 +48,7 @@
 
 ## Features
 ### Cross Platform
-- [x] Linux: Epoll, both ET/LT(as default) supported
+- [x] Linux: Epoll with LT/ET/ET+ONESHOT supported, LT as default
 - [x] BSD(MacOS): Kqueue
 - [x] Windows: Based on std net, for debugging only
 
