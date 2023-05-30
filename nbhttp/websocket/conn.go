@@ -261,13 +261,13 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 		default:
 			bodyLen = int64(payloadLen)
 		}
-		switch opcode {
-		case PingMessage, PongMessage, CloseMessage:
-			if bodyLen > maxControlFramePayloadSize {
-				err = ErrControlMessageTooBig
-				return
-			}
+
+		if (bodyLen > maxControlFramePayloadSize) &&
+			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
+			err = ErrControlMessageTooBig
+			return
 		}
+		
 		if bodyLen >= 0 {
 			masked := (c.buffer[1] & 0x80) != 0
 			if masked {
