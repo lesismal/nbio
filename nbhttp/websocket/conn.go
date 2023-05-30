@@ -158,55 +158,84 @@ func (c *Conn) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body 
 }
 
 func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
+	const errInvalidUtf8Text = "invalid UTF-8 bytes"
+
 	if c.KeepaliveTime > 0 {
 		defer c.SetReadDeadline(time.Now().Add(c.KeepaliveTime))
 	}
+
 	switch opcode {
 	case BinaryMessage:
 		c.messageHandler(c, opcode, data)
+		return
 	case TextMessage:
 		if !c.Engine.CheckUtf8(data) {
-			const errText = "Invalid UTF-8 bytes"
-			protoErrorData := make([]byte, 2+len(errText))
+			protoErrorData := make([]byte, 2+len(errInvalidUtf8Text))
 			binary.BigEndian.PutUint16(protoErrorData, 1002)
-			copy(protoErrorData[2:], errText)
+			copy(protoErrorData[2:], errInvalidUtf8Text)
+			c.SetCloseError(ErrInvalidUtf8)
 			c.WriteMessage(CloseMessage, protoErrorData)
-			return
+			goto ErrExit
 		}
 		c.messageHandler(c, opcode, data)
+		return
+	case PingMessage:
+		c.pingMessageHandler(c, string(data))
+		return
+	case PongMessage:
+		c.pongMessageHandler(c, string(data))
+		return
 	case CloseMessage:
 		if len(data) >= 2 {
 			code := int(binary.BigEndian.Uint16(data[:2]))
-			if !validCloseCode(code) || !c.Engine.CheckUtf8(data[2:]) {
+			if !validCloseCode(code) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
+				c.SetCloseError(ErrInvalidCloseCode)
 				c.WriteMessage(CloseMessage, protoErrorCode)
-			} else {
-				reson := string(data[2:])
+				goto ErrExit
+			}
+			if !c.Engine.CheckUtf8(data[2:]) {
+				protoErrorData := make([]byte, 2+len(errInvalidUtf8Text))
+				binary.BigEndian.PutUint16(protoErrorData, 1002)
+				copy(protoErrorData[2:], errInvalidUtf8Text)
+				c.SetCloseError(ErrInvalidUtf8)
+				c.WriteMessage(CloseMessage, protoErrorData)
+				goto ErrExit
+			}
+
+			reson := string(data[2:])
+			if code != 1000 {
 				c.SetCloseError(&CloseError{
 					Code:   code,
 					Reason: reson,
 				})
-				c.closeMessageHandler(c, code, reson)
 			}
+			c.closeMessageHandler(c, code, reson)
 		} else {
-			c.WriteMessage(CloseMessage, nil)
+			c.SetCloseError(ErrInvalidControlFrame)
 		}
-		// close immediately, no need to wait for data flushed on a blocked conn
-		c.Conn.Close()
-	case PingMessage:
-		c.pingMessageHandler(c, string(data))
-	case PongMessage:
-		c.pongMessageHandler(c, string(data))
 	case FragmentMessage:
 		logging.Debug("invalid fragment message")
-		c.Conn.Close()
+		c.SetCloseError(ErrInvalidFragmentMessage)
 	default:
+		logging.Debug("invalid message type: %v", opcode)
+		c.SetCloseError(fmt.Errorf("websocket: invalid message type: %v", opcode))
+	}
+
+ErrExit:
+	if c.IsAsyncWrite() {
+		if c.Engine.IsTimerRunning() {
+			c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
+		} else {
+			time.AfterFunc(time.Second, func() { c.Conn.Close() })
+		}
+	} else {
 		c.Conn.Close()
 	}
 }
 
-func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
+func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool, err error) {
 	l := int64(len(c.buffer))
 	headLen := int64(2)
 	if l >= 2 {
@@ -232,6 +261,13 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 		default:
 			bodyLen = int64(payloadLen)
 		}
+		switch opcode {
+		case PingMessage, PongMessage, CloseMessage:
+			if bodyLen > maxControlFramePayloadSize {
+				err = ErrControlMessageTooBig
+				return
+			}
+		}
 		if bodyLen >= 0 {
 			masked := (c.buffer[1] & 0x80) != 0
 			if masked {
@@ -253,7 +289,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 		}
 	}
 
-	return opcode, body, ok, fin, res1, res2, res3
+	return opcode, body, ok, fin, res1, res2, res3, err
 }
 
 // Read .
@@ -274,7 +310,11 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 
 	var err error
 	for i := 0; true; i++ {
-		opcode, body, ok, fin, res1, res2, res3 := c.nextFrame()
+		opcode, body, ok, fin, res1, res2, res3, e := c.nextFrame()
+		if e != nil {
+			err = e
+			break
+		}
 		if !ok {
 			break
 		}
@@ -468,7 +508,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	case BinaryMessage:
 	case PingMessage, PongMessage, CloseMessage:
 		if len(data) > maxControlFramePayloadSize {
-			return ErrInvalidControlFrame
+			return ErrControlMessageTooBig
 		}
 	case FragmentMessage:
 	default:

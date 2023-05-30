@@ -33,6 +33,7 @@ type Timer struct {
 	trigger *time.Timer
 	items   timerHeap
 
+	running bool
 	chClose chan struct{}
 }
 
@@ -54,6 +55,7 @@ func New(name string, executor func(f func())) *Timer {
 // Start .
 func (t *Timer) Start() {
 	t.wg.Add(1)
+	t.running = true
 	go t.loop()
 }
 
@@ -185,10 +187,17 @@ func (t *Timer) resetTimerUntil(it *Item, expire time.Time) {
 	}
 }
 
+func (t *Timer) IsTimerRunning() bool {
+	return t.running
+}
+
 func (t *Timer) loop() {
 	defer t.wg.Done()
 	logging.Debug("Timer[%v] timer start", t.name)
-	defer logging.Debug("Timer[%v] timer stopped", t.name)
+	defer func() {
+		t.running = false
+		logging.Debug("Timer[%v] timer stopped", t.name)
+	}()
 	for {
 		select {
 		case <-t.chCalling:
