@@ -267,7 +267,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 			err = ErrControlMessageTooBig
 			return
 		}
-		
+
 		if bodyLen >= 0 {
 			masked := (c.buffer[1] & 0x80) != 0
 			if masked {
