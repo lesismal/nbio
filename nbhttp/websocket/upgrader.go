@@ -101,10 +101,6 @@ func NewUpgrader() *Upgrader {
 		BlockingModSendQueueMaxSize:  DefaultBlockingModSendQueueMaxSize,
 	}
 	u.pingMessageHandler = func(c *Conn, data string) {
-		if len(data) > 125 {
-			c.Close()
-			return
-		}
 		err := c.WriteMessage(PongMessage, []byte(data))
 		if err != nil {
 			logging.Debug("failed to send pong %v", err)
@@ -114,9 +110,6 @@ func NewUpgrader() *Upgrader {
 	}
 	u.pongMessageHandler = func(*Conn, string) {}
 	u.closeMessageHandler = func(c *Conn, code int, text string) {
-		if len(text)+2 > maxControlFramePayloadSize {
-			return //ErrInvalidControlFrame
-		}
 		buf := mempool.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
