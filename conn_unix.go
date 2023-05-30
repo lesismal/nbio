@@ -286,11 +286,10 @@ func (c *Conn) setDeadline(timer **timer.Item, returnErr error, t time.Time) err
 		return nil
 	}
 	if !t.IsZero() {
-		now := time.Now()
 		if *timer == nil {
-			*timer = c.p.g.AfterFunc(t.Sub(now), func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.UntilFunc(t, func() { c.closeWithError(returnErr) })
 		} else {
-			(*timer).Reset(t.Sub(now))
+			(*timer).ResetUntil(t)
 		}
 	} else if *timer != nil {
 		(*timer).Stop()

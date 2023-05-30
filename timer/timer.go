@@ -94,6 +94,27 @@ func (t *Timer) AfterFunc(timeout time.Duration, f func()) *Item {
 	return it
 }
 
+// UntilFunc call f when time expire.
+func (t *Timer) UntilFunc(expire time.Time, f func()) *Item {
+	t.mux.Lock()
+
+	it := &Item{
+		index:  len(t.items),
+		expire: expire,
+		f:      f,
+		parent: t,
+	}
+
+	heap.Push(&t.items, it)
+	if t.items[0] == it {
+		t.trigger.Reset(time.Until(it.expire))
+	}
+
+	t.mux.Unlock()
+
+	return it
+}
+
 // Async executes f in another goroutine.
 func (t *Timer) Async(f func()) {
 	if f != nil {
@@ -139,6 +160,24 @@ func (t *Timer) resetTimer(it *Item, d time.Duration) {
 
 	if t.items[index] == it {
 		it.expire = time.Now().Add(d)
+		heap.Fix(&t.items, index)
+		if index == 0 || it.index == 0 {
+			t.trigger.Reset(time.Until(t.items[0].expire))
+		}
+	}
+}
+
+func (t *Timer) resetTimerUntil(it *Item, expire time.Time) {
+	t.mux.Lock()
+	defer t.mux.Unlock()
+
+	index := it.index
+	if index < 0 || index >= len(t.items) {
+		return
+	}
+
+	if t.items[index] == it {
+		it.expire = expire
 		heap.Fix(&t.items, index)
 		if index == 0 || it.index == 0 {
 			t.trigger.Reset(time.Until(t.items[0].expire))
@@ -262,4 +301,9 @@ func (it *Item) Stop() {
 // Reset resets timer.
 func (it *Item) Reset(timeout time.Duration) {
 	it.parent.resetTimer(it, timeout)
+}
+
+// ResetUntil resets timer.
+func (it *Item) ResetUntil(t time.Time) {
+	it.parent.resetTimerUntil(it, t)
 }

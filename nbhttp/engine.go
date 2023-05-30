@@ -409,6 +409,17 @@ func (e *Engine) stopListeners() {
 
 // Start .
 func (e *Engine) Start() error {
+	modNames := map[int]string{
+		IOModMixed:       "IOModMixed",
+		IOModBlocking:    "IOModBlocking",
+		IOModNonBlocking: "IOModNonBlocking",
+	}
+	if e.IOMod == IOModMixed {
+		logging.Info("NBHTTP[%v] Start with %q, MaxBlockingOnline: %v", e.Engine.Name, modNames[e.IOMod], e.MaxBlockingOnline)
+	} else {
+		logging.Info("NBHTTP[%v] Start with %q", e.Engine.Name, modNames[e.IOMod])
+	}
+
 	err := e.Engine.Start()
 	if err != nil {
 		return err
