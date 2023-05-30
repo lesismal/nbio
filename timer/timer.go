@@ -107,7 +107,7 @@ func (t *Timer) UntilFunc(expire time.Time, f func()) *Item {
 
 	heap.Push(&t.items, it)
 	if t.items[0] == it {
-		t.trigger.Reset(time.Since(it.expire))
+		t.trigger.Reset(time.Until(it.expire))
 	}
 
 	t.mux.Unlock()
