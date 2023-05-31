@@ -53,7 +53,7 @@ const (
 	// DefaultKeepaliveTime .
 	DefaultKeepaliveTime = time.Second * 120
 
-	// DefaultBlockingReadBufferSize sets to 4k(<= goroutine stack size).
+	// DefaultBlockingReadBufferSize sets to 4k.
 	DefaultBlockingReadBufferSize = 1024 * 4
 )
 
@@ -116,7 +116,7 @@ type Config struct {
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
 	ReadLimit int
 
-	// ReadBufferSize represents buffer size for reading, it's set to 32k by default.
+	// ReadBufferSize represents buffer size for reading, it's set to 64k by default.
 	ReadBufferSize int
 
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
