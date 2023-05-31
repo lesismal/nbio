@@ -52,7 +52,7 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
-	// ReadBufferSize represents buffer size for reading, it's set to 16k by default.
+	// ReadBufferSize represents buffer size for reading, it's set to 64k by default.
 	ReadBufferSize int
 
 	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
