@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/mempool"
-	"github.com/lesismal/nbio/timer"
 )
 
 // Conn implements net.Conn.
