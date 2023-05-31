@@ -30,8 +30,8 @@ type Conn struct {
 
 	connUDP *udpConn
 
-	rTimer *timer.Item
-	wTimer *timer.Item
+	rTimer *time.Timer
+	wTimer *time.Timer
 
 	writeBuffer []byte
 
@@ -279,7 +279,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *Conn) setDeadline(timer **timer.Item, returnErr error, t time.Time) error {
+func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if c.closed {
@@ -287,9 +287,9 @@ func (c *Conn) setDeadline(timer **timer.Item, returnErr error, t time.Time) err
 	}
 	if !t.IsZero() {
 		if *timer == nil {
-			*timer = c.p.g.UntilFunc(t, func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.AfterFunc(t.Sub(time.Now()), func() { c.closeWithError(returnErr) })
 		} else {
-			(*timer).ResetUntil(t)
+			(*timer).Reset(t.Sub(time.Now()))
 		}
 	} else if *timer != nil {
 		(*timer).Stop()
