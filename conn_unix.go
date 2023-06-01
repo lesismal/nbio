@@ -387,7 +387,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	}
 
 	if c.overflow(len(b)) {
-		return -1, syscall.EINVAL
+		return -1, errOverflow
 	}
 
 	if len(c.writeBuffer) == 0 {
@@ -469,7 +469,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		size += len(v)
 	}
 	if c.overflow(size) {
-		return -1, syscall.EINVAL
+		return -1, errOverflow
 	}
 	if len(c.writeBuffer) > 0 {
 		for _, v := range in {

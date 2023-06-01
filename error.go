@@ -11,4 +11,5 @@ import (
 var (
 	errReadTimeout  = errors.New("read timeout")
 	errWriteTimeout = errors.New("write timeout")
+	errOverflow     = errors.New("write overflow")
 )
