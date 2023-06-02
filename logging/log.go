@@ -6,6 +6,7 @@ package logging
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 )
