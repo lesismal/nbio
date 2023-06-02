@@ -546,6 +546,7 @@ func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	key, err := conn2Array(nbc)
 	if err != nil {
 		nbc.Close()
+		logging.Error("AddTransferredConn failed: %v", err)
 		return err
 	}
 
@@ -553,6 +554,7 @@ func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
+		logging.Error("AddTransferredConn failed: overload, already has %v online", engine.MaxLoad)
 		return ErrServiceOverload
 	}
 	engine.conns[key] = struct{}{}
@@ -567,6 +569,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 	nbc, err := nbio.NBConn(c)
 	if err != nil {
 		c.Close()
+		logging.Error("AddConnNonTLSNonBlocking failed: %v", err)
 		return
 	}
 	if nbc.Session() != nil {
@@ -576,6 +579,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 	key, err := conn2Array(nbc)
 	if err != nil {
 		nbc.Close()
+		logging.Error("AddConnNonTLSNonBlocking failed: %v", err)
 		return
 	}
 
@@ -583,6 +587,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(c net.Conn, tlsConfig *tls.Config
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
+		logging.Error("AddConnNonTLSNonBlocking failed: overload, already has %v online", engine.MaxLoad)
 		return
 	}
 	engine.conns[key] = struct{}{}
@@ -606,6 +611,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
+		logging.Error("AddConnNonTLSBlocking failed: overload, already has %v online", engine.MaxLoad)
 		conn.Close()
 		decrease()
 		return
@@ -617,6 +623,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 			engine.mux.Unlock()
 			conn.Close()
 			decrease()
+			logging.Error("AddConnNonTLSBlocking failed: %v", err)
 			return
 		}
 		engine.conns[key] = struct{}{}
@@ -624,6 +631,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn net.Conn, tlsConfig *tls.Config
 		engine.mux.Unlock()
 		conn.Close()
 		decrease()
+		logging.Error("AddConnNonTLSBlocking failed: unknown conn type: %v", vt)
 		return
 	}
 	engine.mux.Unlock()
@@ -641,15 +649,18 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 	nbc, err := nbio.NBConn(conn)
 	if err != nil {
 		conn.Close()
+		logging.Error("AddConnTLSNonBlocking failed: %v", err)
 		return
 	}
 	if nbc.Session() != nil {
 		nbc.Close()
+		logging.Error("AddConnTLSNonBlocking failed: session should not be nil")
 		return
 	}
 	key, err := conn2Array(nbc)
 	if err != nil {
 		nbc.Close()
+		logging.Error("AddConnTLSNonBlocking failed: %v", err)
 		return
 	}
 
@@ -657,6 +668,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn net.Conn, tlsConfig *tls.Config
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
+		logging.Error("AddConnTLSNonBlocking failed: overload, already has %v online", engine.MaxLoad)
 		return
 	}
 
@@ -689,6 +701,7 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 		engine.mux.Unlock()
 		conn.Close()
 		decrease()
+		logging.Error("AddConnTLSBlocking failed: overload, already has %v online", engine.MaxLoad)
 		return
 	}
 
@@ -699,6 +712,7 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 			engine.mux.Unlock()
 			conn.Close()
 			decrease()
+			logging.Error("AddConnTLSBlocking failed: %v", err)
 			return
 		}
 		engine.conns[key] = struct{}{}
@@ -706,6 +720,7 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 		engine.mux.Unlock()
 		conn.Close()
 		decrease()
+		logging.Error("AddConnTLSBlocking unknown conn type: %v", vt)
 		return
 	}
 	engine.mux.Unlock()
