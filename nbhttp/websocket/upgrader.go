@@ -28,7 +28,7 @@ var (
 	DefaultBlockingReadBufferSize = 1024 * 4
 
 	// DefaultBlockingModAsyncWrite .
-	DefaultBlockingModAsyncWrite = false
+	DefaultBlockingModAsyncWrite = true
 
 	DefaultBlockingModSendQueueInitSize = 4
 
