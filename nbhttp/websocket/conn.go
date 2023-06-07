@@ -74,6 +74,16 @@ type Conn struct {
 	message                  []byte
 }
 
+// IsClient .
+func (c *Conn) IsClient() bool {
+	return c.isClient
+}
+
+// SetClient .
+func (c *Conn) SetClient(isClient bool) {
+	c.isClient = isClient
+}
+
 // IsBlockingMod .
 func (c *Conn) IsBlockingMod() bool {
 	return c.isBlockingMod
