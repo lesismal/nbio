@@ -369,11 +369,11 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if wsc.isBlockingMod {
-		if rw != nil {
-			go wsc.BlockingModReadLoopByReadWriter(rw)
-		} else {
-			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
-		}
+
+		go wsc.BlockingModReadLoopByReadWriter(rw)
+		// } else {
+		// 	go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
+		// }
 	}
 
 	return wsc, nil

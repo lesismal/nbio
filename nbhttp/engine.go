@@ -5,7 +5,6 @@
 package nbhttp
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"net"
@@ -744,9 +743,9 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 
 func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease func()) {
 	var (
-		n      int
-		err    error
-		reader = bufio.NewReaderSize(conn, 4096)
+		n          int
+		err        error
+		readBuffer = make([]byte, 4096)
 	)
 
 	defer func() {
@@ -762,8 +761,6 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 		decrease()
 	}()
 
-	readBuffer, _ := reader.Peek(reader.Size())
-	parser.ReadWriter = bufio.NewReadWriter(reader, nil)
 	for {
 		n, err = conn.Read(readBuffer)
 		if err != nil {
@@ -775,13 +772,12 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 
 func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
 	var (
-		err    error
-		nread  int
-		reader = bufio.NewReaderSize(tlsConn, 4096)
+		err        error
+		nread      int
+		readBuffer = make([]byte, 4096)
 	)
 
 	defer func() {
-		// readBufferPool.Free(readBuffer)
 		parser.Close(err)
 		tlsConn.Close()
 		engine.mux.Lock()
@@ -795,8 +791,6 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 		decrease()
 	}()
 
-	readBuffer, _ := reader.Peek(reader.Size())
-	parser.ReadWriter = bufio.NewReadWriter(reader, nil)
 	for {
 		nread, err = conn.Read(readBuffer)
 		if err != nil {

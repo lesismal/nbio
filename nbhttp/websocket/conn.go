@@ -475,7 +475,7 @@ func (c *Conn) OnOpen(h func(*Conn)) {
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.Engine.ReleaseWebsocketPayload && len(data) > 0 {
+			if !c.isBlockingMod && c.Engine.ReleaseWebsocketPayload && len(data) > 0 {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, data)
@@ -806,6 +806,11 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 		head   = make([]byte, 14)
 		body   = []byte{}
 	)
+
+	if rw == nil {
+		rw = bufio.NewReadWriter(bufio.NewReaderSize(c.Conn, 4096), nil)
+	}
+
 	defer func() {
 		c.CloseAndClean(err)
 	}()
