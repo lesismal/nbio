@@ -256,35 +256,35 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 		res3 = int8(c.buffer[0]&0x10) != 0
 		fin = ((c.buffer[0] & 0x80) != 0)
 		payloadLen := c.buffer[1] & 0x7F
-		bodyLen := int64(-1)
+		frameLen := int64(-1)
 
 		switch payloadLen {
 		case 126:
 			if l >= 4 {
-				bodyLen = int64(binary.BigEndian.Uint16(c.buffer[2:4]))
+				frameLen = int64(binary.BigEndian.Uint16(c.buffer[2:4]))
 				headLen = 4
 			}
 		case 127:
 			if len(c.buffer) >= 10 {
-				bodyLen = int64(binary.BigEndian.Uint64(c.buffer[2:10]))
+				frameLen = int64(binary.BigEndian.Uint64(c.buffer[2:10]))
 				headLen = 10
 			}
 		default:
-			bodyLen = int64(payloadLen)
+			frameLen = int64(payloadLen)
 		}
 
-		if (bodyLen > maxControlFramePayloadSize) &&
+		if (frameLen > maxControlFramePayloadSize) &&
 			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
 			err = ErrControlMessageTooBig
 			return
 		}
 
-		if bodyLen >= 0 {
+		if frameLen >= 0 {
 			masked := (c.buffer[1] & 0x80) != 0
 			if masked {
 				headLen += 4
 			}
-			total := headLen + bodyLen
+			total := headLen + frameLen
 			if l >= total {
 				body = c.buffer[headLen:total]
 				if masked {
@@ -803,7 +803,8 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 		res3   bool
 		err    error
 		opcode MessageType
-		head   = make([]byte, 14)
+		_head  = [14]byte{}
+		head   = _head[:]
 		body   = []byte{}
 	)
 
@@ -827,7 +828,7 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 		res3 = int8(head[0]&0x10) != 0
 		fin = ((head[0] & 0x80) != 0)
 		payloadLen := head[1] & 0x7F
-		bodyLen := -1
+		frameLen := 0
 
 		switch payloadLen {
 		case 126:
@@ -835,26 +836,32 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 			if err != nil {
 				return
 			}
-			bodyLen = int(binary.BigEndian.Uint16(head[2:4]))
+			frameLen = int(binary.BigEndian.Uint16(head[2:4]))
 			headLen = 4
 		case 127:
 			_, err = rw.Read(head[2:10])
 			if err != nil {
 				return
 			}
-			bodyLen = int(binary.BigEndian.Uint64(c.buffer[2:10]))
+			frameLen = int(binary.BigEndian.Uint64(c.buffer[2:10]))
 			headLen = 10
 		default:
-			bodyLen = int(payloadLen)
+			frameLen = int(payloadLen)
 		}
 
-		if (bodyLen > maxControlFramePayloadSize) &&
+		if (frameLen > maxControlFramePayloadSize) &&
 			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
 			err = ErrControlMessageTooBig
 			return
 		}
 
-		if bodyLen >= 0 {
+		if err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments); err != nil {
+			return
+		}
+		if frameLen >= 0 {
+			if frameLen != 1024 {
+				println("--- frameLen:", frameLen)
+			}
 			masked := (head[1] & 0x80) != 0
 			if masked {
 				_, err = rw.Read(head[headLen : headLen+4])
@@ -862,11 +869,19 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 					return
 				}
 			}
-			if cap(body) < bodyLen {
-				body = append(body[:cap(body)], make([]byte, bodyLen-cap(body))...)
+			lb := len(body)
+			if c.isMessageTooLarge(lb + frameLen) {
+				err = ErrMessageTooLarge
+				return
 			}
-			body = body[:bodyLen]
-			_, err = rw.Read(body)
+			if cap(body)-lb < frameLen {
+				body = append(body[:cap(body)], make([]byte, frameLen-cap(body)+lb)...)
+			}
+			body = body[:frameLen]
+			if len(body) != 1024 {
+				println("--- len(body):", len(body))
+			}
+			_, err = rw.Read(body[lb:])
 			if err != nil {
 				return
 			}
@@ -877,15 +892,9 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 				}
 			}
 		}
-		if err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments); err != nil {
-			return
-		}
 
+		compress := res1
 		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
-			if c.opcode == 0 {
-				c.opcode = opcode
-				c.compress = res1
-			}
 			bl := len(body)
 			if c.dataFrameHandler != nil {
 				var frame []byte
@@ -897,69 +906,49 @@ func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
 					frame = c.Engine.BodyAllocator.Malloc(bl)
 					copy(frame, body)
 				}
-				if c.opcode == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
+				if opcode == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
 					c.Conn.Close()
 				} else {
-					c.handleDataFrame(nil, c.opcode, fin, frame)
+					c.handleDataFrame(nil, opcode, fin, frame)
 				}
 			}
-			if c.messageHandler != nil {
-				if c.message == nil {
-					if c.isMessageTooLarge(len(body)) {
-						err = ErrMessageTooLarge
-						return
-					}
-					c.message = c.Engine.BodyAllocator.Malloc(len(body))
-					copy(c.message, body)
-				} else {
-					if c.isMessageTooLarge(len(c.message) + len(body)) {
-						err = ErrMessageTooLarge
-						return
-					}
-					c.message = c.Engine.BodyAllocator.Append(c.message, body...)
-				}
-			}
-			if fin {
-				if c.messageHandler != nil {
-					if c.compress {
-						if c.Engine.WebsocketDecompressor != nil {
-							var b []byte
-							decompressor := c.Engine.WebsocketDecompressor()
-							defer decompressor.Close()
-							b, err = decompressor.Decompress(c.message)
-							if err != nil {
-								return
-							}
-							c.Engine.BodyAllocator.Free(c.message)
-							c.message = b
-						} else {
-							var b []byte
-							rc := decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
-							b, err = c.readAll(rc, len(c.message)*2)
-							c.Engine.BodyAllocator.Free(c.message)
-							c.message = b
-							rc.Close()
-							if err != nil {
-								return
-							}
+			if fin && c.messageHandler != nil {
+				if compress {
+					if c.Engine.WebsocketDecompressor != nil {
+						var b []byte
+						decompressor := c.Engine.WebsocketDecompressor()
+						defer decompressor.Close()
+						b, err = decompressor.Decompress(body)
+						if err != nil {
+							return
+						}
+						c.Engine.BodyAllocator.Free(body)
+						c.message = b
+					} else {
+						var b []byte
+						rc := decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
+						b, err = c.readAll(rc, len(c.message)*2)
+						c.Engine.BodyAllocator.Free(c.message)
+						c.message = b
+						rc.Close()
+						if err != nil {
+							return
 						}
 					}
-					c.handleMessage(nil, opcode, c.message)
 				}
-				c.compress = false
-				c.expectingFragments = false
+				if len(c.message) != 1024 {
+					println("------- len(c.message):", len(c.message))
+				}
+				c.handleMessage(nil, opcode, c.message)
 				c.message = nil
-				c.opcode = 0
+				body = body[:0]
+				c.expectingFragments = false
 			} else {
 				c.expectingFragments = true
 			}
 		} else {
 			var frame []byte
 			if len(body) > 0 {
-				if c.isMessageTooLarge(len(body)) {
-					err = ErrMessageTooLarge
-					break
-				}
 				frame = c.Engine.BodyAllocator.Malloc(len(body))
 				copy(frame, body)
 			}
