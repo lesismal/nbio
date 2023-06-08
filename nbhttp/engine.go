@@ -5,6 +5,7 @@
 package nbhttp
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"net"
@@ -188,6 +189,8 @@ type Config struct {
 	IOMod int
 	// MaxBlockingOnline represents max blocking conn's online num.
 	MaxBlockingOnline int
+
+	// deprecated .
 	// BlockingReadBufferSize represents read buffer size of blocking mod.
 	BlockingReadBufferSize int
 
@@ -741,20 +744,12 @@ func (engine *Engine) AddConnTLSBlocking(conn net.Conn, tlsConfig *tls.Config, d
 
 func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease func()) {
 	var (
-		n   int
-		err error
+		n      int
+		err    error
+		reader = bufio.NewReaderSize(conn, 4096)
 	)
 
-	readBufferPool := engine.ReadBufferPool
-	if readBufferPool == nil {
-		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
-	}
-
-	buf := readBufferPool.Malloc(engine.BlockingReadBufferSize)
-	defer readBufferPool.Free(buf)
-
 	defer func() {
-		// go func() {
 		parser.Close(err)
 		engine.mux.Lock()
 		switch vt := conn.(type) {
@@ -765,32 +760,28 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 		engine.mux.Unlock()
 		engine._onClose(conn, err)
 		decrease()
-		// }()
 	}()
 
+	readBuffer, _ := reader.Peek(reader.Size())
+	parser.ReadWriter = bufio.NewReadWriter(reader, nil)
 	for {
-		n, err = conn.Read(buf)
+		n, err = conn.Read(readBuffer)
 		if err != nil {
 			return
 		}
-		parser.Read(buf[:n])
+		parser.Read(readBuffer[:n])
 	}
 }
 
 func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
 	var (
-		err   error
-		nread int
+		err    error
+		nread  int
+		reader = bufio.NewReaderSize(tlsConn, 4096)
 	)
 
-	readBufferPool := engine.ReadBufferPool
-	if readBufferPool == nil {
-		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
-	}
-
-	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
 	defer func() {
-		readBufferPool.Free(buffer)
+		// readBufferPool.Free(readBuffer)
 		parser.Close(err)
 		tlsConn.Close()
 		engine.mux.Lock()
@@ -804,21 +795,23 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 		decrease()
 	}()
 
+	readBuffer, _ := reader.Peek(reader.Size())
+	parser.ReadWriter = bufio.NewReadWriter(reader, nil)
 	for {
-		nread, err = conn.Read(buffer)
+		nread, err = conn.Read(readBuffer)
 		if err != nil {
 			return
 		}
 
-		readed := buffer[:nread]
+		readed := readBuffer[:nread]
 		for {
-			_, nread, err = tlsConn.AppendAndRead(readed, buffer)
+			_, nread, err = tlsConn.AppendAndRead(readed, readBuffer)
 			readed = nil
 			if err != nil {
 				return
 			}
 			if nread > 0 {
-				err = parser.Read(buffer[:nread])
+				err = parser.Read(readBuffer[:nread])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
 					return

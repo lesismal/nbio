@@ -200,7 +200,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	if !ok {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
 	}
-	conn, _, err := h.Hijack()
+	conn, rw, err := h.Hijack()
 	if err != nil {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
@@ -369,7 +369,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if wsc.isBlockingMod {
-		if parser == nil {
+		if rw != nil {
+			go wsc.BlockingModReadLoopByReadWriter(rw)
+		} else {
 			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
 		}
 	}

@@ -5,6 +5,7 @@
 package websocket
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -792,6 +793,174 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 		wsc.sendQueueSize = u.BlockingModSendQueueMaxSize
 	}
 	return wsc
+}
+
+func (c *Conn) BlockingModReadLoopByReadWriter(rw *bufio.ReadWriter) {
+	var (
+		fin    bool
+		res1   bool
+		res2   bool
+		res3   bool
+		err    error
+		opcode MessageType
+		head   = make([]byte, 14)
+		body   = []byte{}
+	)
+	defer func() {
+		c.CloseAndClean(err)
+	}()
+
+	for {
+		_, err = rw.Read(head[:2])
+		if err != nil {
+			return
+		}
+		headLen := int64(0)
+		opcode = MessageType(head[0] & 0xF)
+		res1 = int8(head[0]&0x40) != 0
+		res2 = int8(head[0]&0x20) != 0
+		res3 = int8(head[0]&0x10) != 0
+		fin = ((head[0] & 0x80) != 0)
+		payloadLen := head[1] & 0x7F
+		bodyLen := -1
+
+		switch payloadLen {
+		case 126:
+			_, err = rw.Read(head[2:4])
+			if err != nil {
+				return
+			}
+			bodyLen = int(binary.BigEndian.Uint16(head[2:4]))
+			headLen = 4
+		case 127:
+			_, err = rw.Read(head[2:10])
+			if err != nil {
+				return
+			}
+			bodyLen = int(binary.BigEndian.Uint64(c.buffer[2:10]))
+			headLen = 10
+		default:
+			bodyLen = int(payloadLen)
+		}
+
+		if (bodyLen > maxControlFramePayloadSize) &&
+			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
+			err = ErrControlMessageTooBig
+			return
+		}
+
+		if bodyLen >= 0 {
+			masked := (head[1] & 0x80) != 0
+			if masked {
+				_, err = rw.Read(head[headLen : headLen+4])
+				if err != nil {
+					return
+				}
+			}
+			if cap(body) < bodyLen {
+				body = append(body[:cap(body)], make([]byte, bodyLen-cap(body))...)
+			}
+			body = body[:bodyLen]
+			_, err = rw.Read(body)
+			if err != nil {
+				return
+			}
+			if masked {
+				maskKey := head[headLen : headLen+4]
+				for i := 0; i < len(body); i++ {
+					body[i] ^= maskKey[i%4]
+				}
+			}
+		}
+		if err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments); err != nil {
+			return
+		}
+
+		if opcode == FragmentMessage || opcode == TextMessage || opcode == BinaryMessage {
+			if c.opcode == 0 {
+				c.opcode = opcode
+				c.compress = res1
+			}
+			bl := len(body)
+			if c.dataFrameHandler != nil {
+				var frame []byte
+				if bl > 0 {
+					if c.isMessageTooLarge(bl) {
+						err = ErrMessageTooLarge
+						return
+					}
+					frame = c.Engine.BodyAllocator.Malloc(bl)
+					copy(frame, body)
+				}
+				if c.opcode == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
+					c.Conn.Close()
+				} else {
+					c.handleDataFrame(nil, c.opcode, fin, frame)
+				}
+			}
+			if c.messageHandler != nil {
+				if c.message == nil {
+					if c.isMessageTooLarge(len(body)) {
+						err = ErrMessageTooLarge
+						return
+					}
+					c.message = c.Engine.BodyAllocator.Malloc(len(body))
+					copy(c.message, body)
+				} else {
+					if c.isMessageTooLarge(len(c.message) + len(body)) {
+						err = ErrMessageTooLarge
+						return
+					}
+					c.message = c.Engine.BodyAllocator.Append(c.message, body...)
+				}
+			}
+			if fin {
+				if c.messageHandler != nil {
+					if c.compress {
+						if c.Engine.WebsocketDecompressor != nil {
+							var b []byte
+							decompressor := c.Engine.WebsocketDecompressor()
+							defer decompressor.Close()
+							b, err = decompressor.Decompress(c.message)
+							if err != nil {
+								return
+							}
+							c.Engine.BodyAllocator.Free(c.message)
+							c.message = b
+						} else {
+							var b []byte
+							rc := decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
+							b, err = c.readAll(rc, len(c.message)*2)
+							c.Engine.BodyAllocator.Free(c.message)
+							c.message = b
+							rc.Close()
+							if err != nil {
+								return
+							}
+						}
+					}
+					c.handleMessage(nil, opcode, c.message)
+				}
+				c.compress = false
+				c.expectingFragments = false
+				c.message = nil
+				c.opcode = 0
+			} else {
+				c.expectingFragments = true
+			}
+		} else {
+			var frame []byte
+			if len(body) > 0 {
+				if c.isMessageTooLarge(len(body)) {
+					err = ErrMessageTooLarge
+					break
+				}
+				frame = c.Engine.BodyAllocator.Malloc(len(body))
+				copy(frame, body)
+			}
+			c.handleProtocolMessage(nil, opcode, frame)
+		}
+	}
 }
 
 // BlockingModReadLoop .

@@ -5,6 +5,7 @@
 package nbhttp
 
 import (
+	"bufio"
 	"fmt"
 	"net"
 	"net/http"
@@ -44,7 +45,8 @@ type Parser struct {
 
 	Processor Processor
 
-	Reader interface {
+	ReadWriter *bufio.ReadWriter
+	Reader     interface {
 		Read(p *Parser, data []byte) error
 		CloseAndClean(err error)
 	}

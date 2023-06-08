@@ -50,7 +50,7 @@ func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return nil, nil, errors.New("nil Proccessor")
 	}
 	res.hijacked = true
-	return res.Parser.Processor.Conn(), nil, nil
+	return res.Parser.Processor.Conn(), res.Parser.ReadWriter, nil
 }
 
 // Header .
