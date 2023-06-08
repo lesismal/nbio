@@ -164,7 +164,7 @@ func (u *Upgrader) OnOpen(h func(*Conn)) {
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.Engine.ReleaseWebsocketPayload && len(data) > 0 {
+			if c.isBlockingMod && c.Engine.ReleaseWebsocketPayload && len(data) > 0 {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, data)
@@ -369,11 +369,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if wsc.isBlockingMod {
-
 		go wsc.BlockingModReadLoopByReadWriter(rw)
-		// } else {
-		// 	go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
-		// }
 	}
 
 	return wsc, nil
