@@ -27,8 +27,7 @@ type Timer struct {
 
 	executor func(f func())
 
-	chCalling chan struct{}
-	callings  []func()
+	chCalling chan func()
 
 	trigger *time.Timer
 	items   timerHeap
@@ -43,8 +42,7 @@ func New(name string, executor func(f func())) *Timer {
 	t.mux.Lock()
 	t.name = name
 	t.executor = executor
-	t.callings = []func(){}
-	t.chCalling = make(chan struct{}, 1)
+	t.chCalling = make(chan func(), 4096)
 	t.trigger = time.NewTimer(TimeForever)
 	t.chClose = make(chan struct{})
 	t.mux.Unlock()
@@ -120,13 +118,7 @@ func (t *Timer) UntilFunc(expire time.Time, f func()) *Item {
 // Async executes f in another goroutine.
 func (t *Timer) Async(f func()) {
 	if f != nil {
-		t.mux.Lock()
-		t.callings = append(t.callings, f)
-		t.mux.Unlock()
-		select {
-		case t.chCalling <- struct{}{}:
-		default:
-		}
+		t.chCalling <- f
 	}
 }
 
@@ -200,33 +192,22 @@ func (t *Timer) loop() {
 	}()
 	for {
 		select {
-		case <-t.chCalling:
-			for {
-				t.mux.Lock()
-				if len(t.callings) == 0 {
-					t.callings = nil
-					t.mux.Unlock()
-					break
-				}
-				f := t.callings[0]
-				t.callings = t.callings[1:]
-				t.mux.Unlock()
-				if t.executor != nil {
-					t.executor(f)
-				} else {
-					func() {
-						defer func() {
-							err := recover()
-							if err != nil {
-								const size = 64 << 10
-								buf := make([]byte, size)
-								buf = buf[:runtime.Stack(buf, false)]
-								logging.Error("Timer[%v] exec call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
-							}
-						}()
-						f()
+		case f := <-t.chCalling:
+			if t.executor != nil {
+				t.executor(f)
+			} else {
+				func() {
+					defer func() {
+						err := recover()
+						if err != nil {
+							const size = 64 << 10
+							buf := make([]byte, size)
+							buf = buf[:runtime.Stack(buf, false)]
+							logging.Error("Timer[%v] exec call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
+						}
 					}()
-				}
+					f()
+				}()
 			}
 		case <-t.trigger.C:
 			for {
