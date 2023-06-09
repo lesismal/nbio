@@ -233,10 +233,10 @@ func (g *Engine) OnClose(h func(c *Conn, err error)) {
 		panic("invalid nil handler")
 	}
 	g.onClose = func(c *Conn, err error) {
-		// g.Async(func() {
-		defer g.wgConn.Done()
-		h(c, err)
-		// })
+		g.Async(func() {
+			defer g.wgConn.Done()
+			h(c, err)
+		})
 	}
 }
 
