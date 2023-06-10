@@ -372,26 +372,19 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 			if fin {
 				if c.messageHandler != nil {
 					if c.compress {
+						var b []byte
+						var rc io.ReadCloser
 						if c.Engine.WebsocketDecompressor != nil {
-							var b []byte
-							decompressor := c.Engine.WebsocketDecompressor()
-							defer decompressor.Close()
-							b, err = decompressor.Decompress(c.message)
-							if err != nil {
-								break
-							}
-							c.Engine.BodyAllocator.Free(c.message)
-							c.message = b
+							rc = c.Engine.WebsocketDecompressor(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
 						} else {
-							var b []byte
-							rc := decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
-							b, err = c.readAll(rc, len(c.message)*2)
-							c.Engine.BodyAllocator.Free(c.message)
-							c.message = b
-							rc.Close()
-							if err != nil {
-								break
-							}
+							rc = decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
+						}
+						b, err = c.readAll(rc, len(c.message)*2)
+						c.Engine.BodyAllocator.Free(c.message)
+						c.message = b
+						rc.Close()
+						if err != nil {
+							break
 						}
 					}
 					c.handleMessage(p, c.opcode, c.message)
@@ -529,24 +522,24 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		// compress = true
 		// if user customize mempool, they should promise it's safe to mempool.Free a buffer which is not from their mempool.Malloc
 		// or we need to implement a writebuffer that use mempool.Realloc to grow or append the buffer
+		w := &writeBuffer{
+			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
+		}
+		defer w.Close()
+		w.Reset()
+
+		var cw io.WriteCloser
 		if c.Engine.WebsocketCompressor != nil {
-			compressor := c.Engine.WebsocketCompressor()
-			defer compressor.Close()
-			data = compressor.Compress(data)
+			cw = c.Engine.WebsocketCompressor(w, c.compressionLevel)
 		} else {
-			w := &writeBuffer{
-				Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
-			}
-			defer w.Close()
-			w.Reset()
-			cw := compressWriter(w, c.compressionLevel)
-			_, err := cw.Write(data)
-			if err != nil {
-				compress = false
-			} else {
-				cw.Close()
-				data = w.Bytes()
-			}
+			cw = compressWriter(w, c.compressionLevel)
+		}
+		_, err := cw.Write(data)
+		if err != nil {
+			compress = false
+		} else {
+			cw.Close()
+			data = w.Bytes()
 		}
 	}
 
