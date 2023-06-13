@@ -27,12 +27,12 @@ type Timer struct {
 
 	executor func(f func())
 
-	chCalling chan func()
+	chCalling chan struct{}
+	callings  []func()
 
 	trigger *time.Timer
 	items   timerHeap
 
-	running bool
 	chClose chan struct{}
 }
 
@@ -42,7 +42,8 @@ func New(name string, executor func(f func())) *Timer {
 	t.mux.Lock()
 	t.name = name
 	t.executor = executor
-	t.chCalling = make(chan func(), 4096)
+	t.callings = []func(){}
+	t.chCalling = make(chan struct{}, 1)
 	t.trigger = time.NewTimer(TimeForever)
 	t.chClose = make(chan struct{})
 	t.mux.Unlock()
@@ -53,7 +54,6 @@ func New(name string, executor func(f func())) *Timer {
 // Start .
 func (t *Timer) Start() {
 	t.wg.Add(1)
-	t.running = true
 	go t.loop()
 }
 
@@ -118,7 +118,13 @@ func (t *Timer) UntilFunc(expire time.Time, f func()) *Item {
 // Async executes f in another goroutine.
 func (t *Timer) Async(f func()) {
 	if f != nil {
-		t.chCalling <- f
+		t.mux.Lock()
+		t.callings = append(t.callings, f)
+		t.mux.Unlock()
+		select {
+		case t.chCalling <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -179,35 +185,39 @@ func (t *Timer) resetTimerUntil(it *Item, expire time.Time) {
 	}
 }
 
-func (t *Timer) IsTimerRunning() bool {
-	return t.running
-}
-
 func (t *Timer) loop() {
 	defer t.wg.Done()
 	logging.Debug("Timer[%v] timer start", t.name)
-	defer func() {
-		t.running = false
-		logging.Debug("Timer[%v] timer stopped", t.name)
-	}()
+	defer logging.Debug("Timer[%v] timer stopped", t.name)
 	for {
 		select {
-		case f := <-t.chCalling:
-			if t.executor != nil {
-				t.executor(f)
-			} else {
-				func() {
-					defer func() {
-						err := recover()
-						if err != nil {
-							const size = 64 << 10
-							buf := make([]byte, size)
-							buf = buf[:runtime.Stack(buf, false)]
-							logging.Error("Timer[%v] exec call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
-						}
+		case <-t.chCalling:
+			for {
+				t.mux.Lock()
+				if len(t.callings) == 0 {
+					t.callings = nil
+					t.mux.Unlock()
+					break
+				}
+				f := t.callings[0]
+				t.callings = t.callings[1:]
+				t.mux.Unlock()
+				if t.executor != nil {
+					t.executor(f)
+				} else {
+					func() {
+						defer func() {
+							err := recover()
+							if err != nil {
+								const size = 64 << 10
+								buf := make([]byte, size)
+								buf = buf[:runtime.Stack(buf, false)]
+								logging.Error("Timer[%v] exec call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
+							}
+						}()
+						f()
 					}()
-					f()
-				}()
+				}
 			}
 		case <-t.trigger.C:
 			for {
