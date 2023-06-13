@@ -888,6 +888,14 @@ func (c *Conn) readBody(reader *bufio.Reader, head *header, frameLen int) ([]byt
 		return nil, err
 	}
 
+	if head.Masked() {
+		maskKey := (*head)[10:14]
+		body := c.message[cached:]
+		for i := 0; i < frameLen; i++ {
+			body[i] ^= maskKey[i%4]
+		}
+	}
+
 	return c.message[cached:], nil
 }
 
