@@ -22,6 +22,8 @@ const (
 type Timer struct {
 	name string
 
+	running bool
+
 	wg  sync.WaitGroup
 	mux sync.Mutex
 
@@ -51,14 +53,21 @@ func New(name string, executor func(f func())) *Timer {
 	return t
 }
 
+// IsTimerRunning .
+func (t *Timer) IsTimerRunning() bool {
+	return t.running
+}
+
 // Start .
 func (t *Timer) Start() {
+	t.running = true
 	t.wg.Add(1)
 	go t.loop()
 }
 
 // Stop .
 func (t *Timer) Stop() {
+	t.running = false
 	close(t.chClose)
 	t.wg.Wait()
 }
