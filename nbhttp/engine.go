@@ -7,6 +7,7 @@ package nbhttp
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"runtime"
@@ -202,15 +203,10 @@ type Config struct {
 	ReadBufferPool mempool.Allocator
 
 	// WebsocketCompressor .
-	WebsocketCompressor func() interface {
-		Compress([]byte) []byte
-		Close()
-	}
+	WebsocketCompressor func(w io.WriteCloser, level int) io.WriteCloser
+
 	// WebsocketDecompressor .
-	WebsocketDecompressor func() interface {
-		Decompress([]byte) ([]byte, error)
-		Close()
-	}
+	WebsocketDecompressor func(r io.Reader) io.ReadCloser
 }
 
 // Engine .
