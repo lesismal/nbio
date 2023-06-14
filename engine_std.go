@@ -96,7 +96,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
-	g.Timer.Start()
+	// g.Timer.Start()
 
 	if len(g.addrs) == 0 {
 		logging.Info("NBIO[%v] start", g.Name)

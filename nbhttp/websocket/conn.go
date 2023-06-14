@@ -235,11 +235,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 
 ErrExit:
 	if c.IsAsyncWrite() {
-		if c.Engine.IsTimerRunning() {
-			c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
-		} else {
-			time.AfterFunc(time.Second, func() { c.Conn.Close() })
-		}
+		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
 	} else {
 		c.Conn.Close()
 	}

@@ -39,7 +39,7 @@ func (tg *TimerGroup) After(timeout time.Duration) <-chan time.Time {
 }
 
 // AfterFunc used as time.AfterFunc.
-func (tg *TimerGroup) AfterFunc(timeout time.Duration, f func()) *Item {
+func (tg *TimerGroup) AfterFunc(timeout time.Duration, f func()) *time.Timer {
 	return tg.NextTimer().AfterFunc(timeout, f)
 }
 
