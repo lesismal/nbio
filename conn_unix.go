@@ -252,16 +252,15 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	if !c.closed {
 		if !t.IsZero() {
 			g := c.p.g
-			now := time.Now()
 			if c.rTimer == nil {
-				c.rTimer = g.AfterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+				c.rTimer = g.AfterFunc(time.Until(t), func() { c.closeWithError(errReadTimeout) })
 			} else {
-				c.rTimer.Reset(t.Sub(now))
+				c.rTimer.Reset(time.Until(t))
 			}
 			if c.wTimer == nil {
-				c.wTimer = g.AfterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+				c.wTimer = g.AfterFunc(time.Until(t), func() { c.closeWithError(errWriteTimeout) })
 			} else {
-				c.wTimer.Reset(t.Sub(now))
+				c.wTimer.Reset(time.Until(t))
 			}
 		} else {
 			if c.rTimer != nil {
@@ -286,9 +285,9 @@ func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) err
 	}
 	if !t.IsZero() {
 		if *timer == nil {
-			*timer = c.p.g.AfterFunc(t.Sub(time.Now()), func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.AfterFunc(time.Until(t), func() { c.closeWithError(returnErr) })
 		} else {
-			(*timer).Reset(t.Sub(time.Now()))
+			(*timer).Reset(time.Until(t))
 		}
 	} else if *timer != nil {
 		(*timer).Stop()
