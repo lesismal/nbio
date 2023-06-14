@@ -287,10 +287,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 			if l >= total {
 				body = c.buffer[headLen:total]
 				if masked {
-					maskKey := c.buffer[headLen-4 : headLen]
-					for i := 0; i < len(body); i++ {
-						body[i] ^= maskKey[i%4]
-					}
+					maskXOR(body, c.buffer[headLen-4:headLen])
 				}
 
 				ok = true
@@ -663,11 +660,9 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 
 	if c.isClient {
 		u32 := rand.Uint32()
-		maskKey := []byte{byte(u32), byte(u32 >> 8), byte(u32 >> 16), byte(u32 >> 24)}
-		copy(buf[headLen-4:headLen], maskKey)
-		for i := 0; i < len(data); i++ {
-			buf[headLen+i] = (data[i] ^ maskKey[i%4])
-		}
+		binary.LittleEndian.PutUint32(buf[headLen-4:headLen], u32)
+		copy(buf[headLen:], data)
+		maskXOR(buf[headLen:], buf[headLen-4:headLen])
 	} else {
 		copy(buf[headLen:], data)
 	}
@@ -907,4 +902,40 @@ func validCloseCode(code int) bool {
 		return true
 	}
 	return false
+}
+
+func maskXOR(b, key []byte) {
+	key64 := uint64(binary.LittleEndian.Uint32(key))
+	key64 |= (key64 << 32)
+
+	for len(b) >= 64 {
+		v := binary.LittleEndian.Uint64(b)
+		binary.LittleEndian.PutUint64(b, v^key64)
+		v = binary.LittleEndian.Uint64(b[8:16])
+		binary.LittleEndian.PutUint64(b[8:16], v^key64)
+		v = binary.LittleEndian.Uint64(b[16:24])
+		binary.LittleEndian.PutUint64(b[16:24], v^key64)
+		v = binary.LittleEndian.Uint64(b[24:32])
+		binary.LittleEndian.PutUint64(b[24:32], v^key64)
+		v = binary.LittleEndian.Uint64(b[32:40])
+		binary.LittleEndian.PutUint64(b[32:40], v^key64)
+		v = binary.LittleEndian.Uint64(b[40:48])
+		binary.LittleEndian.PutUint64(b[40:48], v^key64)
+		v = binary.LittleEndian.Uint64(b[48:56])
+		binary.LittleEndian.PutUint64(b[48:56], v^key64)
+		v = binary.LittleEndian.Uint64(b[56:64])
+		binary.LittleEndian.PutUint64(b[56:64], v^key64)
+		b = b[64:]
+	}
+
+	for len(b) >= 8 {
+		v := binary.LittleEndian.Uint64(b[:8])
+		binary.LittleEndian.PutUint64(b[:8], v^key64)
+		b = b[8:]
+	}
+
+	for i := 0; i < len(b); i++ {
+		idx := i & 3
+		b[i] ^= key[idx]
+	}
 }
