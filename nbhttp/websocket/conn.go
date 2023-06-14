@@ -74,6 +74,16 @@ type Conn struct {
 	message                  []byte
 }
 
+// IsClient .
+func (c *Conn) IsClient() bool {
+	return c.isClient
+}
+
+// SetClient .
+func (c *Conn) SetClient(isClient bool) {
+	c.isClient = isClient
+}
+
 // IsBlockingMod .
 func (c *Conn) IsBlockingMod() bool {
 	return c.isBlockingMod
@@ -158,55 +168,80 @@ func (c *Conn) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body 
 }
 
 func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
+	const errInvalidUtf8Text = "invalid UTF-8 bytes"
+
 	if c.KeepaliveTime > 0 {
 		defer c.SetReadDeadline(time.Now().Add(c.KeepaliveTime))
 	}
+
 	switch opcode {
 	case BinaryMessage:
 		c.messageHandler(c, opcode, data)
+		return
 	case TextMessage:
 		if !c.Engine.CheckUtf8(data) {
-			const errText = "Invalid UTF-8 bytes"
-			protoErrorData := make([]byte, 2+len(errText))
+			protoErrorData := make([]byte, 2+len(errInvalidUtf8Text))
 			binary.BigEndian.PutUint16(protoErrorData, 1002)
-			copy(protoErrorData[2:], errText)
+			copy(protoErrorData[2:], errInvalidUtf8Text)
+			c.SetCloseError(ErrInvalidUtf8)
 			c.WriteMessage(CloseMessage, protoErrorData)
-			return
+			goto ErrExit
 		}
 		c.messageHandler(c, opcode, data)
+		return
+	case PingMessage:
+		c.pingMessageHandler(c, string(data))
+		return
+	case PongMessage:
+		c.pongMessageHandler(c, string(data))
+		return
 	case CloseMessage:
 		if len(data) >= 2 {
 			code := int(binary.BigEndian.Uint16(data[:2]))
-			if !validCloseCode(code) || !c.Engine.CheckUtf8(data[2:]) {
+			if !validCloseCode(code) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
+				c.SetCloseError(ErrInvalidCloseCode)
 				c.WriteMessage(CloseMessage, protoErrorCode)
-			} else {
-				reson := string(data[2:])
+				goto ErrExit
+			}
+			if !c.Engine.CheckUtf8(data[2:]) {
+				protoErrorData := make([]byte, 2+len(errInvalidUtf8Text))
+				binary.BigEndian.PutUint16(protoErrorData, 1002)
+				copy(protoErrorData[2:], errInvalidUtf8Text)
+				c.SetCloseError(ErrInvalidUtf8)
+				c.WriteMessage(CloseMessage, protoErrorData)
+				goto ErrExit
+			}
+
+			reson := string(data[2:])
+			if code != 1000 {
 				c.SetCloseError(&CloseError{
 					Code:   code,
 					Reason: reson,
 				})
-				c.closeMessageHandler(c, code, reson)
 			}
+			c.closeMessageHandler(c, code, reson)
 		} else {
-			c.WriteMessage(CloseMessage, nil)
+			c.SetCloseError(ErrInvalidControlFrame)
 		}
-		// close immediately, no need to wait for data flushed on a blocked conn
-		c.Conn.Close()
-	case PingMessage:
-		c.pingMessageHandler(c, string(data))
-	case PongMessage:
-		c.pongMessageHandler(c, string(data))
 	case FragmentMessage:
 		logging.Debug("invalid fragment message")
-		c.Conn.Close()
+		c.SetCloseError(ErrInvalidFragmentMessage)
 	default:
+		logging.Debug("invalid message type: %v", opcode)
+		c.SetCloseError(fmt.Errorf("websocket: invalid message type: %v", opcode))
+	}
+
+ErrExit:
+	if c.IsAsyncWrite() {
+		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
+	} else {
 		c.Conn.Close()
 	}
 }
 
-func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool) {
+func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool, err error) {
 	l := int64(len(c.buffer))
 	headLen := int64(2)
 	if l >= 2 {
@@ -232,6 +267,13 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 		default:
 			bodyLen = int64(payloadLen)
 		}
+
+		if (bodyLen > maxControlFramePayloadSize) &&
+			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
+			err = ErrControlMessageTooBig
+			return
+		}
+
 		if bodyLen >= 0 {
 			masked := (c.buffer[1] & 0x80) != 0
 			if masked {
@@ -241,10 +283,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 			if l >= total {
 				body = c.buffer[headLen:total]
 				if masked {
-					maskKey := c.buffer[headLen-4 : headLen]
-					for i := 0; i < len(body); i++ {
-						body[i] ^= maskKey[i%4]
-					}
+					maskXOR(body, c.buffer[headLen-4:headLen])
 				}
 
 				ok = true
@@ -253,7 +292,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 		}
 	}
 
-	return opcode, body, ok, fin, res1, res2, res3
+	return opcode, body, ok, fin, res1, res2, res3, err
 }
 
 // Read .
@@ -274,7 +313,11 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 
 	var err error
 	for i := 0; true; i++ {
-		opcode, body, ok, fin, res1, res2, res3 := c.nextFrame()
+		opcode, body, ok, fin, res1, res2, res3, e := c.nextFrame()
+		if e != nil {
+			err = e
+			break
+		}
 		if !ok {
 			break
 		}
@@ -322,26 +365,19 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 			if fin {
 				if c.messageHandler != nil {
 					if c.compress {
+						var b []byte
+						var rc io.ReadCloser
 						if c.Engine.WebsocketDecompressor != nil {
-							var b []byte
-							decompressor := c.Engine.WebsocketDecompressor()
-							defer decompressor.Close()
-							b, err = decompressor.Decompress(c.message)
-							if err != nil {
-								break
-							}
-							c.Engine.BodyAllocator.Free(c.message)
-							c.message = b
+							rc = c.Engine.WebsocketDecompressor(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
 						} else {
-							var b []byte
-							rc := decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
-							b, err = c.readAll(rc, len(c.message)*2)
-							c.Engine.BodyAllocator.Free(c.message)
-							c.message = b
-							rc.Close()
-							if err != nil {
-								break
-							}
+							rc = decompressReader(io.MultiReader(bytes.NewBuffer(c.message), strings.NewReader(flateReaderTail)))
+						}
+						b, err = c.readAll(rc, len(c.message)*2)
+						c.Engine.BodyAllocator.Free(c.message)
+						c.message = b
+						rc.Close()
+						if err != nil {
+							break
 						}
 					}
 					c.handleMessage(p, c.opcode, c.message)
@@ -468,7 +504,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	case BinaryMessage:
 	case PingMessage, PongMessage, CloseMessage:
 		if len(data) > maxControlFramePayloadSize {
-			return ErrInvalidControlFrame
+			return ErrControlMessageTooBig
 		}
 	case FragmentMessage:
 	default:
@@ -479,24 +515,24 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		// compress = true
 		// if user customize mempool, they should promise it's safe to mempool.Free a buffer which is not from their mempool.Malloc
 		// or we need to implement a writebuffer that use mempool.Realloc to grow or append the buffer
+		w := &writeBuffer{
+			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
+		}
+		defer w.Close()
+		w.Reset()
+
+		var cw io.WriteCloser
 		if c.Engine.WebsocketCompressor != nil {
-			compressor := c.Engine.WebsocketCompressor()
-			defer compressor.Close()
-			data = compressor.Compress(data)
+			cw = c.Engine.WebsocketCompressor(w, c.compressionLevel)
 		} else {
-			w := &writeBuffer{
-				Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
-			}
-			defer w.Close()
-			w.Reset()
-			cw := compressWriter(w, c.compressionLevel)
-			_, err := cw.Write(data)
-			if err != nil {
-				compress = false
-			} else {
-				cw.Close()
-				data = w.Bytes()
-			}
+			cw = compressWriter(w, c.compressionLevel)
+		}
+		_, err := cw.Write(data)
+		if err != nil {
+			compress = false
+		} else {
+			cw.Close()
+			data = w.Bytes()
 		}
 	}
 
@@ -620,11 +656,9 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 
 	if c.isClient {
 		u32 := rand.Uint32()
-		maskKey := []byte{byte(u32), byte(u32 >> 8), byte(u32 >> 16), byte(u32 >> 24)}
-		copy(buf[headLen-4:headLen], maskKey)
-		for i := 0; i < len(data); i++ {
-			buf[headLen+i] = (data[i] ^ maskKey[i%4])
-		}
+		binary.LittleEndian.PutUint32(buf[headLen-4:headLen], u32)
+		copy(buf[headLen:], data)
+		maskXOR(buf[headLen:], buf[headLen-4:headLen])
 	} else {
 		copy(buf[headLen:], data)
 	}
@@ -864,4 +898,40 @@ func validCloseCode(code int) bool {
 		return true
 	}
 	return false
+}
+
+func maskXOR(b, key []byte) {
+	key64 := uint64(binary.LittleEndian.Uint32(key))
+	key64 |= (key64 << 32)
+
+	for len(b) >= 64 {
+		v := binary.LittleEndian.Uint64(b)
+		binary.LittleEndian.PutUint64(b, v^key64)
+		v = binary.LittleEndian.Uint64(b[8:16])
+		binary.LittleEndian.PutUint64(b[8:16], v^key64)
+		v = binary.LittleEndian.Uint64(b[16:24])
+		binary.LittleEndian.PutUint64(b[16:24], v^key64)
+		v = binary.LittleEndian.Uint64(b[24:32])
+		binary.LittleEndian.PutUint64(b[24:32], v^key64)
+		v = binary.LittleEndian.Uint64(b[32:40])
+		binary.LittleEndian.PutUint64(b[32:40], v^key64)
+		v = binary.LittleEndian.Uint64(b[40:48])
+		binary.LittleEndian.PutUint64(b[40:48], v^key64)
+		v = binary.LittleEndian.Uint64(b[48:56])
+		binary.LittleEndian.PutUint64(b[48:56], v^key64)
+		v = binary.LittleEndian.Uint64(b[56:64])
+		binary.LittleEndian.PutUint64(b[56:64], v^key64)
+		b = b[64:]
+	}
+
+	for len(b) >= 8 {
+		v := binary.LittleEndian.Uint64(b[:8])
+		binary.LittleEndian.PutUint64(b[:8], v^key64)
+		b = b[8:]
+	}
+
+	for i := 0; i < len(b); i++ {
+		idx := i & 3
+		b[i] ^= key[idx]
+	}
 }

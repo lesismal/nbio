@@ -6,6 +6,7 @@ package logging
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"time"
 )
@@ -15,7 +16,7 @@ var (
 	TimeFormat = "2006/01/02 15:04:05.000"
 
 	// Output is used to receive log output.
-	Output = os.Stdout
+	Output io.Writer = os.Stdout
 
 	// DefaultLogger is the default logger and is used by arpc.
 	DefaultLogger Logger = &logger{level: LevelInfo}

@@ -1,7 +1,6 @@
 package timer
 
 import (
-	"container/heap"
 	"log"
 	"math/rand"
 	"sync"
@@ -102,7 +101,7 @@ func testTimerNormalExecMany(tg *TimerGroup, timeout time.Duration) {
 }
 
 func testTimerExecManyRandtime(tg *TimerGroup) {
-	its := make([]*Item, 100)[0:0]
+	its := make([]*time.Timer, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {
 		n := 500 + rand.Int()%200
@@ -130,34 +129,5 @@ LOOP_RECV:
 	}
 	if recved != 50 {
 		log.Panicf("invalid recved num: %v", recved)
-	}
-}
-
-func TestTimerHeap(t *testing.T) {
-	now := time.Now()
-	th := make(timerHeap, 0, 10)
-	for i := 0; i < 100; i++ {
-		date := now.Add(time.Duration(rand.Int63n(10000)) * time.Second)
-		heap.Push(&th, &Item{
-			expire: date,
-		})
-	}
-
-	last := now
-	for i := 0; i < 100; i++ {
-		if len(th) == 0 {
-			break
-		}
-
-		item := heap.Pop(&th)
-		if item == nil {
-			break
-		}
-		cur := item.(*Item)
-		if cur.expire.After(last) || cur.expire.Equal(last) {
-			last = cur.expire
-			continue
-		}
-		t.Error("timer error")
 	}
 }

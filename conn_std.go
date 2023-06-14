@@ -29,7 +29,7 @@ type Conn struct {
 	conn    net.Conn
 	connUDP *udpConn
 
-	rTimer *timer.Item
+	rTimer *time.Timer
 
 	typ      ConnType
 	closed   bool

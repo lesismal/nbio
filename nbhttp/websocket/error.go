@@ -46,6 +46,9 @@ var (
 	// ErrControlMessageFragmented .
 	ErrControlMessageFragmented = errors.New("websocket: control messages must not be fragmented")
 
+	// ErrControlMessageTooBig .
+	ErrControlMessageTooBig = errors.New("websocket: control frame length > 125")
+
 	// ErrFragmentsShouldNotHaveBinaryOrTextOpcode .
 	ErrFragmentsShouldNotHaveBinaryOrTextOpcode = errors.New("websocket: fragments should not have opcode of text or binary")
 
@@ -58,8 +61,14 @@ var (
 	// ErrInvalidCompression .
 	ErrInvalidCompression = errors.New("websocket: invalid compression negotiation")
 
+	// ErrInvalidUtf8 .
+	ErrInvalidUtf8 = errors.New("websocket: invalid UTF-8 bytes")
+
+	// ErrInvalidFragmentMessage .
+	ErrInvalidFragmentMessage = errors.New("invalid fragment message")
+
 	// ErrMalformedURL .
-	ErrMalformedURL = errors.New("malformed ws or wss URL")
+	ErrMalformedURL = errors.New("websocket: malformed ws or wss URL")
 
 	// ErrMessageTooLarge.
 	ErrMessageTooLarge = errors.New("message exceeds the configured limit")

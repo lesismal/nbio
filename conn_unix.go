@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/mempool"
-	"github.com/lesismal/nbio/timer"
 )
 
 // Conn implements net.Conn.
@@ -30,8 +29,8 @@ type Conn struct {
 
 	connUDP *udpConn
 
-	rTimer *timer.Item
-	wTimer *timer.Item
+	rTimer *time.Timer
+	wTimer *time.Timer
 
 	writeBuffer []byte
 
@@ -253,16 +252,15 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	if !c.closed {
 		if !t.IsZero() {
 			g := c.p.g
-			now := time.Now()
 			if c.rTimer == nil {
-				c.rTimer = g.AfterFunc(t.Sub(now), func() { c.closeWithError(errReadTimeout) })
+				c.rTimer = g.AfterFunc(time.Until(t), func() { c.closeWithError(errReadTimeout) })
 			} else {
-				c.rTimer.Reset(t.Sub(now))
+				c.rTimer.Reset(time.Until(t))
 			}
 			if c.wTimer == nil {
-				c.wTimer = g.AfterFunc(t.Sub(now), func() { c.closeWithError(errWriteTimeout) })
+				c.wTimer = g.AfterFunc(time.Until(t), func() { c.closeWithError(errWriteTimeout) })
 			} else {
-				c.wTimer.Reset(t.Sub(now))
+				c.wTimer.Reset(time.Until(t))
 			}
 		} else {
 			if c.rTimer != nil {
@@ -279,7 +277,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *Conn) setDeadline(timer **timer.Item, returnErr error, t time.Time) error {
+func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if c.closed {
@@ -287,9 +285,9 @@ func (c *Conn) setDeadline(timer **timer.Item, returnErr error, t time.Time) err
 	}
 	if !t.IsZero() {
 		if *timer == nil {
-			*timer = c.p.g.UntilFunc(t, func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.AfterFunc(time.Until(t), func() { c.closeWithError(returnErr) })
 		} else {
-			(*timer).ResetUntil(t)
+			(*timer).Reset(time.Until(t))
 		}
 	} else if *timer != nil {
 		(*timer).Stop()
@@ -387,7 +385,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	}
 
 	if c.overflow(len(b)) {
-		return -1, syscall.EINVAL
+		return -1, errOverflow
 	}
 
 	if len(c.writeBuffer) == 0 {
@@ -469,7 +467,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		size += len(v)
 	}
 	if c.overflow(size) {
-		return -1, syscall.EINVAL
+		return -1, errOverflow
 	}
 	if len(c.writeBuffer) > 0 {
 		for _, v := range in {
