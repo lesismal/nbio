@@ -593,17 +593,17 @@ type udpConn struct {
 	parent *Conn
 
 	rAddr    syscall.Sockaddr
-	rAddrStr string
+	rAddrKey udpAddrKey
 
 	mux   sync.RWMutex
-	conns map[string]*Conn
+	conns map[udpAddrKey]*Conn
 }
 
 func (u *udpConn) Close() error {
 	parent := u.parent
 	if parent.connUDP != u {
 		parent.mux.Lock()
-		delete(parent.connUDP.conns, u.rAddrStr)
+		delete(parent.connUDP.conns, u.rAddrKey)
 		parent.mux.Unlock()
 	} else {
 		syscall.Close(u.parent.fd)
@@ -616,9 +616,9 @@ func (u *udpConn) Close() error {
 }
 
 func (u *udpConn) getConn(p *poller, fd int, rsa syscall.Sockaddr) (*Conn, bool) {
-	rAddrStr := getUDPNetAddrString(rsa)
+	rAddrKey := getUDPNetAddrKey(rsa)
 	u.mux.RLock()
-	c, ok := u.conns[rAddrStr]
+	c, ok := u.conns[rAddrKey]
 	u.mux.RUnlock()
 
 	if !ok {
@@ -630,41 +630,36 @@ func (u *udpConn) getConn(p *poller, fd int, rsa syscall.Sockaddr) (*Conn, bool)
 			typ:   ConnTypeUDPClientFromRead,
 			connUDP: &udpConn{
 				rAddr:    rsa,
-				rAddrStr: rAddrStr,
+				rAddrKey: rAddrKey,
 				parent:   u.parent,
 			},
 		}
 		u.mux.Lock()
-		u.conns[rAddrStr] = c
+		u.conns[rAddrKey] = c
 		u.mux.Unlock()
 	}
 
 	return c, ok
 }
 
-func getUDPNetAddrString(sa syscall.Sockaddr) string {
+type udpAddrKey [22]byte
+
+func getUDPNetAddrKey(sa syscall.Sockaddr) udpAddrKey {
+	var ret udpAddrKey
 	if sa == nil {
-		return "<nil>"
+		return ret
 	}
-	var ip []byte
-	var port int
-	var zone string
 
 	switch vt := sa.(type) {
 	case *syscall.SockaddrInet4:
-		ip = vt.Addr[:]
-		port = vt.Port
-		return string(ip) + strconv.Itoa(port)
+		copy(ret, vt.Addr[:])
+		binary.LittleEndian.PutUint16(ret[16:], uint64(port))
 	case *syscall.SockaddrInet6:
-		ip = vt.Addr[:]
-		port = vt.Port
-		i, err := net.InterfaceByIndex(int(vt.ZoneId))
-		if err == nil && i != nil {
-			return string(ip) + i.Name + strconv.Itoa(port)
-		}
+		copy(ret, vt.Addr[:])
+		binary.LittleEndian.PutUint16(ret[16:], uint64(port))
+		binary.LittleEndian.PutUint32(ret[18:], vt.ZoneId)
 	}
-
-	return string(ip) + zone + strconv.Itoa(port)
+	return ret
 }
 
 func getUDPNetAddr(sa syscall.Sockaddr) *net.UDPAddr {
