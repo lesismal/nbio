@@ -130,11 +130,13 @@ func (c *Conn) Execute(f func()) bool {
 				c.mux.Lock()
 				i++
 				if len(c.execList) == i {
+					c.execList[i-1] = nil
 					c.execList = c.execList[0:0]
 					c.mux.Unlock()
 					return
 				}
 				f = c.execList[i]
+				c.execList[i] = nil
 				c.mux.Unlock()
 			}
 		})
