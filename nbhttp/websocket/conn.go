@@ -312,7 +312,7 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	var err error
-	for i := 0; true; i++ {
+	for !c.closed {
 		opcode, body, ok, fin, res1, res2, res3, e := c.nextFrame()
 		if e != nil {
 			err = e
