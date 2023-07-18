@@ -12,7 +12,6 @@ import (
 	"errors"
 	"net"
 	"runtime"
-	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -659,10 +658,10 @@ func getUDPNetAddrKey(sa syscall.Sockaddr) udpAddrKey {
 
 	switch vt := sa.(type) {
 	case *syscall.SockaddrInet4:
-		copy(ret, vt.Addr[:])
+		copy(ret[:], vt.Addr[:])
 		binary.LittleEndian.PutUint16(ret[16:], uint16(vt.Port))
 	case *syscall.SockaddrInet6:
-		copy(ret, vt.Addr[:])
+		copy(ret[:], vt.Addr[:])
 		binary.LittleEndian.PutUint16(ret[16:], uint16(vt.Port))
 		binary.LittleEndian.PutUint32(ret[18:], vt.ZoneId)
 	}
