@@ -85,7 +85,7 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 			c.typ = ConnTypeUDPServer
 			c.connUDP = &udpConn{
 				parent: c,
-				conns:  map[string]*Conn{},
+				conns:  map[udpAddrKey]*Conn{},
 			}
 		} else {
 			c.typ = ConnTypeUDPClientFromDial
