@@ -8,6 +8,7 @@
 package nbio
 
 import (
+	"encoding/binary"
 	"errors"
 	"net"
 	"runtime"
@@ -417,6 +418,12 @@ func (c *Conn) flush() error {
 	}
 
 	if len(c.writeBuffer) == 0 {
+		if c.chWaitWrite != nil {
+			select {
+			case c.chWaitWrite <- struct{}{}:
+			default:
+			}
+		}
 		c.mux.Unlock()
 		return nil
 	}
@@ -653,10 +660,10 @@ func getUDPNetAddrKey(sa syscall.Sockaddr) udpAddrKey {
 	switch vt := sa.(type) {
 	case *syscall.SockaddrInet4:
 		copy(ret, vt.Addr[:])
-		binary.LittleEndian.PutUint16(ret[16:], uint64(port))
+		binary.LittleEndian.PutUint16(ret[16:], uint16(vt.Port))
 	case *syscall.SockaddrInet6:
 		copy(ret, vt.Addr[:])
-		binary.LittleEndian.PutUint16(ret[16:], uint64(port))
+		binary.LittleEndian.PutUint16(ret[16:], uint16(vt.Port))
 		binary.LittleEndian.PutUint32(ret[18:], vt.ZoneId)
 	}
 	return ret
