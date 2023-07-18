@@ -167,7 +167,9 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 			if c.Engine.ReleaseWebsocketPayload && len(data) > 0 {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
-			h(c, messageType, data)
+			if !c.closed {
+				h(c, messageType, data)
+			}
 		}
 	}
 }
