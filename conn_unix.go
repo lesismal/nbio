@@ -409,6 +409,10 @@ func (c *Conn) write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+func (c *Conn) Flush() error  {
+	return c.flush()
+}
+
 func (c *Conn) flush() error {
 	c.mux.Lock()
 	if c.closed {
