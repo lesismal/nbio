@@ -140,7 +140,7 @@ func (p *poller) acceptorLoop() {
 			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
 			var ne net.Error
-			if ok := errors.As(err, &ne); ok && ne.Timeout() {
+			if ok := errors.As(err, &ne); ok && ne.Temporary() {
 				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
