@@ -110,6 +110,10 @@ func NewUpgrader() *Upgrader {
 	}
 	u.pongMessageHandler = func(*Conn, string) {}
 	u.closeMessageHandler = func(c *Conn, code int, text string) {
+		if code == 1005 {
+			c.WriteMessage(CloseMessage, nil)
+			return
+		}
 		buf := mempool.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
