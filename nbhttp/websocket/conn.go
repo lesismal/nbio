@@ -776,6 +776,7 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 		subprotocol:              subprotocol,
 		remoteCompressionEnabled: remoteCompressionEnabled,
 	}
+	wsc.EnableWriteCompression(remoteCompressionEnabled)
 	if asyncWrite {
 		wsc.sendQueue = make([][]byte, u.BlockingModSendQueueInitSize)[:0]
 		wsc.sendQueueSize = u.BlockingModSendQueueMaxSize
