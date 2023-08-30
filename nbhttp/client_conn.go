@@ -98,6 +98,18 @@ func (c *ClientConn) closeWithErrorWithoutLock(err error) {
 	}
 	c.handlers = nil
 	if c.conn != nil {
+		nbc, ok := c.conn.(*nbio.Conn)
+		if !ok {
+			if tlsConn, ok2 := c.conn.(*tls.Conn); ok2 {
+				nbc, ok = tlsConn.Conn().(*nbio.Conn)
+			}
+		}
+		if ok {
+			key, _ := conn2Array(nbc)
+			c.Engine.mux.Lock()
+			delete(c.Engine.dialerConns, key)
+			c.Engine.mux.Unlock()
+		}
 		c.conn.Close()
 		c.conn = nil
 	}
@@ -247,6 +259,16 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 				return
 			}
 
+			key, err := conn2Array(nbc)
+			if err != nil {
+				logging.Error("add dialer conn failed: %v", err)
+				c.closeWithErrorWithoutLock(err)
+				return
+			}
+			engine.mux.Lock()
+			engine.dialerConns[key] = struct{}{}
+			engine.mux.Unlock()
+
 			c.conn = nbc
 			processor := NewClientProcessor(c, c.onResponse)
 			parser := NewParser(processor, true, engine.ReadLimit, nbc.Execute)
@@ -287,6 +309,16 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 				c.closeWithErrorWithoutLock(err)
 				return
 			}
+
+			key, err := conn2Array(nbc)
+			if err != nil {
+				logging.Error("add dialer conn failed: %v", err)
+				c.closeWithErrorWithoutLock(err)
+				return
+			}
+			engine.mux.Lock()
+			engine.dialerConns[key] = struct{}{}
+			engine.mux.Unlock()
 
 			isNonblock := true
 			tlsConn.ResetConn(nbc, isNonblock)
