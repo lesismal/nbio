@@ -259,12 +259,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 				return
 			}
 
-			key, err := conn2Array(nbc)
-			if err != nil {
-				logging.Error("add dialer conn failed: %v", err)
-				c.closeWithErrorWithoutLock(err)
-				return
-			}
+			key, _ := conn2Array(nbc)
 			engine.mux.Lock()
 			engine.dialerConns[key] = struct{}{}
 			engine.mux.Unlock()
