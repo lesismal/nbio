@@ -223,8 +223,9 @@ type Engine struct {
 	_onClose func(c net.Conn, err error)
 	_onStop  func()
 
-	mux   sync.Mutex
-	conns map[connValue]struct{}
+	mux         sync.Mutex
+	conns       map[connValue]struct{}
+	dialerConns map[connValue]struct{}
 
 	// tlsBuffers [][]byte
 	// getTLSBuffer func(c *nbio.Conn) []byte
@@ -258,10 +259,20 @@ func (e *Engine) Online() int {
 	return len(e.conns)
 }
 
+// DialerOnline .
+func (e *Engine) DialerOnline() int {
+	return len(e.dialerConns)
+}
+
 func (e *Engine) closeAllConns() {
 	e.mux.Lock()
 	defer e.mux.Unlock()
 	for key := range e.conns {
+		if c, err := array2Conn(key); err == nil {
+			c.Close()
+		}
+	}
+	for key := range e.dialerConns {
 		if c, err := array2Conn(key); err == nil {
 			c.Close()
 		}
@@ -459,7 +470,7 @@ func (e *Engine) Shutdown(ctx context.Context) error {
 			logging.Info("NBIO[%v] shutdown timeout", e.Engine.Name)
 			return ctx.Err()
 		case <-ticker.C:
-			if len(e.conns) == 0 {
+			if len(e.conns)+len(e.dialerConns) == 0 {
 				goto Exit
 			}
 		}
@@ -965,6 +976,7 @@ func NewEngine(conf Config) *Engine {
 		_onStop:       func() {},
 		CheckUtf8:     utf8.Valid,
 		conns:         map[connValue]struct{}{},
+		dialerConns:   map[connValue]struct{}{},
 		ExecuteClient: clientExecutor,
 
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),

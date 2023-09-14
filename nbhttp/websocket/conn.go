@@ -99,13 +99,17 @@ func (c *Conn) Close() error {
 	if c.Conn == nil {
 		return nil
 	}
+	if c.IsAsyncWrite() {
+		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
+		return nil
+	}
 	return c.Conn.Close()
 }
 
 // CloseWithError .
 func (c *Conn) CloseWithError(err error) error {
 	c.SetCloseError(err)
-	return c.Conn.Close()
+	return c.Close()
 }
 
 // SetCloseError .
@@ -237,11 +241,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 	}
 
 ErrExit:
-	if c.IsAsyncWrite() {
-		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
-	} else {
-		c.Conn.Close()
-	}
+	c.Close()
 }
 
 func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool, err error) {
