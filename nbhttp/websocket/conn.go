@@ -99,13 +99,17 @@ func (c *Conn) Close() error {
 	if c.Conn == nil {
 		return nil
 	}
+	if c.sendQueue != nil {
+		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
+		return nil
+	}
 	return c.Conn.Close()
 }
 
 // CloseWithError .
 func (c *Conn) CloseWithError(err error) error {
 	c.SetCloseError(err)
-	return c.Conn.Close()
+	return c.Close()
 }
 
 // SetCloseError .
