@@ -188,11 +188,6 @@ func (p *poller) readWriteLoop() {
 			default:
 				c := p.getConn(fd)
 				if c != nil {
-					if ev.Events&epollEventsError != 0 {
-						c.closeWithError(io.EOF)
-						continue
-					}
-
 					if ev.Events&epollEventsWrite != 0 {
 						c.flush()
 					}
@@ -226,6 +221,11 @@ func (p *poller) readWriteLoop() {
 						} else {
 							p.g.onRead(c)
 						}
+					}
+
+					if ev.Events&epollEventsError != 0 {
+						c.closeWithError(io.EOF)
+						continue
 					}
 				} else {
 					syscall.Close(fd)
