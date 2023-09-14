@@ -34,6 +34,8 @@ var (
 
 	DefaultBlockingModSendQueueMaxSize = 0
 
+	DefaultBlockingModAsyncCloseDelay = time.Second / 10
+
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
 		ReleaseWebsocketPayload: true,
@@ -41,9 +43,10 @@ var (
 )
 
 type commonFields struct {
-	Engine             *nbhttp.Engine
-	KeepaliveTime      time.Duration
-	MessageLengthLimit int
+	Engine                     *nbhttp.Engine
+	KeepaliveTime              time.Duration
+	MessageLengthLimit         int
+	BlockingModAsyncCloseDelay time.Duration
 
 	enableCompression bool
 	compressionLevel  int
@@ -92,8 +95,9 @@ type Upgrader struct {
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
-			Engine:           DefaultEngine,
-			compressionLevel: defaultCompressionLevel,
+			Engine:                     DefaultEngine,
+			compressionLevel:           defaultCompressionLevel,
+			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
 		},
 		BlockingModReadBufferSize:    DefaultBlockingReadBufferSize,
 		BlockingModAsyncWrite:        DefaultBlockingModAsyncWrite,

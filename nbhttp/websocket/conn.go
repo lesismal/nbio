@@ -100,7 +100,7 @@ func (c *Conn) Close() error {
 		return nil
 	}
 	if c.IsAsyncWrite() {
-		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
+		c.Engine.AfterFunc(c.BlockingModAsyncCloseDelay, func() { c.Conn.Close() })
 		return nil
 	}
 	return c.Conn.Close()
@@ -780,6 +780,9 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 	if asyncWrite {
 		wsc.sendQueue = make([][]byte, u.BlockingModSendQueueInitSize)[:0]
 		wsc.sendQueueSize = u.BlockingModSendQueueMaxSize
+		if wsc.BlockingModAsyncCloseDelay <= 0 {
+			wsc.BlockingModAsyncCloseDelay = DefaultBlockingModAsyncCloseDelay
+		}
 	}
 	return wsc
 }
