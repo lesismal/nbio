@@ -102,14 +102,14 @@ func (p *poller) trigger() {
 
 func (p *poller) addRead(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD | syscall.EV_CLEAR, Filter: syscall.EVFILT_READ})
 	p.mux.Unlock()
 	p.trigger()
 }
 
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD | syscall.EV_CLEAR, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
@@ -218,7 +218,7 @@ func (p *poller) readWriteLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	var events = make([]syscall.Kevent_t, 1024)
+	events := make([]syscall.Kevent_t, 1024)
 	var changes []syscall.Kevent_t
 
 	p.shutdown = false
@@ -308,5 +308,4 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 }
 
 func (c *Conn) ResetPollerEvent() {
-
 }
