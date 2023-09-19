@@ -66,12 +66,17 @@ func (p *poller) addConn(c *Conn) {
 		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
 		return
 	}
+	p.g.connsUnix[fd] = c
+	err := p.addRead(fd)
+	if err != nil {
+		p.g.connsUnix[fd] = nil
+		c.closeWithError(err)
+		logging.Error("[%v] add read event failed: %v", c.fd, err)
+	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
-	p.g.connsUnix[fd] = c
-	p.addRead(fd)
 }
 
 func (p *poller) getConn(fd int) *Conn {
