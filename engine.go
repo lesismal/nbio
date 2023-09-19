@@ -105,7 +105,7 @@ type Engine struct {
 	Execute      func(f func())
 	TimerExecute func(f func())
 
-	mux sync.Mutex
+	mux sync.RWMutex
 
 	wgConn sync.WaitGroup
 

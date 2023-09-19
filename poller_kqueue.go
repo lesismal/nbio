@@ -66,10 +66,14 @@ func (p *poller) addConn(c *Conn) {
 		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
 		return
 	}
+	p.g.mux.Lock()
 	p.g.connsUnix[fd] = c
+	p.g.mux.Unlock()
 	err := p.addRead(fd)
 	if err != nil {
+		p.g.mux.Lock()
 		p.g.connsUnix[fd] = nil
+		p.g.mux.Unlock()
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
@@ -80,6 +84,8 @@ func (p *poller) addConn(c *Conn) {
 }
 
 func (p *poller) getConn(fd int) *Conn {
+	p.g.mux.RLock()
+	defer p.g.mux.RUnlock()
 	return p.g.connsUnix[fd]
 }
 
@@ -91,7 +97,9 @@ func (p *poller) deleteConn(c *Conn) {
 
 	if c.typ != ConnTypeUDPClientFromRead {
 		if c == p.g.connsUnix[fd] {
+			p.g.mux.Lock()
 			p.g.connsUnix[fd] = nil
+			p.g.mux.Unlock()
 		}
 		p.deleteEvent(fd)
 	}
