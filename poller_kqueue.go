@@ -9,6 +9,7 @@ package nbio
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"runtime"
@@ -144,6 +145,9 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 						return
 					}
 					if (err != nil || n == 0) && ev.Flags&syscall.EV_DELETE == 0 {
+						if err == nil {
+							err = io.EOF
+						}
 						c.closeWithError(err)
 					}
 					if n < len(buffer) {
