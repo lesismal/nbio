@@ -6,6 +6,7 @@ package websocket
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -564,6 +565,11 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 
 // Session returns user session.
 func (c *Conn) Session() interface{} {
+	return c.session
+}
+
+// SessionWithLock returns user session with lock, returns as soon as the session has been seted.
+func (c *Conn) SessionWithLock() interface{} {
 	c.mux.Lock()
 	ch := c.chSessionInited
 	c.mux.Unlock()
@@ -573,8 +579,19 @@ func (c *Conn) Session() interface{} {
 	return c.session
 }
 
-// SessionWithLock returns user session with lock.
-func (c *Conn) SessionWithLock() interface{} {
+// SessionWithContext returns user session, returns as soon as the session has been seted or
+// waits until the context is done.
+func (c *Conn) SessionWithContext(ctx context.Context) interface{} {
+	c.mux.Lock()
+	ch := c.chSessionInited
+	c.mux.Unlock()
+	if ch != nil {
+		select {
+		case <-ch:
+		case <-ctx.Done():
+		}
+
+	}
 	return c.session
 }
 
