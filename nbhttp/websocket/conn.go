@@ -54,7 +54,8 @@ type Conn struct {
 
 	mux sync.Mutex
 
-	session interface{}
+	chSessionInited chan struct{}
+	session         interface{}
 
 	sendQueue     [][]byte
 	sendQueueSize int
@@ -563,11 +564,28 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 
 // Session returns user session.
 func (c *Conn) Session() interface{} {
+	c.mux.Lock()
+	ch := c.chSessionInited
+	c.mux.Unlock()
+	if ch != nil {
+		<-ch
+	}
+	return c.session
+}
+
+// SessionWithLock returns user session with lock.
+func (c *Conn) SessionWithLock() interface{} {
 	return c.session
 }
 
 // SetSession sets user session.
 func (c *Conn) SetSession(session interface{}) {
+	c.mux.Lock()
+	if c.chSessionInited != nil {
+		close(c.chSessionInited)
+		c.chSessionInited = nil
+	}
+	c.mux.Unlock()
 	c.session = session
 }
 
@@ -584,6 +602,11 @@ func (w *writeBuffer) Close() error {
 // CloseAndClean .
 func (c *Conn) CloseAndClean(err error) {
 	c.mux.Lock()
+	if c.chSessionInited != nil {
+		close(c.chSessionInited)
+		c.chSessionInited = nil
+	}
+
 	closed := c.closed
 	c.closed = true
 	if closed {

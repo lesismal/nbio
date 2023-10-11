@@ -380,6 +380,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	if wsc.isBlockingMod {
 		if parser == nil {
+			wsc.chSessionInited = make(chan struct{})
 			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
 		}
 	}
