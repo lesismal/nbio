@@ -70,6 +70,7 @@ type Conn struct {
 	enableWriteCompression   bool
 	isBlockingMod            bool
 	isHandledBySTDServer     bool
+	isInReadingLoop          bool
 	expectingFragments       bool
 	compress                 bool
 	opcode                   MessageType
@@ -90,6 +91,11 @@ func (c *Conn) SetClient(isClient bool) {
 // IsBlockingMod .
 func (c *Conn) IsBlockingMod() bool {
 	return c.isBlockingMod
+}
+
+// IsHandledBySTDServer .
+func (c *Conn) IsHandledBySTDServer() bool {
+	return c.isHandledBySTDServer
 }
 
 // IsAsyncWrite .
@@ -831,6 +837,13 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 // HandleRead .
 func (c *Conn) HandleRead(bufSize int) {
 	if !c.isHandledBySTDServer {
+		return
+	}
+	c.mux.Lock()
+	reading := c.isInReadingLoop
+	c.isInReadingLoop = true
+	c.mux.Unlock()
+	if reading {
 		return
 	}
 
