@@ -374,14 +374,22 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
+	wsc.isHandledBySTDServer = (parser == nil)
+
 	if wsc.openHandler != nil {
 		wsc.openHandler(wsc)
 	}
 
-	if wsc.isBlockingMod {
-		if parser == nil {
+	if wsc.isBlockingMod && wsc.isHandledBySTDServer {
+		var handleRead = true
+		if len(args) > 1 {
+			var b bool
+			b, ok = args[1].(bool)
+			handleRead = ok && b
+		}
+		if handleRead {
 			wsc.chSessionInited = make(chan struct{})
-			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
+			go wsc.HandleRead(u.BlockingModReadBufferSize)
 		}
 	}
 
@@ -391,6 +399,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 func (u *Upgrader) UpgradeAndTransferConnToPoller(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
 	const trasferConn = true
 	return u.Upgrade(w, r, responseHeader, trasferConn)
+}
+
+func (u *Upgrader) UpgradeWithoutHandlingReadForConnFromSTDServer(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
+	// handle std server's conn, no need transfer conn to nbio Engine
+	const trasferConn = false
+	const handleRead = false
+	return u.Upgrade(w, r, responseHeader, trasferConn, handleRead)
 }
 
 func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (string, string, bool, error) {

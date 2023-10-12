@@ -69,6 +69,7 @@ type Conn struct {
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	isBlockingMod            bool
+	isHandledBySTDServer     bool
 	expectingFragments       bool
 	compress                 bool
 	opcode                   MessageType
@@ -827,8 +828,12 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 	return wsc
 }
 
-// BlockingModReadLoop .
-func (c *Conn) BlockingModReadLoop(bufSize int) {
+// HandleRead .
+func (c *Conn) HandleRead(bufSize int) {
+	if !c.isHandledBySTDServer {
+		return
+	}
+
 	var (
 		n   int
 		err error
