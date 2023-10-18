@@ -781,6 +781,9 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 			return
 		}
 		parser.Read(buf[:n])
+		if parser.hijacked {
+			return
+		}
 	}
 }
 
@@ -830,6 +833,9 @@ func (engine *Engine) readTLSConnBlocking(conn net.Conn, tlsConn *tls.Conn, pars
 					logging.Debug("parser.Read failed: %v", err)
 					return
 				}
+				// if parser.hijacked {
+				// 	return
+				// }
 			}
 			if nread == 0 {
 				break

@@ -374,13 +374,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
-	wsc.isHandledBySTDServer = (parser == nil)
+	wsc.isReadingByParser = (parser == nil)
 
 	if wsc.openHandler != nil {
 		wsc.openHandler(wsc)
 	}
 
-	if wsc.isBlockingMod && wsc.isHandledBySTDServer {
+	if wsc.isBlockingMod && wsc.isReadingByParser {
 		var handleRead = true
 		if len(args) > 1 {
 			var b bool

@@ -35,6 +35,7 @@ type Parser struct {
 
 	state    int8
 	isClient bool
+	hijacked bool
 
 	readLimit int
 
