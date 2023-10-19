@@ -108,6 +108,13 @@ func (p *poller) addRead(fd int) {
 	p.trigger()
 }
 
+func (p *poller) resetRead(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DISABLE, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+}
+
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
