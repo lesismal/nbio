@@ -69,6 +69,8 @@ type Conn struct {
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	isBlockingMod            bool
+	isReadingByParser        bool
+	isInReadingLoop          bool
 	expectingFragments       bool
 	compress                 bool
 	opcode                   MessageType
@@ -827,8 +829,19 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 	return wsc
 }
 
-// BlockingModReadLoop .
-func (c *Conn) BlockingModReadLoop(bufSize int) {
+// HandleRead .
+func (c *Conn) HandleRead(bufSize int) {
+	if !c.isReadingByParser {
+		return
+	}
+	c.mux.Lock()
+	reading := c.isInReadingLoop
+	c.isInReadingLoop = true
+	c.mux.Unlock()
+	if reading {
+		return
+	}
+
 	var (
 		n   int
 		err error
