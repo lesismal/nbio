@@ -266,14 +266,15 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	response := NewResponse(p.parser, request, p.enableSendfile)
 	if !parser.Execute(func() {
 		p.handler.ServeHTTP(response, request)
-		parser.hijacked = p.flushResponse(response)
+		p.flushResponse(response)
 	}) {
 		releaseRequest(request, p.parser.Engine.RetainHTTPBody)
 	}
 }
 
-func (p *ServerProcessor) flushResponse(res *Response) bool {
+func (p *ServerProcessor) flushResponse(res *Response) {
 	hijacked := res.hijacked
+	p.parser.hijacked = hijacked
 	if p.conn != nil {
 		req := res.request
 		if !hijacked {
@@ -282,7 +283,7 @@ func (p *ServerProcessor) flushResponse(res *Response) bool {
 				p.conn.Close()
 				releaseRequest(req, p.parser.Engine.RetainHTTPBody)
 				releaseResponse(res)
-				return hijacked
+				return
 			}
 			if req.Close {
 				// the data may still in the send queue
@@ -294,7 +295,6 @@ func (p *ServerProcessor) flushResponse(res *Response) bool {
 		releaseRequest(req, p.parser.Engine.RetainHTTPBody)
 		releaseResponse(res)
 	}
-	return hijacked
 }
 
 // Close .
