@@ -34,6 +34,8 @@ var (
 
 	DefaultBlockingModSendQueueMaxSize = 0
 
+	DefaultBlockingModAsyncCloseDelay = time.Second / 10
+
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
 		ReleaseWebsocketPayload: true,
@@ -41,9 +43,10 @@ var (
 )
 
 type commonFields struct {
-	Engine             *nbhttp.Engine
-	KeepaliveTime      time.Duration
-	MessageLengthLimit int
+	Engine                     *nbhttp.Engine
+	KeepaliveTime              time.Duration
+	MessageLengthLimit         int
+	BlockingModAsyncCloseDelay time.Duration
 
 	enableCompression bool
 	compressionLevel  int
@@ -92,8 +95,9 @@ type Upgrader struct {
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
-			Engine:           DefaultEngine,
-			compressionLevel: defaultCompressionLevel,
+			Engine:                     DefaultEngine,
+			compressionLevel:           defaultCompressionLevel,
+			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
 		},
 		BlockingModReadBufferSize:    DefaultBlockingReadBufferSize,
 		BlockingModAsyncWrite:        DefaultBlockingModAsyncWrite,
@@ -370,13 +374,22 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
+	wsc.isReadingByParser = (parser == nil)
+
 	if wsc.openHandler != nil {
 		wsc.openHandler(wsc)
 	}
 
-	if wsc.isBlockingMod {
-		if parser == nil {
-			go wsc.BlockingModReadLoop(u.BlockingModReadBufferSize)
+	if wsc.isBlockingMod && wsc.isReadingByParser {
+		var handleRead = true
+		if len(args) > 1 {
+			var b bool
+			b, ok = args[1].(bool)
+			handleRead = ok && b
+		}
+		if handleRead {
+			wsc.chSessionInited = make(chan struct{})
+			go wsc.HandleRead(u.BlockingModReadBufferSize)
 		}
 	}
 
@@ -386,6 +399,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 func (u *Upgrader) UpgradeAndTransferConnToPoller(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
 	const trasferConn = true
 	return u.Upgrade(w, r, responseHeader, trasferConn)
+}
+
+func (u *Upgrader) UpgradeWithoutHandlingReadForConnFromSTDServer(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
+	// handle std server's conn, no need transfer conn to nbio Engine
+	const trasferConn = false
+	const handleRead = false
+	return u.Upgrade(w, r, responseHeader, trasferConn, handleRead)
 }
 
 func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (string, string, bool, error) {

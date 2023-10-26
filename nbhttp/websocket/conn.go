@@ -6,6 +6,7 @@ package websocket
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -54,7 +55,8 @@ type Conn struct {
 
 	mux sync.Mutex
 
-	session interface{}
+	chSessionInited chan struct{}
+	session         interface{}
 
 	sendQueue     [][]byte
 	sendQueueSize int
@@ -67,6 +69,8 @@ type Conn struct {
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	isBlockingMod            bool
+	isReadingByParser        bool
+	isInReadingLoop          bool
 	expectingFragments       bool
 	compress                 bool
 	opcode                   MessageType
@@ -99,13 +103,17 @@ func (c *Conn) Close() error {
 	if c.Conn == nil {
 		return nil
 	}
+	if c.IsAsyncWrite() {
+		c.Engine.AfterFunc(c.BlockingModAsyncCloseDelay, func() { c.Conn.Close() })
+		return nil
+	}
 	return c.Conn.Close()
 }
 
 // CloseWithError .
 func (c *Conn) CloseWithError(err error) error {
 	c.SetCloseError(err)
-	return c.Conn.Close()
+	return c.Close()
 }
 
 // SetCloseError .
@@ -237,11 +245,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 	}
 
 ErrExit:
-	if c.IsAsyncWrite() {
-		c.Engine.AfterFunc(time.Second, func() { c.Conn.Close() })
-	} else {
-		c.Conn.Close()
-	}
+	c.Close()
 }
 
 func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool, err error) {
@@ -566,8 +570,41 @@ func (c *Conn) Session() interface{} {
 	return c.session
 }
 
+// SessionWithLock returns user session with lock, returns as soon as the session has been seted.
+func (c *Conn) SessionWithLock() interface{} {
+	c.mux.Lock()
+	ch := c.chSessionInited
+	c.mux.Unlock()
+	if ch != nil {
+		<-ch
+	}
+	return c.session
+}
+
+// SessionWithContext returns user session, returns as soon as the session has been seted or
+// waits until the context is done.
+func (c *Conn) SessionWithContext(ctx context.Context) interface{} {
+	c.mux.Lock()
+	ch := c.chSessionInited
+	c.mux.Unlock()
+	if ch != nil {
+		select {
+		case <-ch:
+		case <-ctx.Done():
+		}
+
+	}
+	return c.session
+}
+
 // SetSession sets user session.
 func (c *Conn) SetSession(session interface{}) {
+	c.mux.Lock()
+	if c.chSessionInited != nil {
+		close(c.chSessionInited)
+		c.chSessionInited = nil
+	}
+	c.mux.Unlock()
 	c.session = session
 }
 
@@ -584,6 +621,11 @@ func (w *writeBuffer) Close() error {
 // CloseAndClean .
 func (c *Conn) CloseAndClean(err error) {
 	c.mux.Lock()
+	if c.chSessionInited != nil {
+		close(c.chSessionInited)
+		c.chSessionInited = nil
+	}
+
 	closed := c.closed
 	c.closed = true
 	if closed {
@@ -780,12 +822,26 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 	if asyncWrite {
 		wsc.sendQueue = make([][]byte, u.BlockingModSendQueueInitSize)[:0]
 		wsc.sendQueueSize = u.BlockingModSendQueueMaxSize
+		if wsc.BlockingModAsyncCloseDelay <= 0 {
+			wsc.BlockingModAsyncCloseDelay = DefaultBlockingModAsyncCloseDelay
+		}
 	}
 	return wsc
 }
 
-// BlockingModReadLoop .
-func (c *Conn) BlockingModReadLoop(bufSize int) {
+// HandleRead .
+func (c *Conn) HandleRead(bufSize int) {
+	if !c.isReadingByParser {
+		return
+	}
+	c.mux.Lock()
+	reading := c.isInReadingLoop
+	c.isInReadingLoop = true
+	c.mux.Unlock()
+	if reading {
+		return
+	}
+
 	var (
 		n   int
 		err error

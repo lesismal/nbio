@@ -9,6 +9,7 @@ package nbio
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"runtime"
@@ -107,6 +108,13 @@ func (p *poller) addRead(fd int) {
 	p.trigger()
 }
 
+func (p *poller) resetRead(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DISABLE, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+}
+
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD | syscall.EV_CLEAR, Filter: syscall.EVFILT_WRITE})
@@ -144,6 +152,9 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 						return
 					}
 					if (err != nil || n == 0) && ev.Flags&syscall.EV_DELETE == 0 {
+						if err == nil {
+							err = io.EOF
+						}
 						c.closeWithError(err)
 					}
 					if n < len(buffer) {

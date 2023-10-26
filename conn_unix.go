@@ -374,8 +374,7 @@ func (c *Conn) resetRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
 		p := c.p
-		p.deleteEvent(c.fd)
-		p.addRead(c.fd)
+		p.resetRead(c.fd)
 	}
 }
 
