@@ -235,7 +235,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 	}
 
-	switch vt := conn.(type) {
+	var underLayerConn net.Conn
+	tmpConn, isReadingByParser := conn.(*nbhttp.Conn)
+	if isReadingByParser {
+		underLayerConn = tmpConn.Conn
+		parser = tmpConn.Parser
+	} else {
+		underLayerConn = conn
+	}
+
+	switch vt := underLayerConn.(type) {
 	case *nbio.Conn:
 		// Scenario 1: *nbio.Conn, handled by nbhttp.Engine.
 		parser, ok = vt.Session().(*nbhttp.Parser)
@@ -374,13 +383,15 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
-	wsc.isReadingByParser = (parser == nil)
-
 	if wsc.openHandler != nil {
 		wsc.openHandler(wsc)
 	}
 
-	if wsc.isBlockingMod && wsc.isReadingByParser {
+	if parser != nil {
+		parser.Reader = wsc
+	}
+	wsc.isReadingByParser = isReadingByParser
+	if wsc.isBlockingMod && (!wsc.isReadingByParser) {
 		var handleRead = true
 		if len(args) > 1 {
 			var b bool

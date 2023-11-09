@@ -273,11 +273,11 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 }
 
 func (p *ServerProcessor) flushResponse(res *Response) {
-	hijacked := res.hijacked
-	p.parser.hijacked = hijacked
+	// hijacked := res.hijacked
+	// p.parser.hijacked = hijacked
 	if p.conn != nil {
 		req := res.request
-		if !hijacked {
+		if !res.hijacked {
 			res.eoncodeHead()
 			if err := res.flushTrailer(p.conn); err != nil {
 				p.conn.Close()

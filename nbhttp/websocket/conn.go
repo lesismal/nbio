@@ -831,7 +831,7 @@ func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabl
 
 // HandleRead .
 func (c *Conn) HandleRead(bufSize int) {
-	if !c.isReadingByParser {
+	if c.isReadingByParser {
 		return
 	}
 	c.mux.Lock()
