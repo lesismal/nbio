@@ -825,7 +825,7 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 		}
 
 		engine.mux.Lock()
-		switch vt := conn.Conn.(type) {
+		switch vt := rconn.(type) {
 		case *net.TCPConn, *net.UnixConn:
 			key, _ := conn2Array(vt)
 			delete(engine.conns, key)
