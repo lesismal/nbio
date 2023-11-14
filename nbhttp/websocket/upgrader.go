@@ -236,10 +236,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	var underLayerConn net.Conn
-	tmpConn, isReadingByParser := conn.(*nbhttp.Conn)
+	nbhttpConn, isReadingByParser := conn.(*nbhttp.Conn)
 	if isReadingByParser {
-		underLayerConn = tmpConn.Conn
-		parser = tmpConn.Parser
+		underLayerConn = nbhttpConn.Conn
+		parser = nbhttpConn.Parser
 	} else {
 		underLayerConn = conn
 	}
@@ -265,6 +265,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				nbc, err = nbio.NBConn(vt.Conn())
 				if err != nil {
 					return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+				}
+				if nbhttpConn != nil {
+					nbhttpConn.Trasfered = true
 				}
 				vt.ResetRawInput()
 				parser = &nbhttp.Parser{Execute: nbc.Execute}
@@ -337,6 +340,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			nbc, err = nbio.NBConn(vt)
 			if err != nil {
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+			}
+			if nbhttpConn != nil {
+				nbhttpConn.Trasfered = true
 			}
 			parser = &nbhttp.Parser{Execute: nbc.Execute}
 			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
