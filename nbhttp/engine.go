@@ -584,6 +584,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 		logging.Error("AddConnNonTLSNonBlocking failed: %v", err)
 		return
 	}
+	conn.Conn = nbc
 	if nbc.Session() != nil {
 		nbc.Close()
 		return
@@ -604,8 +605,8 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	}
 	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
-	engine._onOpen(nbc)
-	processor := NewServerProcessor(nbc, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	engine._onOpen(conn.Conn)
+	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
 	if engine.isOneshot {
 		parser.Execute = SyncExecutor
@@ -666,6 +667,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 		logging.Error("AddConnTLSNonBlocking failed: %v", err)
 		return
 	}
+	conn.Conn = nbc
 	if nbc.Session() != nil {
 		nbc.Close()
 		logging.Error("AddConnTLSNonBlocking failed: session should not be nil")
@@ -688,11 +690,11 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 
 	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
-	engine._onOpen(nbc)
+	engine._onOpen(conn.Conn)
 
 	isClient := false
 	isNonBlock := true
-	tlsConn := tls.NewConn(nbc, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
+	tlsConn := tls.NewConn(conn, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	processor := NewServerProcessor(tlsConn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
 	if engine.isOneshot {
