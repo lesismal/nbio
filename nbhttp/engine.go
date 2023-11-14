@@ -764,7 +764,7 @@ func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decr
 	go engine.readTLSConnBlocking(conn, underLayerConn, tlsConn, parser, decrease)
 }
 
-func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease func()) {
+func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func()) {
 	var (
 		n   int
 		err error
@@ -782,7 +782,7 @@ func (engine *Engine) readConnBlocking(conn net.Conn, parser *Parser, decrease f
 		// go func() {
 		parser.Close(err)
 		engine.mux.Lock()
-		switch vt := conn.(type) {
+		switch vt := conn.Conn.(type) {
 		case *net.TCPConn, *net.UnixConn:
 			key, _ := conn2Array(vt)
 			delete(engine.conns, key)
