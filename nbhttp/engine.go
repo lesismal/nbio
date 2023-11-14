@@ -799,9 +799,6 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 			return
 		}
 		parser.Read(buf[:n])
-		// if parser.hijacked {
-		// 	return
-		// }
 	}
 }
 

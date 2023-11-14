@@ -33,10 +33,6 @@ type Parser struct {
 
 	cache []byte
 
-	state    int8
-	isClient bool
-	hijacked bool
-
 	readLimit int
 
 	errClose error
@@ -66,8 +62,11 @@ type Parser struct {
 	trailer       http.Header
 	contentLength int
 	chunkSize     int
-	chunked       bool
-	headerExists  bool
+
+	state        int8
+	chunked      bool
+	isClient     bool
+	headerExists bool
 }
 
 func (p *Parser) nextState(state int8) {

@@ -273,8 +273,6 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 }
 
 func (p *ServerProcessor) flushResponse(res *Response) {
-	// hijacked := res.hijacked
-	// p.parser.hijacked = hijacked
 	if p.conn != nil {
 		req := res.request
 		if !res.hijacked {
