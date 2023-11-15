@@ -1026,6 +1026,7 @@ func NewEngine(conf Config) *Engine {
 			engine.mux.Lock()
 			key, _ := conn2Array(c)
 			delete(engine.conns, key)
+			delete(engine.dialerConns, key)
 			engine.mux.Unlock()
 		})
 	})
