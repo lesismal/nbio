@@ -185,7 +185,13 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 
 		nbc, ok := conn.(*nbio.Conn)
 		if !ok {
-			tlsConn, tlsOk := conn.(*tls.Conn)
+			nbhttpConn, ok2 := conn.(*nbhttp.Conn)
+			if !ok2 {
+				err = ErrBadHandshake
+				notifyResult(err)
+				return
+			}
+			tlsConn, tlsOk := nbhttpConn.Conn.(*tls.Conn)
 			if !tlsOk {
 				err = ErrBadHandshake
 				notifyResult(err)

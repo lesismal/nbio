@@ -235,7 +235,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 	}
 
-	switch vt := conn.(type) {
+	var underLayerConn net.Conn
+	nbhttpConn, isReadingByParser := conn.(*nbhttp.Conn)
+	if isReadingByParser {
+		underLayerConn = nbhttpConn.Conn
+		parser = nbhttpConn.Parser
+	} else {
+		underLayerConn = conn
+	}
+
+	switch vt := underLayerConn.(type) {
 	case *nbio.Conn:
 		// Scenario 1: *nbio.Conn, handled by nbhttp.Engine.
 		parser, ok = vt.Session().(*nbhttp.Parser)
@@ -256,6 +265,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				nbc, err = nbio.NBConn(vt.Conn())
 				if err != nil {
 					return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+				}
+				if nbhttpConn != nil {
+					nbhttpConn.Trasfered = true
 				}
 				vt.ResetRawInput()
 				parser = &nbhttp.Parser{Execute: nbc.Execute}
@@ -329,6 +341,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if err != nil {
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 			}
+			if nbhttpConn != nil {
+				nbhttpConn.Trasfered = true
+			}
 			parser = &nbhttp.Parser{Execute: nbc.Execute}
 			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
 				parser.Execute = nbhttp.SyncExecutor
@@ -374,13 +389,15 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
-	wsc.isReadingByParser = (parser == nil)
-
 	if wsc.openHandler != nil {
 		wsc.openHandler(wsc)
 	}
 
-	if wsc.isBlockingMod && wsc.isReadingByParser {
+	if parser != nil {
+		parser.Reader = wsc
+	}
+	wsc.isReadingByParser = isReadingByParser
+	if wsc.isBlockingMod && (!wsc.isReadingByParser) {
 		var handleRead = true
 		if len(args) > 1 {
 			var b bool
