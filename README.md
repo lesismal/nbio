@@ -167,27 +167,43 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/lesismal/nbio/nbhttp/websocket"
 )
 
-func echo(w http.ResponseWriter, r *http.Request) {
+var (
+	upgrader = newUpgrader()
+)
+
+func newUpgrader() *websocket.Upgrader {
 	u := websocket.NewUpgrader()
-	u.OnMessage(func(c *websocket.Conn, mt websocket.MessageType, data []byte) {
-		c.WriteMessage(mt, data)
+	u.OnOpen(func(c *websocket.Conn) {
+		// echo
+		fmt.Println("OnOpen:", c.RemoteAddr().String())
 	})
-	_, err := u.Upgrade(w, r, nil)
+	u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
+		// echo
+		fmt.Println("OnMessage:", messageType, string(data))
+		c.WriteMessage(messageType, data)
+	})
+	u.OnClose(func(c *websocket.Conn, err error) {
+		fmt.Println("OnClose:", c.RemoteAddr().String(), err)
+	})
+	return u
+}
+
+func onWebsocket(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("upgrade:", err)
-		return
+		panic(err)
 	}
+	fmt.Println("Upgraded:", conn.RemoteAddr().String())
 }
 
 func main() {
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/ws", echo)
+	mux.HandleFunc("/ws", onWebsocket)
 	server := http.Server{
 		Addr:    "localhost:8080",
 		Handler: mux,

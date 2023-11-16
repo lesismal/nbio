@@ -318,10 +318,11 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			isNonblock := true
 			tlsConn.ResetConn(nbc, isNonblock)
 
-			c.conn = tlsConn
+			nbhttpConn := &Conn{Conn: tlsConn}
+			c.conn = nbhttpConn
 			processor := NewClientProcessor(c, c.onResponse)
 			parser := NewParser(processor, true, engine.ReadLimit, nbc.Execute)
-			parser.Conn = tlsConn
+			parser.Conn = nbhttpConn
 			parser.Engine = engine
 			parser.OnClose(func(p *Parser, err error) {
 				c.CloseWithError(err)
