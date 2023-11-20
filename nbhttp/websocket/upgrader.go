@@ -275,7 +275,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					parser.Execute = nbhttp.SyncExecutor
 				}
 				wsc = NewConn(u, vt, subprotocol, compress, false)
-				nbc.SetSession(wsc)
+				parser.Reader = wsc
+				parser.Engine = engine
+				nbc.SetSession(parser)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
 					defer func() {
 						if err := recover(); err != nil {
@@ -349,7 +351,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				parser.Execute = nbhttp.SyncExecutor
 			}
 			wsc = NewConn(u, nbc, subprotocol, compress, false)
-			nbc.SetSession(wsc)
+			parser.Reader = wsc
+			parser.Engine = engine
+			nbc.SetSession(parser)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
 				defer func() {
 					if err := recover(); err != nil {

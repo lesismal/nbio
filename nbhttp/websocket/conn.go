@@ -306,7 +306,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 	oldLen := len(c.buffer)
 	readLimit := c.Engine.ReadLimit
-	if readLimit > 0 && ((oldLen+len(data) > readLimit) || ((oldLen + len(c.message) + len(data)) > readLimit)) {
+	if readLimit > 0 && (oldLen+len(data) > readLimit) {
 		return nbhttp.ErrTooLong
 	}
 
