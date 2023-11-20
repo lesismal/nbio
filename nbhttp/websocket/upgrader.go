@@ -270,7 +270,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					nbhttpConn.Trasfered = true
 				}
 				vt.ResetRawInput()
-				parser = &nbhttp.Parser{Execute: nbc.Execute}
+				parser = nbhttp.NewParser(nil, false, engine.ReadLimit, nbc.Execute)
 				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
 					parser.Execute = nbhttp.SyncExecutor
 				}
@@ -301,7 +301,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 							return
 						}
 						if nread > 0 {
-							errRead = wsc.Read(parser, buffer[:nread])
+							errRead = parser.Read(buffer[:nread])
 							if err != nil {
 								logging.Debug("websocket Conn Read failed: %v", errRead)
 								c.CloseWithError(errRead)
@@ -346,7 +346,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if nbhttpConn != nil {
 				nbhttpConn.Trasfered = true
 			}
-			parser = &nbhttp.Parser{Execute: nbc.Execute}
+			parser = nbhttp.NewParser(nil, false, engine.ReadLimit, nbc.Execute)
 			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
 				parser.Execute = nbhttp.SyncExecutor
 			}
@@ -364,7 +364,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					}
 				}()
 
-				errRead := wsc.Read(parser, data)
+				errRead := parser.Read(data)
 				if errRead != nil {
 					logging.Debug("websocket Conn Read failed: %v", errRead)
 					c.CloseWithError(errRead)
