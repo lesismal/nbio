@@ -114,7 +114,7 @@ type Upgrader struct {
 	// false: don't try to transfer.
 	//
 	// Notice:
-	// Only `net.TCPConn` and `llib's blocking tls.Conn` can be transfered to nonblocking.
+	// Only `net.TCPConn` and `llib's blocking tls.Conn` can be transferred to nonblocking.
 	BlockingModTrasferConnToPoller bool
 
 	// BlockingModSendQueueInitSize represents the init size of a Conn's send queue,
