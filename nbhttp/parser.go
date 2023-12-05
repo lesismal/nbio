@@ -136,7 +136,6 @@ func (p *Parser) Read(data []byte) error {
 		return nil
 	}
 
-	var c byte
 	var start = 0
 	var offset = len(p.cache)
 	if offset > 0 {
@@ -161,6 +160,7 @@ UPGRADER:
 		return err
 	}
 
+	var c byte
 	for i := offset; i < len(data); i++ {
 		if p.Reader != nil {
 			goto UPGRADER
