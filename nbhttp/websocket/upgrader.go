@@ -131,8 +131,9 @@ func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
 			Engine:                     DefaultEngine,
-			compressionLevel:           defaultCompressionLevel,
+			KeepaliveTime:              nbhttp.DefaultKeepaliveTime,
 			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
+			compressionLevel:           defaultCompressionLevel,
 		},
 		BlockingModReadBufferSize:      DefaultBlockingReadBufferSize,
 		BlockingModAsyncWrite:          DefaultBlockingModAsyncWrite,
@@ -430,6 +431,12 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, err
 	}
 
+	if u.KeepaliveTime > 0 {
+		conn.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
+	} else {
+		conn.SetReadDeadline(time.Time{})
+	}
+
 	if wsc.openHandler != nil {
 		wsc.openHandler(wsc)
 	}
@@ -558,12 +565,6 @@ func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, chall
 	if err != nil {
 		conn.Close()
 		return err
-	}
-
-	if u.KeepaliveTime <= 0 {
-		conn.SetReadDeadline(time.Now().Add(nbhttp.DefaultKeepaliveTime))
-	} else {
-		conn.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
 	}
 
 	return nil
