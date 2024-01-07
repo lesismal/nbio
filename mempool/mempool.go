@@ -110,16 +110,16 @@ func (mp *MemPool) Free(buf []byte) {
 	mp.pool.Put(&buf)
 }
 
-// NativeAllocator definition.
-type NativeAllocator struct{}
+// stdAllocator .
+type stdAllocator struct{}
 
 // Malloc .
-func (a *NativeAllocator) Malloc(size int) []byte {
+func (a *stdAllocator) Malloc(size int) []byte {
 	return make([]byte, size)
 }
 
 // Realloc .
-func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
+func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
 	}
@@ -129,7 +129,19 @@ func (a *NativeAllocator) Realloc(buf []byte, size int) []byte {
 }
 
 // Free .
-func (a *NativeAllocator) Free(buf []byte) {
+func (a *stdAllocator) Free(buf []byte) {
+}
+
+func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
+	return append(buf, more...)
+}
+
+func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
+	return append(buf, more...)
+}
+
+func NewSTD() Allocator {
+	return &stdAllocator{}
 }
 
 // Malloc exports default package method.
