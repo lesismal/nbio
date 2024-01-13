@@ -140,7 +140,8 @@ func TestSendfile(t *testing.T) {
 			log.Panicf("write 'sendfile' failed: %v", err)
 		}
 
-		if _, err := io.ReadFull(conn, buf); err != nil {
+		_, err := io.ReadFull(conn, buf)
+		if err != nil {
 			log.Panicf("read file failed: %v", err)
 		}
 	}
