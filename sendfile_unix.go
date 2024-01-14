@@ -29,19 +29,18 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		return 0, net.ErrClosed
 	}
 
-	var err error
-	var offset int64
-	if remain <= 0 {
-		stat, err := f.Stat()
-		if err != nil {
-			c.closeWithErrorWithoutLock(err)
-			return 0, err
-		}
-		offset, err = f.Seek(0, io.SeekCurrent)
-		if err != nil {
-			return 0, err
-		}
-		remain = stat.Size() - offset
+	offset, err := f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return 0, err
+	}
+	stat, err := f.Stat()
+	if err != nil {
+		c.closeWithErrorWithoutLock(err)
+		return 0, err
+	}
+	size := stat.Size()
+	if (remain <= 0) || (remain > size-offset) {
+		remain = size - offset
 	}
 
 	c.p.g.beforeWrite(c)
@@ -64,7 +63,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if int64(n) > remain {
 			n = int(remain)
 		}
-		var tmpOffset int64
+		var tmpOffset = offset
 		n, err = syscall.Sendfile(dst, src, &tmpOffset, n)
 		if n > 0 {
 			remain -= int64(n)
@@ -95,5 +94,5 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		}
 	}
 
-	return total - remain, err
+	return total, nil
 }
