@@ -43,6 +43,17 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = size - offset
 	}
 
+	if len(c.writeList) > 0 {
+		src, err := syscall.Dup(int(f.Fd()))
+		if err != nil {
+			c.closeWithErrorWithoutLock(err)
+			return 0, err
+		}
+		t := newToWriteFile(src, offset, remain)
+		c.appendWrite(t)
+		return remain, nil
+	}
+
 	c.p.g.beforeWrite(c)
 
 	var (
@@ -79,11 +90,11 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 			if err == nil {
 				t := newToWriteFile(src, offset, remain)
 				c.appendWrite(t)
-				err = syscall.SetNonblock(src, true)
-				if err != nil {
-					c.closeWithErrorWithoutLock(err)
-					return 0, err
-				}
+				// err = syscall.SetNonblock(src, true)
+				// if err != nil {
+				// 	c.closeWithErrorWithoutLock(err)
+				// 	return 0, err
+				// }
 				c.modWrite()
 			}
 			break
