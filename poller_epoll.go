@@ -349,7 +349,7 @@ func (c *Conn) ResetPollerEvent() {
 	g := p.g
 	fd := c.fd
 	if !c.closed && g.epollMod == EPOLLET && g.epollOneshot == EPOLLONESHOT {
-		if len(c.writeBuffer) == 0 {
+		if len(c.writeList) == 0 {
 			p.resetRead(fd)
 		} else {
 			p.modWrite(fd)
