@@ -563,7 +563,8 @@ func (c *Conn) flush() error {
 	writeFile := func() error {
 		v := c.writeList[0]
 		for v.remain > 0 {
-			n, err := syscall.Sendfile(c.fd, v.fd, &v.offset, int(v.remain))
+			var tmpPos int64
+			n, err := syscall.Sendfile(c.fd, v.fd, &tmpPos, int(v.remain))
 			if n > 0 {
 				v.remain -= int64(n)
 				v.offset += int64(n)

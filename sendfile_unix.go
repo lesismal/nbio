@@ -69,7 +69,8 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if int64(n) > remain {
 			n = int(remain)
 		}
-		n, err = syscall.Sendfile(dst, src, &pos, n)
+		var tmpPos int64
+		n, err = syscall.Sendfile(dst, src, &tmpPos, n)
 		if n > 0 {
 			remain -= int64(n)
 			pos += int64(n)
