@@ -516,10 +516,10 @@ func (c *Conn) flush() error {
 	iovc := make([][]byte, 4)[0:0]
 	writeBuffers := func() error {
 		var (
-			n    int
-			err  error
-			iovc = iovc[0:0]
+			n   int
+			err error
 		)
+		iovc = iovc[0:0]
 		for i := 0; i < len(c.writeList); i++ {
 			v := c.writeList[i]
 			if v.buf != nil {
@@ -528,18 +528,8 @@ func (c *Conn) flush() error {
 				break
 			}
 		}
-		if len(iovc) == 1 {
-			n, err = syscall.Write(c.fd, iovc[0])
-			if n > 0 {
-				c.left -= n
-				if n < len(iovc[0]) {
-					c.writeList[0].offset += int64(n)
-				} else {
-					releaseToWrite(c.writeList[0])
-					c.writeList = c.writeList[1:]
-				}
-			}
-		} else {
+
+		for len(iovc) > 0 && err == nil {
 			n, err = writev(c.fd, iovc)
 			if n > 0 {
 				c.left -= n
@@ -548,10 +538,12 @@ func (c *Conn) flush() error {
 					headLeft := len(head.buf) - int(head.offset)
 					if n < headLeft {
 						head.offset += int64(n)
+						iovc[0] = iovc[0][n:]
 						break
 					} else {
 						releaseToWrite(head)
 						c.writeList = c.writeList[1:]
+						iovc = iovc[1:]
 						n -= headLeft
 					}
 				}
