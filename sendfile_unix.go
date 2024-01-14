@@ -29,17 +29,19 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		return 0, net.ErrClosed
 	}
 
+	var err error
+	var offset int64
 	if remain <= 0 {
 		stat, err := f.Stat()
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
 			return 0, err
 		}
-		pos, err := f.Seek(0, io.SeekCurrent)
+		offset, err = f.Seek(0, io.SeekCurrent)
 		if err != nil {
 			return 0, err
 		}
-		remain = stat.Size() - pos
+		remain = stat.Size() - offset
 	}
 
 	c.p.g.beforeWrite(c)
@@ -51,7 +53,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		total = remain
 	)
 
-	err := syscall.SetNonblock(src, true)
+	err = syscall.SetNonblock(src, true)
 	if err != nil {
 		c.closeWithErrorWithoutLock(err)
 		return 0, err
@@ -62,11 +64,11 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if int64(n) > remain {
 			n = int(remain)
 		}
-		var offset int64
-		n, err = syscall.Sendfile(dst, src, &offset, n)
+		var tmpOffset int64
+		n, err = syscall.Sendfile(dst, src, &tmpOffset, n)
 		if n > 0 {
 			remain -= int64(n)
-			// pos += int64(n)
+			offset += int64(n)
 		} else if n == 0 && err == nil {
 			break
 		}
@@ -76,7 +78,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if errors.Is(err, syscall.EAGAIN) {
 			src, err = syscall.Dup(src)
 			if err == nil {
-				t := newToWriteFile(src, remain)
+				t := newToWriteFile(src, offset, remain)
 				c.appendWrite(t)
 				err = syscall.SetNonblock(src, true)
 				if err != nil {
