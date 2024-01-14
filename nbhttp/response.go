@@ -191,9 +191,22 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 
 		f, ok := r.(*os.File)
 		if ok {
-			nc, ok := c.(interface {
+			rc := c
+			if hc, ok := c.(*Conn); ok {
+				rc = hc.Conn
+			}
+			nc, ok := rc.(interface {
 				Sendfile(f *os.File, remain int64) (int64, error)
 			})
+			if !ok {
+				hc, ok2 := c.(*Conn)
+				if ok2 {
+					nc, ok = hc.Conn.(interface {
+						Sendfile(f *os.File, remain int64) (int64, error)
+					})
+				}
+
+			}
 			if ok {
 				ns, err := nc.Sendfile(f, lr.N)
 				return ns, err

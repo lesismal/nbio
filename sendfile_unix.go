@@ -22,23 +22,30 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 	if f == nil {
 		return 0, nil
 	}
+
 	c.mux.Lock()
+	defer c.mux.Unlock()
 	if c.closed {
-		c.mux.Unlock()
-		return -1, net.ErrClosed
+		return 0, net.ErrClosed
 	}
 
 	var err error
 	var pos int64
+	pos, err = f.Seek(0, io.SeekCurrent)
+	if err != nil {
+		c.closeWithErrorWithoutLock(err)
+		return 0, err
+	}
 	if remain <= 0 {
 		stat, err := f.Stat()
 		if err != nil {
+			c.closeWithErrorWithoutLock(err)
 			return 0, err
 		}
-		pos, err = f.Seek(0, io.SeekCurrent)
-		if err != nil {
-			return 0, err
-		}
+		// pos, err = f.Seek(0, io.SeekCurrent)
+		// if err != nil {
+		// 	return 0, err
+		// }
 		remain = stat.Size() - pos + 100
 	}
 
@@ -53,8 +60,8 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 
 	err = syscall.SetNonblock(src, true)
 	if err != nil {
-		c.mux.Unlock()
-		return -1, err
+		c.closeWithErrorWithoutLock(err)
+		return 0, err
 	}
 
 	for remain > 0 {
@@ -77,15 +84,20 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 			if err == nil {
 				t := newToWriteFile(src, pos, remain)
 				c.appendWrite(t)
+				err = syscall.SetNonblock(src, true)
+				if err != nil {
+					c.closeWithErrorWithoutLock(err)
+					return 0, err
+				}
+				c.modWrite()
 			}
 			break
 		}
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
-			break
+			return 0, err
 		}
 	}
 
-	c.mux.Unlock()
 	return total - remain, err
 }

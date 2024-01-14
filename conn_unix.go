@@ -41,12 +41,16 @@ func newToWriteFile(fd int, offset, remain int64) *toWrite {
 	t := poolToWrite.New().(*toWrite)
 	t.fd = fd
 	t.offset = offset
+	t.remain = remain
 	return t
 }
 
 func releaseToWrite(t *toWrite) {
 	if t.buf != nil {
 		mempool.Free(t.buf)
+	}
+	if t.fd > 0 {
+		syscall.Close(t.fd)
 	}
 	*t = emptyToWrite
 	poolToWrite.Put(t)
@@ -500,93 +504,103 @@ func (c *Conn) appendWrite(t *toWrite) {
 
 func (c *Conn) flush() error {
 	c.mux.Lock()
+	defer c.mux.Unlock()
 	if c.closed {
-		c.mux.Unlock()
 		return net.ErrClosed
 	}
 
 	if len(c.writeList) == 0 {
-		c.mux.Unlock()
 		return nil
 	}
 
-	var (
-		n    int
-		err  error
-		iovc = make([][]byte, 4)[0:0]
-	)
-
-	for len(c.writeList) > 0 {
+	iovc := make([][]byte, 4)[0:0]
+	writeBuffers := func() error {
+		var (
+			n    int
+			err  error
+			iovc = iovc[0:0]
+		)
 		for i := 0; i < len(c.writeList); i++ {
 			v := c.writeList[i]
 			if v.buf != nil {
 				iovc = append(iovc, v.buf[v.offset:])
 			} else {
-				if len(iovc) > 0 {
-					if len(iovc) == 0 {
-						n, err = syscall.Write(c.fd, iovc[0])
-						if n > 0 {
-							c.left -= n
-							if n < len(iovc[0]) {
-								c.writeList[0].offset += int64(n)
-							} else {
-								releaseToWrite(c.writeList[0])
-								c.writeList = c.writeList[1:]
-							}
-						}
-					} else {
-						n, err = writev(c.fd, iovc)
-						if n > 0 {
-							c.left -= n
-							for j := 0; n > 0 && j < i; j++ {
-								head := c.writeList[0]
-								headLeft := len(head.buf) - int(head.offset)
-								if n < headLeft {
-									head.offset += int64(n)
-									break
-								} else {
-									releaseToWrite(head)
-									c.writeList = c.writeList[1:]
-									n -= headLeft
-								}
-							}
-						}
-					}
-				} else {
-					for v.remain > 0 {
-						n, err = syscall.Sendfile(c.fd, v.fd, &v.offset, int(v.remain))
-						if n > 0 {
-							v.remain -= int64(n)
-							v.offset += int64(n)
-							if v.remain >= 0 {
-								releaseToWrite(c.writeList[0])
-								c.writeList = c.writeList[1:]
-							}
-						}
-					}
-				}
 				break
 			}
 		}
-		iovc = iovc[0:0]
+		if len(iovc) == 1 {
+			n, err = syscall.Write(c.fd, iovc[0])
+			if n > 0 {
+				c.left -= n
+				if n < len(iovc[0]) {
+					c.writeList[0].offset += int64(n)
+				} else {
+					releaseToWrite(c.writeList[0])
+					c.writeList = c.writeList[1:]
+				}
+			}
+		} else {
+			n, err = writev(c.fd, iovc)
+			if n > 0 {
+				c.left -= n
+				for n > 0 {
+					head := c.writeList[0]
+					headLeft := len(head.buf) - int(head.offset)
+					if n < headLeft {
+						head.offset += int64(n)
+						break
+					} else {
+						releaseToWrite(head)
+						c.writeList = c.writeList[1:]
+						n -= headLeft
+					}
+				}
+			}
+		}
+		return err
+	}
+
+	writeFile := func() error {
+		v := c.writeList[0]
+		for v.remain > 0 {
+			n, err := syscall.Sendfile(c.fd, v.fd, &v.offset, int(v.remain))
+			if n > 0 {
+				v.remain -= int64(n)
+				v.offset += int64(n)
+				if v.remain <= 0 {
+					releaseToWrite(c.writeList[0])
+					c.writeList = c.writeList[1:]
+				}
+			}
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	for len(c.writeList) > 0 {
+		var err error
+		if c.writeList[0].fd == 0 {
+			err = writeBuffers()
+		} else {
+			err = writeFile()
+		}
 
 		if errors.Is(err, syscall.EINTR) {
 			continue
 		}
 		if errors.Is(err, syscall.EAGAIN) {
 			c.modWrite()
-			c.mux.Unlock()
 			return nil
 		}
 		if err != nil {
 			c.closed = true
-			c.mux.Unlock()
 			c.closeWithErrorWithoutLock(err)
 			return err
 		}
 	}
 
-	c.mux.Unlock()
 	return nil
 }
 
