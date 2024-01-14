@@ -18,7 +18,10 @@ func writev(fd int, iovs [][]byte) (int, error) {
 	for _, v := range iovs {
 		size += len(v)
 	}
-	buf := mempool.Malloc(size)
+	buf := mempool.Malloc(size)[:0]
+	for _, v := range iovs {
+		buf = append(buf, v...)
+	}
 	n, err := syscall.Write(fd, buf)
 	mempool.Free(buf)
 	return n, err
