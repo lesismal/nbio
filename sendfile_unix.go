@@ -46,7 +46,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		// if err != nil {
 		// 	return 0, err
 		// }
-		remain = stat.Size() - pos + 100
+		remain = stat.Size() - pos
 	}
 
 	c.p.g.beforeWrite(c)
