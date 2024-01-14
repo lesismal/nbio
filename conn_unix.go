@@ -442,7 +442,6 @@ func (c *Conn) write(b []byte) (int, error) {
 		if left > 0 && c.typ == ConnTypeTCP {
 			t := newToWriteBuf(b[n:])
 			c.appendWrite(t)
-			c.modWrite()
 		}
 		return len(b), nil
 	}
@@ -524,7 +523,7 @@ func (c *Conn) flush() error {
 		if len(c.writeList) == 1 {
 			head = c.writeList[0]
 			buf := head.buf[head.offset:]
-			for err == nil {
+			for len(buf) > 0 && err == nil {
 				n, err = syscall.Write(c.fd, buf)
 				if n > 0 {
 					c.left -= n
