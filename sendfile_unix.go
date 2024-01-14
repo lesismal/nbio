@@ -29,13 +29,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		return 0, net.ErrClosed
 	}
 
-	// var err error
-	// var pos int64
-	// pos, err = f.Seek(0, io.SeekCurrent)
-	// if err != nil {
-	// 	c.closeWithErrorWithoutLock(err)
-	// 	return 0, err
-	// }
 	if remain <= 0 {
 		stat, err := f.Stat()
 		if err != nil {
@@ -69,8 +62,8 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if int64(n) > remain {
 			n = int(remain)
 		}
-		var tmpPos int64
-		n, err = syscall.Sendfile(dst, src, &tmpPos, n)
+		var offset int64
+		n, err = syscall.Sendfile(dst, src, &offset, n)
 		if n > 0 {
 			remain -= int64(n)
 			// pos += int64(n)

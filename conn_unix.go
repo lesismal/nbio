@@ -40,7 +40,7 @@ func newToWriteBuf(buf []byte) *toWrite {
 func newToWriteFile(fd int, remain int64) *toWrite {
 	t := poolToWrite.New().(*toWrite)
 	t.fd = fd
-	t.remain = remain
+	t.cnt = remain
 	return t
 }
 
@@ -56,10 +56,9 @@ func releaseToWrite(t *toWrite) {
 }
 
 type toWrite struct {
-	fd     int
-	buf    []byte
-	offset int64
-	remain int64
+	fd  int
+	buf []byte
+	cnt int64
 }
 
 // Conn implements net.Conn.
@@ -522,7 +521,7 @@ func (c *Conn) flush() error {
 		for i := 0; i < len(c.writeList); i++ {
 			v := c.writeList[i]
 			if v.buf != nil {
-				iovc = append(iovc, v.buf[v.offset:])
+				iovc = append(iovc, v.buf[v.cnt:])
 			} else {
 				break
 			}
@@ -532,7 +531,7 @@ func (c *Conn) flush() error {
 			if n > 0 {
 				c.left -= n
 				if n < len(iovc[0]) {
-					c.writeList[0].offset += int64(n)
+					c.writeList[0].cnt += int64(n)
 				} else {
 					releaseToWrite(c.writeList[0])
 					c.writeList = c.writeList[1:]
@@ -544,9 +543,9 @@ func (c *Conn) flush() error {
 				c.left -= n
 				for n > 0 {
 					head := c.writeList[0]
-					headLeft := len(head.buf) - int(head.offset)
+					headLeft := len(head.buf) - int(head.cnt)
 					if n < headLeft {
-						head.offset += int64(n)
+						head.cnt += int64(n)
 						break
 					} else {
 						releaseToWrite(head)
@@ -561,13 +560,12 @@ func (c *Conn) flush() error {
 
 	writeFile := func() error {
 		v := c.writeList[0]
-		for v.remain > 0 {
+		for v.cnt > 0 {
 			var offset int64
-			n, err := syscall.Sendfile(c.fd, v.fd, &offset, int(v.remain))
+			n, err := syscall.Sendfile(c.fd, v.fd, &offset, int(v.cnt))
 			if n > 0 {
-				v.remain -= int64(n)
-				// v.offset += int64(n)
-				if v.remain <= 0 {
+				v.cnt -= int64(n)
+				if v.cnt <= 0 {
 					releaseToWrite(c.writeList[0])
 					c.writeList = c.writeList[1:]
 				}
