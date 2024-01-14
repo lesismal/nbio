@@ -29,23 +29,23 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		return 0, net.ErrClosed
 	}
 
-	var err error
-	var pos int64
-	pos, err = f.Seek(0, io.SeekCurrent)
-	if err != nil {
-		c.closeWithErrorWithoutLock(err)
-		return 0, err
-	}
+	// var err error
+	// var pos int64
+	// pos, err = f.Seek(0, io.SeekCurrent)
+	// if err != nil {
+	// 	c.closeWithErrorWithoutLock(err)
+	// 	return 0, err
+	// }
 	if remain <= 0 {
 		stat, err := f.Stat()
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
 			return 0, err
 		}
-		// pos, err = f.Seek(0, io.SeekCurrent)
-		// if err != nil {
-		// 	return 0, err
-		// }
+		pos, err := f.Seek(0, io.SeekCurrent)
+		if err != nil {
+			return 0, err
+		}
 		remain = stat.Size() - pos
 	}
 
@@ -58,7 +58,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		total = remain
 	)
 
-	err = syscall.SetNonblock(src, true)
+	err := syscall.SetNonblock(src, true)
 	if err != nil {
 		c.closeWithErrorWithoutLock(err)
 		return 0, err
@@ -73,7 +73,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		n, err = syscall.Sendfile(dst, src, &tmpPos, n)
 		if n > 0 {
 			remain -= int64(n)
-			pos += int64(n)
+			// pos += int64(n)
 		} else if n == 0 && err == nil {
 			break
 		}
@@ -83,7 +83,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if errors.Is(err, syscall.EAGAIN) {
 			src, err = syscall.Dup(src)
 			if err == nil {
-				t := newToWriteFile(src, pos, remain)
+				t := newToWriteFile(src, remain)
 				c.appendWrite(t)
 				err = syscall.SetNonblock(src, true)
 				if err != nil {

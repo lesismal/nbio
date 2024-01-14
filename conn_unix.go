@@ -37,10 +37,9 @@ func newToWriteBuf(buf []byte) *toWrite {
 	return t
 }
 
-func newToWriteFile(fd int, offset, remain int64) *toWrite {
+func newToWriteFile(fd int, remain int64) *toWrite {
 	t := poolToWrite.New().(*toWrite)
 	t.fd = fd
-	t.offset = offset
 	t.remain = remain
 	return t
 }
@@ -563,11 +562,11 @@ func (c *Conn) flush() error {
 	writeFile := func() error {
 		v := c.writeList[0]
 		for v.remain > 0 {
-			var tmpPos int64
-			n, err := syscall.Sendfile(c.fd, v.fd, &tmpPos, int(v.remain))
+			var offset int64
+			n, err := syscall.Sendfile(c.fd, v.fd, &offset, int(v.remain))
 			if n > 0 {
 				v.remain -= int64(n)
-				v.offset += int64(n)
+				// v.offset += int64(n)
 				if v.remain <= 0 {
 					releaseToWrite(c.writeList[0])
 					c.writeList = c.writeList[1:]
