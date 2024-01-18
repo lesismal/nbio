@@ -43,9 +43,9 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = size - offset
 	}
 
-	var src int
+	src := int(f.Fd())
 	if len(c.writeList) > 0 {
-		src, err = syscall.Dup(int(f.Fd()))
+		src, err = syscall.Dup(src)
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
 			return 0, err
