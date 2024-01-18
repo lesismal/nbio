@@ -132,15 +132,12 @@ func (res *Response) Write(data []byte) (int, error) {
 			res.buffer = buf
 			return l, nil
 		}
-		nw, err := conn.Write(buf)
+		_, err = conn.Write(buf)
 		mempool.Free(buf)
-		if err == nil {
-			return l, nil
+		if err != nil {
+			return 0, err
 		}
-		if nw >= 4 {
-			return nw - 4, err
-		}
-		return -1, err
+		return l, nil
 	}
 
 	if len(res.header[contentLengthHeader]) > 0 {
@@ -148,13 +145,16 @@ func (res *Response) Write(data []byte) (int, error) {
 
 		buf := res.buffer
 		res.buffer = nil
-		if buf == nil {
-			return conn.Write(buf)
-		}
+		// if buf == nil {
+		// 	return conn.Write(buf)
+		// }
 		buf = mempool.Append(buf, data...)
-		nw, err := conn.Write(buf)
+		_, err := conn.Write(buf)
 		mempool.Free(buf)
-		return nw, err
+		if err != nil {
+			return 0, err
+		}
+		return l, err
 	}
 	if res.bodyBuffer == nil {
 		res.bodyBuffer = mempool.Malloc(l)[0:0]
@@ -191,9 +191,22 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 
 		f, ok := r.(*os.File)
 		if ok {
-			nc, ok := c.(interface {
+			rc := c
+			if hc, ok := c.(*Conn); ok {
+				rc = hc.Conn
+			}
+			nc, ok := rc.(interface {
 				Sendfile(f *os.File, remain int64) (int64, error)
 			})
+			if !ok {
+				hc, ok2 := c.(*Conn)
+				if ok2 {
+					nc, ok = hc.Conn.(interface {
+						Sendfile(f *os.File, remain int64) (int64, error)
+					})
+				}
+
+			}
 			if ok {
 				ns, err := nc.Sendfile(f, lr.N)
 				return ns, err
@@ -257,9 +270,7 @@ func (res *Response) eoncodeHead() {
 		const contentType = "Content-Type: text/plain; charset=utf-8\r\n"
 		data = mempool.AppendString(data, contentType)
 	}
-
-	const contentLenthKey = "Content-Length"
-	if !res.chunked && len(res.header[contentLenthKey]) == 0 {
+	if !res.chunked && len(res.header[contentLengthHeader]) == 0 {
 		const contentLenthPrefix = "Content-Length: "
 		if !res.hasBody {
 			data = mempool.AppendString(data, contentLenthPrefix)

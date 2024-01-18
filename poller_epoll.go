@@ -140,8 +140,8 @@ func (p *poller) acceptorLoop() {
 			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
 			var ne net.Error
-			if ok := errors.As(err, &ne); ok && ne.Temporary() {
-				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+			if ok := errors.As(err, &ne); ok && ne.Timeout() {
+				logging.Error("NBIO[%v][%v_%v] Accept failed: timeout error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
 				if !p.shutdown {
@@ -349,7 +349,7 @@ func (c *Conn) ResetPollerEvent() {
 	g := p.g
 	fd := c.fd
 	if !c.closed && g.epollMod == EPOLLET && g.epollOneshot == EPOLLONESHOT {
-		if len(c.writeBuffer) == 0 {
+		if len(c.writeList) == 0 {
 			p.resetRead(fd)
 		} else {
 			p.modWrite(fd)

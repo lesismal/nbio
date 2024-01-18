@@ -8,6 +8,7 @@
 package nbio
 
 import (
+	"errors"
 	"net"
 	"runtime"
 	"time"
@@ -109,8 +110,9 @@ func (p *poller) start() {
 		for !p.shutdown {
 			err = p.accept()
 			if err != nil {
-				if ne, ok := err.(net.Error); ok && ne.Temporary() {
-					logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+				var ne net.Error
+				if ok := errors.As(err, &ne); ok && ne.Timeout() {
+					logging.Error("NBIO[%v][%v_%v] Accept failed: timeout error, retrying...", p.g.Name, p.pollType, p.index)
 					time.Sleep(time.Second / 20)
 				} else {
 					if !p.shutdown {

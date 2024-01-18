@@ -360,6 +360,8 @@ func (s *proxySocks5) Dial(network, addr string) (net.Conn, error) {
 	return conn, nil
 }
 
+const errProxyAtSocks5Prefix = "proxy: SOCKS5 proxy at "
+
 func (s *proxySocks5) connect(conn net.Conn, target string) error {
 	host, portStr, err := net.SplitHostPort(target)
 	if err != nil {
@@ -392,10 +394,10 @@ func (s *proxySocks5) connect(conn net.Conn, target string) error {
 		return errors.New("proxy: failed to read greeting from SOCKS5 proxy at " + s.addr + ": " + err.Error())
 	}
 	if buf[0] != 5 {
-		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " has unexpected version " + strconv.Itoa(int(buf[0])))
+		return errors.New(errProxyAtSocks5Prefix + s.addr + " has unexpected version " + strconv.Itoa(int(buf[0])))
 	}
 	if buf[1] == 0xff {
-		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " requires authentication")
+		return errors.New(errProxyAtSocks5Prefix + s.addr + " requires authentication")
 	}
 
 	// See RFC 1929
@@ -416,7 +418,7 @@ func (s *proxySocks5) connect(conn net.Conn, target string) error {
 		}
 
 		if buf[1] != 0 {
-			return errors.New("proxy: SOCKS5 proxy at " + s.addr + " rejected username/password")
+			return errors.New(errProxyAtSocks5Prefix + s.addr + " rejected username/password")
 		}
 	}
 
@@ -455,7 +457,7 @@ func (s *proxySocks5) connect(conn net.Conn, target string) error {
 	}
 
 	if len(failure) > 0 {
-		return errors.New("proxy: SOCKS5 proxy at " + s.addr + " failed to connect: " + failure)
+		return errors.New(errProxyAtSocks5Prefix + s.addr + " failed to connect: " + failure)
 	}
 
 	var bytesToDiscard int
