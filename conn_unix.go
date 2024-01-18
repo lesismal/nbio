@@ -606,7 +606,7 @@ func (c *Conn) flush() error {
 			continue
 		}
 		if errors.Is(err, syscall.EAGAIN) {
-			c.modWrite()
+			// c.modWrite()
 			return nil
 		}
 		if err != nil {
@@ -615,6 +615,8 @@ func (c *Conn) flush() error {
 			return err
 		}
 	}
+
+	c.resetRead()
 
 	return nil
 }

@@ -75,8 +75,8 @@ func (lm *ListenerMux) Start() {
 				c, err := l.Accept()
 				if err != nil {
 					var ne net.Error
-					if ok := errors.As(err, &ne); ok && ne.Temporary() {
-						logging.Error("Accept failed: temporary error, retrying...")
+					if ok := errors.As(err, &ne); ok && ne.Timeout() {
+						logging.Error("Accept failed: timeout error, retrying...")
 						time.Sleep(time.Second / 20)
 						continue
 					} else {

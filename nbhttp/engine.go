@@ -298,8 +298,8 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(*Co
 				addConn(&Conn{Conn: conn}, tlsConfig, decrease)
 			} else {
 				var ne net.Error
-				if ok := errors.As(err, &ne); ok && ne.Temporary() {
-					logging.Error("Accept failed: temporary error, retrying...")
+				if ok := errors.As(err, &ne); ok && ne.Timeout() {
+					logging.Error("Accept failed: timeout error, retrying...")
 					time.Sleep(time.Second / 20)
 				} else {
 					if !e.shutdown {

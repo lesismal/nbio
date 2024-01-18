@@ -8,6 +8,7 @@
 package nbio
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -32,7 +33,6 @@ const (
 )
 
 const (
-	// for build
 	IPPROTO_TCP   = 0
 	TCP_KEEPINTVL = 0
 	TCP_KEEPIDLE  = 0
@@ -147,10 +147,10 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 						p.g.onData(rc, buffer[:n])
 					}
 					p.g.payback(c, buffer)
-					if err == syscall.EINTR {
+					if errors.Is(err, syscall.EINTR) {
 						continue
 					}
-					if err == syscall.EAGAIN {
+					if errors.Is(err, syscall.EAGAIN) {
 						return
 					}
 					if (err != nil || n == 0) && ev.Flags&syscall.EV_DELETE == 0 {
@@ -205,15 +205,17 @@ func (p *poller) acceptorLoop() {
 	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
-			c, err := NBConn(conn)
+			var c *Conn
+			c, err = NBConn(conn)
 			if err != nil {
 				conn.Close()
 				continue
 			}
 			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+			var ne net.Error
+			if ok := errors.As(err, &ne); ok && ne.Timeout() {
+				logging.Error("NBIO[%v][%v_%v] Accept failed: timeout error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
 				if !p.shutdown {
@@ -241,7 +243,7 @@ func (p *poller) readWriteLoop() {
 		p.eventList = nil
 		p.mux.Unlock()
 		n, err := syscall.Kevent(p.kfd, changes, events, nil)
-		if err != nil && err != syscall.EINTR {
+		if err != nil && errors.Is(err, syscall.EINTR) {
 			return
 		}
 

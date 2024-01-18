@@ -43,8 +43,9 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = size - offset
 	}
 
+	var src int
 	if len(c.writeList) > 0 {
-		src, err := syscall.Dup(int(f.Fd()))
+		src, err = syscall.Dup(int(f.Fd()))
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
 			return 0, err
@@ -58,7 +59,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 
 	var (
 		n     int
-		src   = int(f.Fd())
 		dst   = c.fd
 		total = remain
 	)
