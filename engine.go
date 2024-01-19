@@ -134,6 +134,7 @@ type Engine struct {
 	onClose           func(c *Conn, err error)
 	onRead            func(c *Conn)
 	onData            func(c *Conn, data []byte)
+	onWrittenSize     func(c *Conn, b []byte, n int)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
 	// onWriteBufferFree func(c *Conn, buffer []byte)
@@ -251,6 +252,16 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 		panic("invalid nil handler")
 	}
 	g.onData = h
+}
+
+// OnWrittenSize registers callback for written size.
+// If len(b) is bigger than 0, it represents that it's writting a buffer,
+// else it's operating by Sendfile.
+func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
+	if h == nil {
+		panic("invalid nil handler")
+	}
+	g.onWrittenSize = h
 }
 
 // OnReadBufferAlloc registers callback for memory allocating.

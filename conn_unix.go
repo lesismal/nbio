@@ -468,30 +468,43 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		return size, nil
 	}
 
-	n, err := writev(c.fd, in)
-	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
-		return n, err
-	}
-	nwrite := 0
-	if n > 0 {
-		nwrite += n
+	nwrite, err := writev(c.fd, in)
+	if nwrite > 0 {
+		n := nwrite
+		onWrittenSize := c.p.g.onWrittenSize
 		if n < size {
 			for i := 0; i < len(in) && n > 0; i++ {
 				b := in[i]
-				if n >= len(b) {
-					n -= len(b)
+				if n == 0 {
 					t := newToWriteBuf(b)
 					c.appendWrite(t)
 				} else {
-					t := newToWriteBuf(b[len(b)-n:])
-					c.appendWrite(t)
+					if n < len(b) {
+						if onWrittenSize != nil {
+							onWrittenSize(c, b[:n], n)
+						}
+						t := newToWriteBuf(b[n:])
+						c.appendWrite(t)
+						n = 0
+					} else {
+						if onWrittenSize != nil {
+							onWrittenSize(c, b, len(b))
+						}
+						n -= len(b)
+					}
 				}
 			}
 			c.left += (size - n)
 		}
+	} else {
+		nwrite = 0
 	}
 
-	return nwrite, nil
+	// if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
+	// 	return nwrite, err
+	// }
+
+	return nwrite, err
 }
 
 func (c *Conn) appendWrite(t *toWrite) {
@@ -512,6 +525,8 @@ func (c *Conn) flush() error {
 		return nil
 	}
 
+	onWrittenSize := c.p.g.onWrittenSize
+
 	iovc := make([][]byte, 4)[0:0]
 	writeBuffers := func() error {
 		var (
@@ -526,6 +541,9 @@ func (c *Conn) flush() error {
 			for len(buf) > 0 && err == nil {
 				n, err = syscall.Write(c.fd, buf)
 				if n > 0 {
+					if c.p.g.onWrittenSize != nil && n > 0 {
+						c.p.g.onWrittenSize(c, buf[:n], n)
+					}
 					c.left -= n
 					head.offset += int64(n)
 					buf = buf[n:]
@@ -556,10 +574,16 @@ func (c *Conn) flush() error {
 					head = c.writeList[0]
 					headLeft := len(head.buf) - int(head.offset)
 					if n < headLeft {
+						if onWrittenSize != nil {
+							onWrittenSize(c, head.buf[head.offset:head.offset+int64(n)], n)
+						}
 						head.offset += int64(n)
 						iovc[0] = iovc[0][n:]
 						break
 					} else {
+						if onWrittenSize != nil {
+							onWrittenSize(c, head.buf[head.offset:], headLeft)
+						}
 						releaseToWrite(head)
 						c.writeList = c.writeList[1:]
 						if len(c.writeList) == 0 {
@@ -580,6 +604,9 @@ func (c *Conn) flush() error {
 			var offset = v.offset
 			n, err := syscall.Sendfile(c.fd, v.fd, &offset, int(v.remain))
 			if n > 0 {
+				if onWrittenSize != nil {
+					onWrittenSize(c, nil, n)
+				}
 				v.remain -= int64(n)
 				v.offset += int64(n)
 				if v.remain <= 0 {
@@ -622,19 +649,22 @@ func (c *Conn) flush() error {
 }
 
 func (c *Conn) doWrite(b []byte) (int, error) {
+	var n int
 	var err error
-	var nread int
 	switch c.typ {
 	case ConnTypeTCP, ConnTypeUnix:
-		nread, err = c.writeStream(b)
+		n, err = c.writeStream(b)
 	case ConnTypeUDPServer:
 	case ConnTypeUDPClientFromDial:
-		nread, err = c.writeUDPClientFromDial(b)
+		n, err = c.writeUDPClientFromDial(b)
 	case ConnTypeUDPClientFromRead:
-		nread, err = c.writeUDPClientFromRead(b)
+		n, err = c.writeUDPClientFromRead(b)
 	default:
 	}
-	return nread, err
+	if c.p.g.onWrittenSize != nil && n > 0 {
+		c.p.g.onWrittenSize(c, b[:n], n)
+	}
+	return n, err
 }
 
 func (c *Conn) overflow(n int) bool {

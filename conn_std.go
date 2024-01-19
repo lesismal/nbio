@@ -168,19 +168,22 @@ func (c *Conn) readUDP(b []byte) (int, error) {
 
 // Write wraps net.Conn.Write.
 func (c *Conn) Write(b []byte) (int, error) {
+	var n int
 	var err error
-	var nwrite int
 	switch c.typ {
 	case ConnTypeTCP:
-		nwrite, err = c.writeTCP(b)
+		n, err = c.writeTCP(b)
 	case ConnTypeUDPServer:
 	case ConnTypeUDPClientFromDial:
-		nwrite, err = c.writeUDPClientFromDial(b)
+		n, err = c.writeUDPClientFromDial(b)
 	case ConnTypeUDPClientFromRead:
-		nwrite, err = c.writeUDPClientFromRead(b)
+		n, err = c.writeUDPClientFromRead(b)
 	default:
 	}
-	return nwrite, err
+	if c.p.g.onWrittenSize != nil && n > 0 {
+		c.p.g.onWrittenSize(c, b[:n], n)
+	}
+	return n, err
 }
 
 func (c *Conn) writeTCP(b []byte) (int, error) {
@@ -230,6 +233,18 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 			}
 			c.Close()
 		}
+		if c.p.g.onWrittenSize != nil && nwrite > 0 {
+			total := nwrite
+			for i := 0; total > 0; i++ {
+				if total <= len(in[i]) {
+					c.p.g.onWrittenSize(c, in[i][:total], total)
+					total = 0
+				} else {
+					c.p.g.onWrittenSize(c, in[i], len(in[i]))
+					total -= len(in[i])
+				}
+			}
+		}
 		return int(nwrite), err
 	}
 
@@ -238,6 +253,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		nwrite, err := c.Write(b)
 		if nwrite > 0 {
 			total += nwrite
+		}
+		if c.p.g.onWrittenSize != nil && nwrite > 0 {
+			c.p.g.onWrittenSize(c, b[:nwrite], nwrite)
 		}
 		if err != nil {
 			if c.closeErr == nil {
