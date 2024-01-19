@@ -234,7 +234,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 			c.Close()
 		}
 		if c.p.g.onWrittenSize != nil && nwrite > 0 {
-			total := nwrite
+			total := int(nwrite)
 			for i := 0; total > 0; i++ {
 				if total <= len(in[i]) {
 					c.p.g.onWrittenSize(c, in[i][:total], total)

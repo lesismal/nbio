@@ -255,7 +255,7 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 }
 
 // OnWrittenSize registers callback for written size.
-// If len(b) is bigger than 0, it represents that it's writting a buffer,
+// If len(b) is bigger than 0, it represents that it's writing a buffer,
 // else it's operating by Sendfile.
 func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
 	if h == nil {
