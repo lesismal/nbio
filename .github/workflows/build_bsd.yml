@@ -36,6 +36,6 @@ jobs:
           go get -u github.com/lesismal/nbio/...
           ulimit -n 30000
           go env
-          echo "::set-output name=short_sha::$(git rev-parse --short HEAD)"
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: go test
         run: go test -covermode=atomic -timeout 60s -coverprofile="./coverage"
