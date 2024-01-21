@@ -16,9 +16,10 @@ import (
 var addr = "127.0.0.1:8888"
 var testfile = "test_tmp.file"
 var gopher *Engine
+var testFileSize = 1024 * 200
 
 func init() {
-	if err := os.WriteFile(testfile, make([]byte, 1024*100), 0600); err != nil {
+	if err := os.WriteFile(testfile, make([]byte, testFileSize), 0600); err != nil {
 		log.Panicf("write file failed: %v", err)
 	}
 
@@ -28,11 +29,26 @@ func init() {
 		Addrs:   addrs,
 	})
 
+	type writtenSizeSession struct {
+		sumRecv int
+		sumSend int
+		isFile  bool
+	}
 	g.OnOpen(func(c *Conn) {
 		c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	})
 	g.OnData(func(c *Conn, data []byte) {
+		var wsess *writtenSizeSession
+		if session := c.Session(); session == nil {
+			wsess = &writtenSizeSession{sumRecv: len(data)}
+			c.SetSession(wsess)
+		} else {
+			wsess = session.(*writtenSizeSession)
+		}
+		wsess.sumRecv += len(data)
+
 		if len(data) == 8 && string(data) == "sendfile" {
+			wsess.isFile = true
 			fd, err := os.Open(testfile)
 			if err != nil {
 				log.Panicf("open file failed: %v", err)
@@ -49,7 +65,31 @@ func init() {
 			c.Write(append([]byte{}, data...))
 		}
 	})
-	g.OnClose(func(c *Conn, err error) {})
+
+	g.OnWrittenSize(func(c *Conn, b []byte, n int) {
+		if session := c.Session(); session == nil {
+			panic("invalid session nil")
+		} else {
+			wsess := session.(*writtenSizeSession)
+			wsess.sumSend += n
+		}
+	})
+	g.OnClose(func(c *Conn, err error) {
+		session := c.Session()
+		if session == nil {
+			panic("invalid session nil")
+		}
+		wsess := session.(*writtenSizeSession)
+		if wsess.isFile {
+			if wsess.sumSend != testFileSize {
+				panic("invalid send size for sendfile")
+			}
+		} else {
+			if wsess.sumSend != wsess.sumRecv {
+				panic("invalid send size: not equal to recv size")
+			}
+		}
+	})
 
 	err := g.Start()
 	if err != nil {
@@ -133,14 +173,15 @@ func TestSendfile(t *testing.T) {
 		panic(err)
 	}
 
-	buf := make([]byte, 1024*100)
+	buf := make([]byte, testFileSize)
 
 	for i := 0; i < 3; i++ {
 		if _, err := conn.Write([]byte("sendfile")); err != nil {
 			log.Panicf("write 'sendfile' failed: %v", err)
 		}
 
-		if _, err := io.ReadFull(conn, buf); err != nil {
+		_, err := io.ReadFull(conn, buf)
+		if err != nil {
 			log.Panicf("read file failed: %v", err)
 		}
 	}

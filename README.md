@@ -151,11 +151,11 @@ func main() {
 
 ### Different IOMod
 
-| IOMod            |                                                                                                                  Remarks                                                                                                                   |
-| ---------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
-| IOModNonBlocking |                                                         There's no difference between this IOMod and the old version with no IOMod. All the connections will be handled by poller.                                                         |
-| IOModBlocking    | All the connections will be handled by at least one goroutine, for websocket, we can set Upgrader.BlockingModAsyncWrite=true to handle writting with a separated goroutine and then avoid Head-of-line blocking on broadcasting scenarios. |
-| IOModMixed       |                   We set the Engine.MaxBlockingOnline, if the online num is smaller than it, the new connection will be handled by single goroutine as IOModBlocking, else the new connection will be handled by poller.                   |
+| IOMod            |                                                                                                                  Remarks                                                                                                                  |
+| ---------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: |
+| IOModNonBlocking |                                                        There's no difference between this IOMod and the old version with no IOMod. All the connections will be handled by poller.                                                         |
+| IOModBlocking    | All the connections will be handled by at least one goroutine, for websocket, we can set Upgrader.BlockingModAsyncWrite=true to handle writing with a separated goroutine and then avoid Head-of-line blocking on broadcasting scenarios. |
+| IOModMixed       |                  We set the Engine.MaxBlockingOnline, if the online num is smaller than it, the new connection will be handled by single goroutine as IOModBlocking, else the new connection will be handled by poller.                   |
 
 The `IOModBlocking` aims to improve the performance for low online service, it runs faster than std. 
 The `IOModMixed` aims to keep a balance between performance and cpu/mem cost in different scenarios: when there are not too many online connections, it performs better than std, or else it can serve lots of online connections and keep healthy.

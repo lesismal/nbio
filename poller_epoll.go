@@ -140,8 +140,8 @@ func (p *poller) acceptorLoop() {
 			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
 		} else {
 			var ne net.Error
-			if ok := errors.As(err, &ne); ok && ne.Temporary() {
-				logging.Error("NBIO[%v][%v_%v] Accept failed: temporary error, retrying...", p.g.Name, p.pollType, p.index)
+			if ok := errors.As(err, &ne); ok && ne.Timeout() {
+				logging.Error("NBIO[%v][%v_%v] Accept failed: timeout error, retrying...", p.g.Name, p.pollType, p.index)
 				time.Sleep(time.Second / 20)
 			} else {
 				if !p.shutdown {
@@ -261,7 +261,10 @@ func (p *poller) resetRead(fd int) error {
 func (p *poller) setRead(fd int, op int) error {
 	switch p.g.epollMod {
 	case EPOLLET:
-		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | EPOLLET | p.g.epollOneshot})
+		if op == syscall.EPOLL_CTL_MOD {
+			return nil
+		}
+		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET | p.g.epollOneshot})
 	default:
 		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN})
 	}
@@ -274,7 +277,8 @@ func (p *poller) setRead(fd int, op int) error {
 func (p *poller) modWrite(fd int) error {
 	switch p.g.epollMod {
 	case EPOLLET:
-		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET | p.g.epollOneshot})
+		return nil
+		// return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET | p.g.epollOneshot})
 	default:
 		return syscall.EpollCtl(p.epfd, syscall.EPOLL_CTL_MOD, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT})
 	}
@@ -349,7 +353,7 @@ func (c *Conn) ResetPollerEvent() {
 	g := p.g
 	fd := c.fd
 	if !c.closed && g.epollMod == EPOLLET && g.epollOneshot == EPOLLONESHOT {
-		if len(c.writeBuffer) == 0 {
+		if len(c.writeList) == 0 {
 			p.resetRead(fd)
 		} else {
 			p.modWrite(fd)
