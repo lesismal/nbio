@@ -173,7 +173,7 @@ func TestSendfile(t *testing.T) {
 		panic(err)
 	}
 
-	buf := make([]byte, 1024*100)
+	buf := make([]byte, testFileSize)
 
 	for i := 0; i < 3; i++ {
 		if _, err := conn.Write([]byte("sendfile")); err != nil {
