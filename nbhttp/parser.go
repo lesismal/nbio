@@ -27,30 +27,8 @@ const (
 	MaxInt = int64(int(MaxUint >> 1))
 )
 
-// Parser .
-type Parser struct {
-	mux sync.Mutex
-
-	cache []byte
-
-	readLimit int
-
-	errClose error
-
-	onClose func(p *Parser, err error)
-
+type parserCommon struct {
 	Processor Processor
-
-	Reader interface {
-		Read(p *Parser, data []byte) error
-		CloseAndClean(err error)
-	}
-
-	Engine *Engine
-
-	Conn net.Conn
-
-	Execute func(f func()) bool
 
 	// http fields
 	proto         string
@@ -67,6 +45,29 @@ type Parser struct {
 	chunked      bool
 	isClient     bool
 	headerExists bool
+}
+
+// Parser .
+type Parser struct {
+	*parserCommon
+	mux sync.Mutex
+
+	cache []byte
+
+	errClose error
+
+	onClose func(p *Parser, err error)
+
+	Reader interface {
+		Read(p *Parser, data []byte) error
+		CloseAndClean(err error)
+	}
+
+	Engine *Engine
+
+	Conn net.Conn
+
+	Execute func(f func()) bool
 }
 
 func (p *Parser) nextState(state int8) {
@@ -123,6 +124,13 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 	return int(chunkSize), nil
 }
 
+func (p *Parser) releaseHttpFields() {
+	if p.Processor != nil {
+		p.Processor.Clean(p)
+	}
+	p.parserCommon = nil
+}
+
 // Read .
 func (p *Parser) Read(data []byte) error {
 	p.mux.Lock()
@@ -139,7 +147,7 @@ func (p *Parser) Read(data []byte) error {
 	var start = 0
 	var offset = len(p.cache)
 	if offset > 0 {
-		if offset+len(data) > p.readLimit {
+		if p.Engine.ReadLimit > 0 && offset+len(data) > p.Engine.ReadLimit {
 			return ErrTooLong
 		}
 		p.cache = mempool.Append(p.cache, data...)
@@ -163,6 +171,7 @@ UPGRADER:
 	var c byte
 	for i := offset; i < len(data); i++ {
 		if p.Reader != nil {
+			p.releaseHttpFields()
 			goto UPGRADER
 		}
 		c = data[i]
@@ -792,11 +801,12 @@ func NewParser(processor Processor, isClient bool, readLimit int, executor func(
 		}
 	}
 	p := &Parser{
-		state:     state,
-		readLimit: readLimit,
-		isClient:  isClient,
-		Execute:   executor,
-		Processor: processor,
+		parserCommon: &parserCommon{
+			state:     state,
+			isClient:  isClient,
+			Processor: processor,
+		},
+		Execute: executor,
 	}
 	return p
 }

@@ -98,7 +98,13 @@ type Processor interface {
 	OnTrailerHeader(key, value string)
 	OnComplete(parser *Parser)
 	Close(p *Parser, err error)
+	Clean(parser *Parser)
 }
+
+var (
+	emptyServerProcessor = ServerProcessor{}
+	emptyClientProcessor = ClientProcessor{}
+)
 
 // ServerProcessor .
 type ServerProcessor struct {
@@ -295,12 +301,18 @@ func (p *ServerProcessor) flushResponse(res *Response) {
 	}
 }
 
-// Close .
-func (p *ServerProcessor) Close(parser *Parser, err error) {
+// Clean .
+func (p *ServerProcessor) Clean(parser *Parser) {
 	if p.request != nil {
 		releaseRequest(p.request, parser.Engine.RetainHTTPBody)
 		p.request = nil
 	}
+	*p = emptyServerProcessor
+}
+
+// Close .
+func (p *ServerProcessor) Close(parser *Parser, err error) {
+	p.Clean(parser)
 }
 
 // NewServerProcessor .
@@ -432,12 +444,17 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 	}
 }
 
-// Close .
-func (p *ClientProcessor) Close(parser *Parser, err error) {
+func (p *ClientProcessor) Clean(parser *Parser) {
 	if p.response != nil {
 		releaseClientResponse(p.response)
 	}
+	*p = emptyClientProcessor
+}
+
+// Close .
+func (p *ClientProcessor) Close(parser *Parser, err error) {
 	p.conn.CloseWithError(err)
+	p.Clean(parser)
 }
 
 // NewClientProcessor .
@@ -498,6 +515,11 @@ func (p *EmptyProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *EmptyProcessor) OnComplete(parser *Parser) {
+
+}
+
+// Clean .
+func (p *EmptyProcessor) Clean(parser *Parser) {
 
 }
 
