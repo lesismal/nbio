@@ -5,8 +5,7 @@
 package mempool
 
 import (
-	"log"
-	"runtime/debug"
+	"encoding/json"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -18,7 +17,8 @@ type Allocator interface {
 	Append(buf []byte, more ...byte) []byte
 	AppendString(buf []byte, more string) []byte
 	Free(buf []byte)
-	Log()
+	String() string
+	SetDebug(bool)
 }
 
 // DefaultMemPool .
@@ -26,30 +26,75 @@ var DefaultMemPool = New(1024, 1024*1024*1024)
 var DefaultAlignedMemPool = NewAligned()
 
 type debugger struct {
-	cntMalloc uint64
-	cntFree   uint64
+	mux         sync.Mutex
+	on          bool
+	MallocCount int64
+	FreeCount   int64
+	NeedFree    int64
+	SizeMap     map[int]*struct {
+		MallocCount int64
+		FreeCount   int64
+		NeedFree    int64
+	}
 }
 
-func (d *debugger) incrMalloc() {
-	atomic.AddUint64(&d.cntMalloc, 1)
+func (d *debugger) SetDebug(dbg bool) {
+	d.on = dbg
 }
 
-func (d *debugger) incrFree() {
-	atomic.AddUint64(&d.cntFree, 1)
+func (d *debugger) incrMalloc(b []byte) {
+	if d.on {
+		atomic.AddInt64(&d.MallocCount, 1)
+		atomic.AddInt64(&d.NeedFree, 1)
+		size := cap(b)
+		d.mux.Lock()
+		defer d.mux.Unlock()
+		if v, ok := d.SizeMap[size]; ok {
+			v.MallocCount++
+			v.NeedFree++
+		} else {
+			d.SizeMap[size] = &struct {
+				MallocCount int64
+				FreeCount   int64
+				NeedFree    int64
+			}{
+				MallocCount: 1,
+				NeedFree:    1,
+			}
+		}
+	}
 }
 
-func (d *debugger) Log() {
-	cntMalloc := atomic.LoadUint64(&d.cntMalloc)
-	cntFree := atomic.LoadUint64(&d.cntFree)
-	log.Printf(`
-------------------------------
-malloc times: %d
-free times  : %d
-need free   : %d
-------------------------------`,
-		cntMalloc,
-		cntFree,
-		cntMalloc-cntFree)
+func (d *debugger) incrFree(b []byte) {
+	if d.on {
+		atomic.AddInt64(&d.FreeCount, 1)
+		atomic.AddInt64(&d.NeedFree, -1)
+		size := cap(b)
+		d.mux.Lock()
+		defer d.mux.Unlock()
+		if v, ok := d.SizeMap[size]; ok {
+			v.FreeCount++
+			v.NeedFree--
+		} else {
+			d.SizeMap[size] = &struct {
+				MallocCount int64
+				FreeCount   int64
+				NeedFree    int64
+			}{
+				MallocCount: 1,
+				NeedFree:    -1,
+			}
+		}
+	}
+}
+
+func (d *debugger) String() string {
+	var ret string
+	if d.on {
+		b, _ := json.Marshal(d)
+		ret = string(b)
+	}
+	return ret
 }
 
 // MemPool .
@@ -95,16 +140,20 @@ func New(bufSize, freeSize int) Allocator {
 
 // Malloc .
 func (mp *MemPool) Malloc(size int) []byte {
-	mp.incrMalloc()
+	var ret []byte
 	if size > mp.freeSize {
-		return make([]byte, size)
+		ret = make([]byte, size)
+		mp.incrMalloc(ret)
+		return ret
 	}
 	pbuf := mp.pool.Get().(*[]byte)
 	n := cap(*pbuf)
 	if n < size {
 		*pbuf = append((*pbuf)[:n], make([]byte, size-n)...)
 	}
-	return (*pbuf)[:size]
+	ret = (*pbuf)[:size]
+	mp.incrMalloc(ret)
+	return ret
 }
 
 // Realloc .
@@ -139,8 +188,7 @@ func (mp *MemPool) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (mp *MemPool) Free(buf []byte) {
-	debug.PrintStack()
-	mp.incrFree()
+	mp.incrFree(buf)
 	if cap(buf) > mp.freeSize {
 		return
 	}
@@ -197,15 +245,19 @@ func NewAligned() Allocator {
 
 // Malloc .
 func (amp *AlignedMemPool) Malloc(size int) []byte {
-	amp.incrMalloc()
 	if size < 0 {
 		return nil
 	}
+	var ret []byte
 	pool := amp.pool(size)
 	if pool != nil {
-		return pool.Get().([]byte)[:size]
+		ret = pool.Get().([]byte)[:size]
+		amp.incrMalloc(ret)
+		return ret
 	}
-	return make([]byte, size)
+	ret = make([]byte, size)
+	amp.incrMalloc(ret)
+	return ret
 }
 
 // Realloc .
@@ -239,7 +291,7 @@ func (amp *AlignedMemPool) AppendString(buf []byte, s string) []byte {
 
 // Free .
 func (amp *AlignedMemPool) Free(buf []byte) {
-	amp.incrFree()
+	amp.incrFree(buf)
 	size := cap(buf)
 	if size&alignedBlockSize != 0 {
 		return
@@ -270,8 +322,9 @@ type stdAllocator struct {
 
 // Malloc .
 func (a *stdAllocator) Malloc(size int) []byte {
-	a.incrMalloc()
-	return make([]byte, size)
+	ret := make([]byte, size)
+	a.incrMalloc(ret)
+	return ret
 }
 
 // Realloc .
@@ -286,7 +339,7 @@ func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 
 // Free .
 func (a *stdAllocator) Free(buf []byte) {
-	a.incrFree()
+	a.incrFree(buf)
 }
 
 func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
