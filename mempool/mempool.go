@@ -53,6 +53,13 @@ func (d *debugger) incrMalloc(b []byte) {
 		size := cap(b)
 		d.mux.Lock()
 		defer d.mux.Unlock()
+		if d.SizeMap == nil {
+			d.SizeMap = map[int]*struct {
+				MallocCount int64
+				FreeCount   int64
+				NeedFree    int64
+			}{}
+		}
 		if v, ok := d.SizeMap[size]; ok {
 			v.MallocCount++
 			v.NeedFree++
