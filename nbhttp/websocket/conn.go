@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/logging"
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -311,10 +310,11 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 	}
 
 	var oldBuffer []byte
+	var allocator = c.Engine.BodyAllocator
 	if oldLen == 0 {
 		c.buffer = data
 	} else {
-		c.buffer = mempool.Append(c.buffer, data...)
+		c.buffer = allocator.Append(c.buffer, data...)
 		oldBuffer = c.buffer
 	}
 
@@ -417,20 +417,20 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 	if oldLen == 0 {
 		if len(c.buffer) > 0 {
 			tmp := c.buffer
-			c.buffer = mempool.Malloc(len(tmp))
+			c.buffer = allocator.Malloc(len(tmp) + 1024)[:len(tmp)]
 			copy(c.buffer, tmp)
 		} else {
 			c.buffer = nil
 		}
 	} else {
 		if len(c.buffer) == 0 {
-			mempool.Free(oldBuffer)
+			allocator.Free(oldBuffer)
 			c.buffer = nil
 		} else if len(c.buffer) < len(oldBuffer) {
-			tmp := mempool.Malloc(len(c.buffer))
+			tmp := allocator.Malloc(len(c.buffer) + 1024)[:len(c.buffer)]
 			copy(tmp, c.buffer)
 			c.buffer = tmp
-			mempool.Free(oldBuffer)
+			allocator.Free(oldBuffer)
 		}
 	}
 
@@ -521,11 +521,9 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 
 	compress := c.enableWriteCompression && (messageType == TextMessage || messageType == BinaryMessage)
 	if compress {
-		// compress = true
-		// if user customize mempool, they should promise it's safe to mempool.Free a buffer which is not from their mempool.Malloc
-		// or we need to implement a writebuffer that use mempool.Realloc to grow or append the buffer
 		w := &writeBuffer{
-			Buffer: bytes.NewBuffer(mempool.Malloc(len(data))),
+			free:   c.Engine.BodyAllocator.Free,
+			Buffer: bytes.NewBuffer(c.Engine.BodyAllocator.Malloc(len(data))),
 		}
 		defer w.Close()
 		w.Reset()
@@ -610,11 +608,12 @@ func (c *Conn) SetSession(session interface{}) {
 
 type writeBuffer struct {
 	*bytes.Buffer
+	free func([]byte)
 }
 
 // Close .
 func (w *writeBuffer) Close() error {
-	mempool.Free(w.Bytes())
+	w.free(w.Bytes())
 	return nil
 }
 
@@ -634,7 +633,7 @@ func (c *Conn) CloseAndClean(err error) {
 	} else {
 		for i, b := range c.sendQueue {
 			if b != nil {
-				mempool.Free(b)
+				c.Engine.BodyAllocator.Free(b)
 				c.sendQueue[i] = nil
 			}
 		}
@@ -654,11 +653,11 @@ func (c *Conn) CloseAndClean(err error) {
 	}
 
 	if c.buffer != nil {
-		mempool.Free(c.buffer)
+		c.Engine.BodyAllocator.Free(c.buffer)
 		c.buffer = nil
 	}
 	if c.message != nil {
-		mempool.Free(c.message)
+		c.Engine.BodyAllocator.Free(c.message)
 		c.message = nil
 	}
 }
@@ -684,18 +683,18 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 
 	if bodyLen < 126 {
 		headLen = 2 + maskLen
-		buf = mempool.Malloc(len(data) + headLen)
+		buf = c.Engine.BodyAllocator.Malloc(len(data) + headLen)
 		buf[0] = 0
 		buf[1] = (byte1 | byte(bodyLen))
 	} else if bodyLen <= 65535 {
 		headLen = 4 + maskLen
-		buf = mempool.Malloc(len(data) + headLen)
+		buf = c.Engine.BodyAllocator.Malloc(len(data) + headLen)
 		buf[0] = 0
 		buf[1] = (byte1 | 126)
 		binary.BigEndian.PutUint16(buf[2:4], uint16(bodyLen))
 	} else {
 		headLen = 10 + maskLen
-		buf = mempool.Malloc(len(data) + headLen)
+		buf = c.Engine.BodyAllocator.Malloc(len(data) + headLen)
 		buf[0] = 0
 		buf[1] = (byte1 | 127)
 		binary.BigEndian.PutUint64(buf[2:10], uint64(bodyLen))
@@ -729,14 +728,14 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()
-		mempool.Free(buf)
+		c.Engine.BodyAllocator.Free(buf)
 		return net.ErrClosed
 	}
 
 	if c.sendQueue != nil {
 		if c.sendQueueSize > 0 && len(c.sendQueue) >= c.sendQueueSize {
 			c.mux.Unlock()
-			mempool.Free(buf)
+			c.Engine.BodyAllocator.Free(buf)
 			return ErrMessageSendQuqueIsFull
 		}
 		c.sendQueue = append(c.sendQueue, buf)
@@ -751,7 +750,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 				i := 0
 				for {
 					_, err := c.Conn.Write(buf)
-					mempool.Free(buf)
+					c.Engine.BodyAllocator.Free(buf)
 					if err != nil {
 						c.CloseWithError(err)
 						return
@@ -785,7 +784,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	c.mux.Unlock()
 
 	_, err := c.Conn.Write(buf)
-	mempool.Free(buf)
+	c.Engine.BodyAllocator.Free(buf)
 
 	return err
 }

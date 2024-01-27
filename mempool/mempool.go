@@ -6,6 +6,7 @@ package mempool
 
 import (
 	"sync"
+	"unsafe"
 )
 
 type Allocator interface {
@@ -17,8 +18,8 @@ type Allocator interface {
 }
 
 type AlignedAllocator interface {
-	MallocAligned(size int) []byte
-	FreeAligned(buf []byte)
+	Malloc(size int) []byte
+	Free(buf []byte)
 }
 
 // DefaultMemPool .
@@ -160,8 +161,8 @@ func NewAligned() *AlignedMemPool {
 	return &AlignedMemPool{}
 }
 
-// MallocAligned .
-func (amp *AlignedMemPool) MallocAligned(size int) []byte {
+// Malloc .
+func (amp *AlignedMemPool) Malloc(size int) []byte {
 	if size < 0 {
 		return nil
 	}
@@ -172,8 +173,37 @@ func (amp *AlignedMemPool) MallocAligned(size int) []byte {
 	return make([]byte, size)
 }
 
-// FreeAligned .
-func (amp *AlignedMemPool) FreeAligned(buf []byte) {
+// Realloc .
+func (amp *AlignedMemPool) Realloc(buf []byte, size int) []byte {
+	if size <= cap(buf) {
+		return buf[:size]
+	}
+	newBuf := amp.Malloc(size)
+	copy(newBuf, buf)
+	return newBuf
+}
+
+// Append .
+func (amp *AlignedMemPool) Append(buf []byte, more ...byte) []byte {
+	if cap(buf)-len(buf) >= len(more) {
+		return append(buf, more...)
+	}
+	newBuf := amp.Malloc(len(buf) + len(more))
+	copy(newBuf, buf)
+	copy(newBuf[len(buf):], more)
+	return newBuf
+}
+
+// AppendString .
+func (amp *AlignedMemPool) AppendString(buf []byte, s string) []byte {
+	x := (*[2]uintptr)(unsafe.Pointer(&s))
+	h := [3]uintptr{x[0], x[1], x[1]}
+	more := *(*[]byte)(unsafe.Pointer(&h))
+	return amp.Append(buf, more...)
+}
+
+// Free .
+func (amp *AlignedMemPool) Free(buf []byte) {
 	size := cap(buf)
 	if size&alignedBlockSize != 0 {
 		return
@@ -205,11 +235,6 @@ func (a *stdAllocator) Malloc(size int) []byte {
 	return make([]byte, size)
 }
 
-// MallocAligned .
-func (a *stdAllocator) MallocAligned(size int) []byte {
-	return make([]byte, size)
-}
-
 // Realloc .
 func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
@@ -224,10 +249,6 @@ func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 func (a *stdAllocator) Free(buf []byte) {
 }
 
-// FreeAligned .
-func (a *stdAllocator) FreeAligned(buf []byte) {
-}
-
 func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
 	return append(buf, more...)
 }
@@ -238,11 +259,6 @@ func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
 
 func NewSTD() Allocator {
 	return &stdAllocator{}
-}
-
-// Malloc exports default package method.
-func Malloc(size int) []byte {
-	return DefaultMemPool.Malloc(size)
 }
 
 // Realloc exports default package method.
@@ -265,12 +281,8 @@ func Free(buf []byte) {
 	DefaultMemPool.Free(buf)
 }
 
-func MallocAligned(size int) []byte {
-	return DefaultAlignedMemPool.MallocAligned(size)
-}
-
-func FreeAligned(buf []byte) {
-	DefaultAlignedMemPool.FreeAligned(buf)
+func Malloc(size int) []byte {
+	return DefaultAlignedMemPool.Malloc(size)
 }
 
 func Init(bufSize, freeSize int) {

@@ -19,7 +19,6 @@ import (
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/logging"
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -156,11 +155,11 @@ func NewUpgrader() *Upgrader {
 			c.WriteMessage(CloseMessage, nil)
 			return
 		}
-		buf := mempool.Malloc(len(text) + 2)
+		buf := u.Engine.BodyAllocator.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
 		c.WriteMessage(CloseMessage, buf)
-		mempool.Free(buf)
+		u.Engine.BodyAllocator.Free(buf)
 	}
 
 	return u
@@ -524,44 +523,45 @@ func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHea
 }
 
 func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, challengeKey, subprotocol string, compress bool) error {
-	buf := mempool.Malloc(1024)[0:0]
-	buf = mempool.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
-	buf = mempool.Append(buf, acceptKeyBytes(challengeKey)...)
-	buf = mempool.AppendString(buf, "\r\n")
+	allocator := u.Engine.BodyAllocator
+	buf := allocator.Malloc(1024)[0:0]
+	buf = allocator.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
+	buf = allocator.Append(buf, acceptKeyBytes(challengeKey)...)
+	buf = allocator.AppendString(buf, "\r\n")
 	if subprotocol != "" {
-		buf = mempool.AppendString(buf, "Sec-WebSocket-Protocol: ")
-		buf = mempool.AppendString(buf, subprotocol)
-		buf = mempool.AppendString(buf, "\r\n")
+		buf = allocator.AppendString(buf, "Sec-WebSocket-Protocol: ")
+		buf = allocator.AppendString(buf, subprotocol)
+		buf = allocator.AppendString(buf, "\r\n")
 	}
 	if compress {
-		buf = mempool.AppendString(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
+		buf = allocator.AppendString(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
 	}
 	for k, vs := range responseHeader {
 		if k == "Sec-Websocket-Protocol" {
 			continue
 		}
 		for _, v := range vs {
-			buf = mempool.AppendString(buf, k)
-			buf = mempool.AppendString(buf, ": ")
+			buf = allocator.AppendString(buf, k)
+			buf = allocator.AppendString(buf, ": ")
 			for i := 0; i < len(v); i++ {
 				b := v[i]
 				if b <= 31 {
 					// prevent response splitting.
 					b = ' '
 				}
-				buf = mempool.Append(buf, b)
+				buf = allocator.Append(buf, b)
 			}
-			buf = mempool.AppendString(buf, "\r\n")
+			buf = allocator.AppendString(buf, "\r\n")
 		}
 	}
-	buf = mempool.AppendString(buf, "\r\n")
+	buf = allocator.AppendString(buf, "\r\n")
 
 	if u.HandshakeTimeout > 0 {
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
 	_, err := conn.Write(buf)
-	mempool.Free(buf)
+	allocator.Free(buf)
 	if err != nil {
 		conn.Close()
 		return err
