@@ -324,7 +324,7 @@ func Free(buf []byte) {
 }
 
 func Malloc(size int) []byte {
-	return DefaultAlignedMemPool.Malloc(size)
+	return DefaultMemPool.Malloc(size)
 }
 
 func Init(bufSize, freeSize int) {
