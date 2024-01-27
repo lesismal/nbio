@@ -5,7 +5,9 @@
 package mempool
 
 import (
+	"log"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -15,11 +17,7 @@ type Allocator interface {
 	Append(buf []byte, more ...byte) []byte
 	AppendString(buf []byte, more string) []byte
 	Free(buf []byte)
-}
-
-type AlignedAllocator interface {
-	Malloc(size int) []byte
-	Free(buf []byte)
+	Log()
 }
 
 // DefaultMemPool .
@@ -117,6 +115,10 @@ func (mp *MemPool) Free(buf []byte) {
 	mp.pool.Put(&buf)
 }
 
+func (mp *MemPool) Log() {
+
+}
+
 const (
 	minAlignedBufferSizeBits = 8
 	maxAlignedBufferSizeBits = 16
@@ -154,7 +156,10 @@ func init() {
 }
 
 // AlignedMemPool .
-type AlignedMemPool struct{}
+type AlignedMemPool struct {
+	cntMalloc int64
+	cntFree   int64
+}
 
 // NewAligned initiates a []byte allocator for frames less than 65536 bytes,
 func NewAligned() *AlignedMemPool {
@@ -162,7 +167,22 @@ func NewAligned() *AlignedMemPool {
 }
 
 // Malloc .
+func (amp *AlignedMemPool) Log() {
+	cntMalloc := atomic.LoadInt64(&amp.cntMalloc)
+	cntFree := atomic.LoadInt64(&amp.cntFree)
+	log.Printf(`
+------------------------------
+Aligned Allocator
+malloc times: %08d
+free times  : %08d
+------------------------------\n`,
+		cntMalloc,
+		cntFree)
+}
+
+// Malloc .
 func (amp *AlignedMemPool) Malloc(size int) []byte {
+	atomic.AddInt64(&amp.cntMalloc, 1)
 	if size < 0 {
 		return nil
 	}
@@ -204,6 +224,7 @@ func (amp *AlignedMemPool) AppendString(buf []byte, s string) []byte {
 
 // Free .
 func (amp *AlignedMemPool) Free(buf []byte) {
+	atomic.AddInt64(&amp.cntFree, 1)
 	size := cap(buf)
 	if size&alignedBlockSize != 0 {
 		return
@@ -255,6 +276,10 @@ func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
 
 func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
 	return append(buf, more...)
+}
+
+func (a *stdAllocator) Log() {
+
 }
 
 func NewSTD() Allocator {
