@@ -16,8 +16,14 @@ type Allocator interface {
 	Free(buf []byte)
 }
 
+type AlignedAllocator interface {
+	MallocAligned(size int) []byte
+	FreeAligned(buf []byte)
+}
+
 // DefaultMemPool .
 var DefaultMemPool = New(1024, 1024*1024*1024)
+var DefaultAlignedMemPool = NewAligned(0, 0)
 
 // MemPool .
 type MemPool struct {
@@ -110,11 +116,92 @@ func (mp *MemPool) Free(buf []byte) {
 	mp.pool.Put(&buf)
 }
 
+var (
+	defaultAllocator *Allocator
+	debruijinPos     = [...]int{0, 9, 1, 10, 13, 21, 2, 29, 11, 14, 16, 18, 22, 25, 3, 30, 8, 12, 20, 28, 15, 17, 24, 7, 19, 27, 23, 6, 26, 5, 4, 31}
+)
+
+const (
+	DefaultMinAlignedBufferSizeBits = 8
+	DefaultMaxAlignedBufferSizeBits = 20
+)
+
+// AlignedMemPool .
+type AlignedMemPool struct {
+	minBits, maxBits, minSize, maxSize int
+	sizes                              []int
+	pools                              []sync.Pool
+}
+
+// NewAligned initiates a []byte allocator for frames less than 65536 bytes,
+func NewAligned(minBits, maxBits int) *AlignedMemPool {
+	if minBits <= 0 {
+		minBits = DefaultMinAlignedBufferSizeBits
+	}
+	if maxBits <= 0 {
+		maxBits = DefaultMaxAlignedBufferSizeBits
+	}
+	amp := &AlignedMemPool{
+		minBits: minBits,
+		maxBits: maxBits,
+		minSize: 1 << minBits,
+		maxSize: 1 << maxBits,
+	}
+	amp.sizes = make([]int, maxBits-minBits)
+	amp.pools = make([]sync.Pool, maxBits-minBits)
+	for i := range amp.pools {
+		bits := i + minBits
+		amp.sizes[i] = 1 << uint32(bits)
+		amp.pools[i].New = func() interface{} {
+			return make([]byte, 1<<uint32(bits))
+		}
+	}
+	return amp
+}
+
+// MallocAligned .
+func (amp *AlignedMemPool) MallocAligned(size int) []byte {
+	if size < amp.maxSize {
+		pool := amp.pool(size)
+		if pool != nil {
+			return pool.Get().([]byte)[:size]
+		}
+	}
+	return make([]byte, size)
+}
+
+// FreeAligned .
+func (amp *AlignedMemPool) FreeAligned(buf []byte) {
+	size := cap(buf)
+	if size < amp.minSize || size > amp.maxSize {
+		return
+	}
+	pool := amp.pool(size)
+	if pool != nil {
+		pool.Put(buf)
+	}
+}
+
+// index return the the pool index by the size.
+func (amp *AlignedMemPool) pool(size int) *sync.Pool {
+	for i, n := range amp.sizes {
+		if size <= n {
+			return &amp.pools[i]
+		}
+	}
+	return nil
+}
+
 // stdAllocator .
 type stdAllocator struct{}
 
 // Malloc .
 func (a *stdAllocator) Malloc(size int) []byte {
+	return make([]byte, size)
+}
+
+// MallocAligned .
+func (a *stdAllocator) MallocAligned(size int) []byte {
 	return make([]byte, size)
 }
 
@@ -130,6 +217,10 @@ func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 
 // Free .
 func (a *stdAllocator) Free(buf []byte) {
+}
+
+// FreeAligned .
+func (a *stdAllocator) FreeAligned(buf []byte) {
 }
 
 func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
@@ -167,6 +258,14 @@ func AppendString(buf []byte, more string) []byte {
 // Free exports default package method.
 func Free(buf []byte) {
 	DefaultMemPool.Free(buf)
+}
+
+func MallocAligned(size int) []byte {
+	return DefaultAlignedMemPool.MallocAligned(size)
+}
+
+func FreeAligned(buf []byte) {
+	DefaultAlignedMemPool.FreeAligned(buf)
 }
 
 func Init(bufSize, freeSize int) {
