@@ -42,11 +42,10 @@ func (d *debugger) Log() {
 	cntFree := atomic.LoadUint64(&d.cntFree)
 	log.Printf(`
 ------------------------------
-Aligned Allocator
 malloc times: %d
 free times  : %d
 need free   : %d
-------------------------------\n`,
+------------------------------`,
 		cntMalloc,
 		cntFree,
 		cntMalloc-cntFree)
