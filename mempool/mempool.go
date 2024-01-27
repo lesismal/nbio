@@ -45,9 +45,11 @@ func (d *debugger) Log() {
 Aligned Allocator
 malloc times: %d
 free times  : %d
+need free   : %d
 ------------------------------\n`,
 		cntMalloc,
-		cntFree)
+		cntFree,
+		cntMalloc-cntFree)
 }
 
 // MemPool .
@@ -88,7 +90,6 @@ func New(bufSize, freeSize int) Allocator {
 		buf := make([]byte, bufSize)
 		return &buf
 	}
-
 	return mp
 }
 
@@ -187,8 +188,10 @@ type AlignedMemPool struct {
 }
 
 // NewAligned initiates a []byte allocator for frames less than 65536 bytes,
-func NewAligned() *AlignedMemPool {
-	return &AlignedMemPool{}
+func NewAligned() Allocator {
+	return &AlignedMemPool{
+		debugger: &debugger{},
+	}
 }
 
 // Malloc .
@@ -294,7 +297,9 @@ func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
 }
 
 func NewSTD() Allocator {
-	return &stdAllocator{}
+	return &stdAllocator{
+		debugger: &debugger{},
+	}
 }
 
 // Realloc exports default package method.
