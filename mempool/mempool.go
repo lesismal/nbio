@@ -24,8 +24,35 @@ type Allocator interface {
 var DefaultMemPool = New(1024, 1024*1024*1024)
 var DefaultAlignedMemPool = NewAligned()
 
+type debugger struct {
+	cntMalloc uint64
+	cntFree   uint64
+}
+
+func (d *debugger) incrMalloc() {
+	atomic.AddUint64(&d.cntMalloc, 1)
+}
+
+func (d *debugger) incrFree() {
+	atomic.AddUint64(&d.cntFree, 1)
+}
+
+func (d *debugger) Log() {
+	cntMalloc := atomic.LoadUint64(&d.cntMalloc)
+	cntFree := atomic.LoadUint64(&d.cntFree)
+	log.Printf(`
+------------------------------
+Aligned Allocator
+malloc times: %d
+free times  : %d
+------------------------------\n`,
+		cntMalloc,
+		cntFree)
+}
+
 // MemPool .
 type MemPool struct {
+	*debugger
 	// Debug bool
 	// mux   sync.Mutex
 
@@ -51,6 +78,7 @@ func New(bufSize, freeSize int) Allocator {
 	}
 
 	mp := &MemPool{
+		debugger: &debugger{},
 		bufSize:  bufSize,
 		freeSize: freeSize,
 		pool:     &sync.Pool{},
@@ -66,6 +94,7 @@ func New(bufSize, freeSize int) Allocator {
 
 // Malloc .
 func (mp *MemPool) Malloc(size int) []byte {
+	mp.incrMalloc()
 	if size > mp.freeSize {
 		return make([]byte, size)
 	}
@@ -109,14 +138,11 @@ func (mp *MemPool) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (mp *MemPool) Free(buf []byte) {
+	mp.incrFree()
 	if cap(buf) > mp.freeSize {
 		return
 	}
 	mp.pool.Put(&buf)
-}
-
-func (mp *MemPool) Log() {
-
 }
 
 const (
@@ -157,8 +183,7 @@ func init() {
 
 // AlignedMemPool .
 type AlignedMemPool struct {
-	cntMalloc int64
-	cntFree   int64
+	*debugger
 }
 
 // NewAligned initiates a []byte allocator for frames less than 65536 bytes,
@@ -167,22 +192,8 @@ func NewAligned() *AlignedMemPool {
 }
 
 // Malloc .
-func (amp *AlignedMemPool) Log() {
-	cntMalloc := atomic.LoadInt64(&amp.cntMalloc)
-	cntFree := atomic.LoadInt64(&amp.cntFree)
-	log.Printf(`
-------------------------------
-Aligned Allocator
-malloc times: %08d
-free times  : %08d
-------------------------------\n`,
-		cntMalloc,
-		cntFree)
-}
-
-// Malloc .
 func (amp *AlignedMemPool) Malloc(size int) []byte {
-	atomic.AddInt64(&amp.cntMalloc, 1)
+	amp.incrMalloc()
 	if size < 0 {
 		return nil
 	}
@@ -224,7 +235,7 @@ func (amp *AlignedMemPool) AppendString(buf []byte, s string) []byte {
 
 // Free .
 func (amp *AlignedMemPool) Free(buf []byte) {
-	atomic.AddInt64(&amp.cntFree, 1)
+	amp.incrFree()
 	size := cap(buf)
 	if size&alignedBlockSize != 0 {
 		return
@@ -249,10 +260,13 @@ func (amp *AlignedMemPool) pool(size int) *sync.Pool {
 }
 
 // stdAllocator .
-type stdAllocator struct{}
+type stdAllocator struct {
+	*debugger
+}
 
 // Malloc .
 func (a *stdAllocator) Malloc(size int) []byte {
+	a.incrMalloc()
 	return make([]byte, size)
 }
 
@@ -268,6 +282,7 @@ func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 
 // Free .
 func (a *stdAllocator) Free(buf []byte) {
+	a.incrFree()
 }
 
 func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
@@ -276,10 +291,6 @@ func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
 
 func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
 	return append(buf, more...)
-}
-
-func (a *stdAllocator) Log() {
-
 }
 
 func NewSTD() Allocator {
