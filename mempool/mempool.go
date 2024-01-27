@@ -214,8 +214,8 @@ func (mp *MemPool) Free(buf []byte) {
 }
 
 const (
-	minAlignedBufferSizeBits = 8
-	maxAlignedBufferSizeBits = 16
+	minAlignedBufferSizeBits = 5
+	maxAlignedBufferSizeBits = 13
 	alignedBlockSize         = 1 << minAlignedBufferSizeBits
 )
 
