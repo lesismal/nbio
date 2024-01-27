@@ -17,6 +17,10 @@ type Allocator interface {
 	Append(buf []byte, more ...byte) []byte
 	AppendString(buf []byte, more string) []byte
 	Free(buf []byte)
+}
+
+type DebugAllocator interface {
+	Allocator
 	String() string
 	SetDebug(bool)
 }
