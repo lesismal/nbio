@@ -6,6 +6,7 @@ package mempool
 
 import (
 	"log"
+	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -138,6 +139,7 @@ func (mp *MemPool) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (mp *MemPool) Free(buf []byte) {
+	debug.PrintStack()
 	mp.incrFree()
 	if cap(buf) > mp.freeSize {
 		return
