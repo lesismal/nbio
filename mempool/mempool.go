@@ -315,9 +315,7 @@ func (amp *AlignedMemPool) Free(buf []byte) {
 	}
 	amp.incrFree(buf)
 	idx := alignedPoolIndex[size]
-	if idx >= 0 {
-		alignedPools[idx].Put(buf)
-	}
+	alignedPools[idx].Put(buf)
 }
 
 // stdAllocator .
