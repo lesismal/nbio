@@ -886,7 +886,7 @@ func NewEngine(conf Config) *Engine {
 		conf.TLSAllocator = mempool.DefaultMemPool
 	}
 	if conf.BodyAllocator == nil {
-		conf.BodyAllocator = mempool.DefaultAlignedMemPool
+		conf.BodyAllocator = mempool.DefaultMemPool
 	}
 	if conf.BlockingReadBufferSize <= 0 {
 		conf.BlockingReadBufferSize = DefaultBlockingReadBufferSize

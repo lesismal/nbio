@@ -27,7 +27,8 @@ type DebugAllocator interface {
 
 // DefaultMemPool .
 var DefaultMemPool = New(1024, 1024*1024*1024)
-var DefaultAlignedMemPool = NewAligned()
+
+// var DefaultAlignedMemPool = NewAligned()
 
 type debugger struct {
 	mux         sync.Mutex
@@ -216,22 +217,33 @@ func (mp *MemPool) Free(buf []byte) {
 const (
 	minAlignedBufferSizeBits = 5
 	maxAlignedBufferSizeBits = 16
-	alignedPoolNum           = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1
 	minAlignedBufferSize     = 1 << minAlignedBufferSizeBits
 	maxAlignedBufferSize     = 1 << maxAlignedBufferSizeBits
+	alignedPoolBucketNum     = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1
 )
 
-var alignedPools [alignedPoolNum]sync.Pool // 32-64k
-var alignedPoolIndex [65537]byte
+// NewAligned .
+func NewAligned() Allocator {
+	amp := &AlignedMemPool{
+		debugger: &debugger{},
+	}
+	amp.init()
+	return amp
+}
 
-// var alignedSizeMap [256]int
+// AlignedMemPool .
+type AlignedMemPool struct {
+	*debugger
+	pools   [alignedPoolBucketNum]sync.Pool // 32-64k
+	indexes [65537]byte
+}
 
-func init() {
-	var poolSizes [alignedPoolNum]int
-	for i := range alignedPools {
+func (amp *AlignedMemPool) init() {
+	var poolSizes [alignedPoolBucketNum]int
+	for i := range amp.pools {
 		size := 1 << (i + minAlignedBufferSizeBits)
 		poolSizes[i] = size
-		alignedPools[i].New = func() interface{} {
+		amp.pools[i].New = func() interface{} {
 			b := make([]byte, size)
 			return &b
 		}
@@ -246,20 +258,8 @@ func init() {
 		return 0xFF
 	}
 
-	for i := range alignedPoolIndex {
-		alignedPoolIndex[i] = getPoolBySize(i)
-	}
-}
-
-// AlignedMemPool .
-type AlignedMemPool struct {
-	*debugger
-}
-
-// NewAligned initiates a []byte allocator for frames less than 65536 bytes,
-func NewAligned() Allocator {
-	return &AlignedMemPool{
-		debugger: &debugger{},
+	for i := range amp.indexes {
+		amp.indexes[i] = getPoolBySize(i)
 	}
 }
 
@@ -270,8 +270,8 @@ func (amp *AlignedMemPool) Malloc(size int) []byte {
 	}
 	var ret []byte
 	if size <= maxAlignedBufferSize {
-		idx := alignedPoolIndex[size]
-		ret = (*(alignedPools[idx].Get().(*[]byte)))[:size]
+		idx := amp.indexes[size]
+		ret = (*(amp.pools[idx].Get().(*[]byte)))[:size]
 	} else {
 		ret = make([]byte, size)
 	}
@@ -315,8 +315,8 @@ func (amp *AlignedMemPool) Free(buf []byte) {
 		return
 	}
 	amp.incrFree(buf)
-	idx := alignedPoolIndex[size]
-	alignedPools[idx].Put(&buf)
+	idx := amp.indexes[size]
+	amp.pools[idx].Put(&buf)
 }
 
 // stdAllocator .
