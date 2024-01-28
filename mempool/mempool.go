@@ -216,7 +216,8 @@ func (mp *MemPool) Free(buf []byte) {
 const (
 	minAlignedBufferSizeBits = 5
 	maxAlignedBufferSizeBits = 13
-	alignedBlockSize         = 1 << minAlignedBufferSizeBits
+	minAlignedBufferSize     = 1 << minAlignedBufferSizeBits
+	maxAlignedBufferSize     = 1 << maxAlignedBufferSizeBits
 )
 
 var alignedPool [8]sync.Pool
@@ -243,7 +244,7 @@ func init() {
 	}
 
 	for i := range alignedSizePoolMap {
-		size := i * alignedBlockSize
+		size := i * minAlignedBufferSize
 		alignedSizeMap[i] = size
 		alignedSizePoolMap[i] = getPoolBySize(size)
 	}
@@ -267,13 +268,12 @@ func (amp *AlignedMemPool) Malloc(size int) []byte {
 		return nil
 	}
 	var ret []byte
-	pool := amp.pool(size)
-	if pool != nil {
-		ret = pool.Get().([]byte)[:size]
-		amp.incrMalloc(ret)
-		return ret
+	if size <= maxAlignedBufferSize {
+		idx := alignedIndex(size)
+		ret = alignedSizePoolMap[idx].Get().([]byte)[:size]
+	} else {
+		ret = make([]byte, size)
 	}
-	ret = make([]byte, size)
 	amp.incrMalloc(ret)
 	return ret
 }
@@ -311,26 +311,21 @@ func (amp *AlignedMemPool) AppendString(buf []byte, s string) []byte {
 func (amp *AlignedMemPool) Free(buf []byte) {
 	amp.incrFree(buf)
 	size := cap(buf)
-	if size&alignedBlockSize != 0 {
+	if size&minAlignedBufferSize != 0 || size > maxAlignedBufferSize {
 		return
 	}
-	pool := amp.pool(size)
-	if pool != nil {
-		pool.Put(buf)
+	idx := alignedIndex(size)
+	if idx >= 0 {
+		alignedSizePoolMap[idx].Put(buf)
 	}
 }
 
-func (amp *AlignedMemPool) pool(size int) *sync.Pool {
+func alignedIndex(size int) int {
 	idx := size >> minAlignedBufferSizeBits
-	if idx < 256 {
-		if alignedSizeMap[idx] < size {
-			idx++
-		}
-		if idx < 256 {
-			return alignedSizePoolMap[idx]
-		}
+	if alignedSizeMap[idx] < size {
+		return idx + 1
 	}
-	return nil
+	return idx
 }
 
 // stdAllocator .
