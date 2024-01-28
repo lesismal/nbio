@@ -33,7 +33,9 @@ func TestMemPool(t *testing.T) {
 
 func TestAlignedMemPool(t *testing.T) {
 	pool := NewAligned()
-	pool.Malloc(32769)
+	b := pool.Malloc(32769)
+	pool.Free(b)
+	pool.Free(make([]byte, 60001))
 	for i := 0; i < 1024*64+1024; i += 1 {
 		buf := pool.Malloc(i)
 		if len(buf) != i {

@@ -5,6 +5,11 @@ import (
 	"unsafe"
 )
 
+var (
+	alignedPools   [alignedPoolBucketNum]sync.Pool
+	alignedIndexes [maxAlignedBufferSize + 1]byte
+)
+
 const (
 	minAlignedBufferSizeBits = 5
 	maxAlignedBufferSizeBits = 16
@@ -14,28 +19,12 @@ const (
 	alignedPoolBucketNum     = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1 // 12
 )
 
-// NewAligned .
-func NewAligned() Allocator {
-	amp := &AlignedAllocator{
-		debugger: &debugger{},
-	}
-	amp.init()
-	return amp
-}
-
-// AlignedAllocator .
-type AlignedAllocator struct {
-	*debugger
-	pools   [alignedPoolBucketNum]sync.Pool
-	indexes [maxAlignedBufferSize/2 + 1]byte
-}
-
-func (amp *AlignedAllocator) init() {
+func init() {
 	var poolSizes [alignedPoolBucketNum]int
-	for i := range amp.pools {
+	for i := range alignedPools {
 		size := 1 << (i + minAlignedBufferSizeBits)
 		poolSizes[i] = size
-		amp.pools[i].New = func() interface{} {
+		alignedPools[i].New = func() interface{} {
 			b := make([]byte, size)
 			return &b
 		}
@@ -50,20 +39,22 @@ func (amp *AlignedAllocator) init() {
 		return 0xFF
 	}
 
-	for i := range amp.indexes {
-		n := i << 1
-		shift := (n & 0x1) << 2
-		amp.indexes[n>>1] |= (getPoolBySize(n) << shift)
-		n = i<<1 + 1
-		shift = (n & 0x1) << 2
-		amp.indexes[n>>1] |= (getPoolBySize(n) << shift)
+	for i := range alignedIndexes {
+		alignedIndexes[i] = getPoolBySize(i)
 	}
 }
 
-func (amp *AlignedAllocator) index(size int) byte {
-	v := amp.indexes[size>>1]
-	shift := (size & 0x1) << 2
-	return (v >> shift) & 0xF
+// NewAligned .
+func NewAligned() Allocator {
+	amp := &AlignedAllocator{
+		debugger: &debugger{},
+	}
+	return amp
+}
+
+// AlignedAllocator .
+type AlignedAllocator struct {
+	*debugger
 }
 
 // Malloc .
@@ -73,8 +64,8 @@ func (amp *AlignedAllocator) Malloc(size int) []byte {
 	}
 	var ret []byte
 	if size <= maxAlignedBufferSize {
-		idx := amp.index(size)
-		ret = (*(amp.pools[idx].Get().(*[]byte)))[:size]
+		idx := alignedIndexes[size]
+		ret = (*(alignedPools[idx].Get().(*[]byte)))[:size]
 	} else {
 		ret = make([]byte, size)
 	}
@@ -118,6 +109,6 @@ func (amp *AlignedAllocator) Free(buf []byte) {
 		return
 	}
 	amp.incrFree(buf)
-	idx := amp.index(size)
-	amp.pools[idx].Put(&buf)
+	idx := alignedIndexes[size]
+	alignedPools[idx].Put(&buf)
 }
