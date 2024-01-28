@@ -47,7 +47,7 @@ func TestAlignedMemPool(t *testing.T) {
 			t.Fatalf("invalid len or cap: %v, %v %v, %v ", i, len(buf), cap(buf), size)
 		}
 		buf = pool.Malloc(size + 1)
-		if i != maxAlignedBufferSizeBits-1 {
+		if i != maxAlignedBufferSizeBits {
 			if len(buf) != size+1 || cap(buf) != size*2 || cap(buf) > (size+1)*2 {
 				t.Fatalf("invalid len or cap: %v, %v %v, %v ", i, len(buf), cap(buf), size)
 			}

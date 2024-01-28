@@ -215,38 +215,38 @@ func (mp *MemPool) Free(buf []byte) {
 
 const (
 	minAlignedBufferSizeBits = 5
-	maxAlignedBufferSizeBits = 13
+	maxAlignedBufferSizeBits = 16
+	alignedPoolNum           = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1
 	minAlignedBufferSize     = 1 << minAlignedBufferSizeBits
 	maxAlignedBufferSize     = 1 << maxAlignedBufferSizeBits
 )
 
-var alignedPool [8]sync.Pool
-var alignedSizeMap [256]int
-var alignedSizePoolMap [256]*sync.Pool
+var alignedPools [alignedPoolNum]sync.Pool // 32-64k
+var alignedPoolIndex [65537]byte
+
+// var alignedSizeMap [256]int
 
 func init() {
-	var poolSizes [8]int
-	for i := range alignedPool {
-		size := 1 << uint32(i+minAlignedBufferSizeBits)
+	var poolSizes [alignedPoolNum]int
+	for i := range alignedPools {
+		size := 1 << (i + minAlignedBufferSizeBits)
 		poolSizes[i] = size
-		alignedPool[i].New = func() interface{} {
+		alignedPools[i].New = func() interface{} {
 			return make([]byte, size)
 		}
 	}
 
-	getPoolBySize := func(size int) *sync.Pool {
+	getPoolBySize := func(size int) byte {
 		for i, n := range poolSizes {
 			if size <= n {
-				return &alignedPool[i]
+				return byte(i)
 			}
 		}
-		return nil
+		return 0xFF
 	}
 
-	for i := range alignedSizePoolMap {
-		size := i * minAlignedBufferSize
-		alignedSizeMap[i] = size
-		alignedSizePoolMap[i] = getPoolBySize(size)
+	for i := range alignedPoolIndex {
+		alignedPoolIndex[i] = getPoolBySize(i)
 	}
 }
 
@@ -269,8 +269,8 @@ func (amp *AlignedMemPool) Malloc(size int) []byte {
 	}
 	var ret []byte
 	if size <= maxAlignedBufferSize {
-		idx := alignedIndex(size)
-		ret = alignedSizePoolMap[idx].Get().([]byte)[:size]
+		idx := alignedPoolIndex[size]
+		ret = alignedPools[idx].Get().([]byte)[:size]
 	} else {
 		ret = make([]byte, size)
 	}
@@ -309,23 +309,15 @@ func (amp *AlignedMemPool) AppendString(buf []byte, s string) []byte {
 
 // Free .
 func (amp *AlignedMemPool) Free(buf []byte) {
-	amp.incrFree(buf)
 	size := cap(buf)
 	if size&minAlignedBufferSize != 0 || size > maxAlignedBufferSize {
 		return
 	}
-	idx := alignedIndex(size)
+	amp.incrFree(buf)
+	idx := alignedPoolIndex[size]
 	if idx >= 0 {
-		alignedSizePoolMap[idx].Put(buf)
+		alignedPools[idx].Put(buf)
 	}
-}
-
-func alignedIndex(size int) int {
-	idx := size >> minAlignedBufferSizeBits
-	if alignedSizeMap[idx] < size {
-		return idx + 1
-	}
-	return idx
 }
 
 // stdAllocator .
