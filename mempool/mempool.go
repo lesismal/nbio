@@ -232,7 +232,8 @@ func init() {
 		size := 1 << (i + minAlignedBufferSizeBits)
 		poolSizes[i] = size
 		alignedPools[i].New = func() interface{} {
-			return make([]byte, size)
+			b := make([]byte, size)
+			return &b
 		}
 	}
 
@@ -270,7 +271,7 @@ func (amp *AlignedMemPool) Malloc(size int) []byte {
 	var ret []byte
 	if size <= maxAlignedBufferSize {
 		idx := alignedPoolIndex[size]
-		ret = alignedPools[idx].Get().([]byte)[:size]
+		ret = (*(alignedPools[idx].Get().(*[]byte)))[:size]
 	} else {
 		ret = make([]byte, size)
 	}
@@ -315,7 +316,7 @@ func (amp *AlignedMemPool) Free(buf []byte) {
 	}
 	amp.incrFree(buf)
 	idx := alignedPoolIndex[size]
-	alignedPools[idx].Put(buf)
+	alignedPools[idx].Put(&buf)
 }
 
 // stdAllocator .
