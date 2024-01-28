@@ -14,15 +14,6 @@ const (
 	alignedPoolBucketNum     = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1 // 12
 )
 
-func init() {
-	println("minAlignedBufferSizeBits:", minAlignedBufferSizeBits)
-	println("maxAlignedBufferSizeBits:", maxAlignedBufferSizeBits)
-	println("minAlignedBufferSize:", minAlignedBufferSize)
-	println("minAlignedBufferSizeMask:", minAlignedBufferSizeMask)
-	println("maxAlignedBufferSize:", maxAlignedBufferSize)
-	println("alignedPoolBucketNum:", alignedPoolBucketNum)
-}
-
 // NewAligned .
 func NewAligned() Allocator {
 	amp := &AlignedAllocator{
