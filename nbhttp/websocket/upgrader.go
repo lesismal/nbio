@@ -55,30 +55,32 @@ var (
 
 //go:nosplit
 func clearBuffer(rw *bufio.ReadWriter) {
-	r := (*struct {
-		buf          []byte
-		rd           io.Reader // reader provided by the client
-		r, w         int       // buf read and write positions
-		err          error
-		lastByte     int // last byte read for UnreadByte; -1 means invalid
-		lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
-	})(unsafe.Pointer(rw.Reader))
-	r.buf = nil
-	r.rd = nil
-	r.err = nil
+	*rw.Reader = emptyReader
+	*&rw.Writer = &emptyWriter
+	// r := (*struct {
+	// 	buf          []byte
+	// 	rd           io.Reader // reader provided by the client
+	// 	r, w         int       // buf read and write positions
+	// 	err          error
+	// 	lastByte     int // last byte read for UnreadByte; -1 means invalid
+	// 	lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
+	// })(unsafe.Pointer(rw.Reader))
+	// r.buf = nil
+	// r.rd = nil
+	// r.err = nil
 
-	w := (*struct {
-		err error
-		buf []byte
-		n   int
-		wr  io.Writer
-	})(unsafe.Pointer(rw.Writer))
-	w.err = nil
-	w.buf = nil
-	w.wr = nil
+	// w := (*struct {
+	// 	err error
+	// 	buf []byte
+	// 	n   int
+	// 	wr  io.Writer
+	// })(unsafe.Pointer(rw.Writer))
+	// w.err = nil
+	// w.buf = nil
+	// w.wr = nil
 
-	rw.Writer = nil
 	rw.Reader = nil
+	rw.Writer = nil
 }
 
 type commonFields struct {
