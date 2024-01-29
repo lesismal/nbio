@@ -53,6 +53,33 @@ var (
 	emptyWriter bufio.Writer
 )
 
+//go:nosplit
+func clearBuffer(rw *bufio.ReadWriter) {
+	r := (*struct {
+		buf          []byte
+		rd           io.Reader // reader provided by the client
+		r, w         int       // buf read and write positions
+		err          error
+		lastByte     int // last byte read for UnreadByte; -1 means invalid
+		lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
+	})(unsafe.Pointer(rw.Reader))
+	r.buf = nil
+	r.rd = nil
+	r.err = nil
+	rw.Reader = nil
+
+	w2 := (*struct {
+		err error
+		buf []byte
+		n   int
+		wr  io.Writer
+	})(unsafe.Pointer(rw.Writer))
+	w2.err = nil
+	w2.buf = nil
+	w2.wr = nil
+	rw.Writer = nil
+}
+
 type commonFields struct {
 	Engine                     *nbhttp.Engine
 	KeepaliveTime              time.Duration
@@ -256,14 +283,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
 	if brw != nil {
-		if brw.Reader != nil {
-			*brw.Reader = emptyReader
-			brw.Reader = nil
-		}
-		if brw.Writer != nil {
-			*brw.Writer = emptyWriter
-			brw.Writer = nil
-		}
+		clearBuffer(brw)
 		brw = nil
 	}
 
