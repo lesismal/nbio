@@ -772,7 +772,7 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 	var readCloser ReadCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
-		if readCloser != nil {
+		if !conn.Trasfered {
 			readCloser.CloseAndClean(err)
 		}
 		engine.mux.Lock()
@@ -795,7 +795,7 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		readCloser.Read(buffer[:n])
 		if conn.Trasfered {
 			parser.onClose = nil
-			// parser.CloseAndClean(nil)
+			parser.CloseAndClean(nil)
 			parser = nil
 			return
 		}
@@ -822,10 +822,10 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 	var readCloser ReadCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
-		if readCloser != nil {
+		if !conn.Trasfered {
 			readCloser.CloseAndClean(err)
+			tlsConn.Close()
 		}
-		tlsConn.Close()
 		engine.mux.Lock()
 		switch vt := rconn.(type) {
 		case *net.TCPConn, *net.UnixConn:
@@ -858,7 +858,7 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 				}
 				if conn.Trasfered {
 					parser.onClose = nil
-					// parser.CloseAndClean(nil)
+					parser.CloseAndClean(nil)
 					parser = nil
 					return
 				}
