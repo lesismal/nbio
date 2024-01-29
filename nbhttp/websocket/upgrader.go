@@ -268,8 +268,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		nbResonse, ok = w.(*nbhttp.Response)
 		if ok {
 			parser = nbResonse.Parser
-			parser.ReadCloser = wsc
-			wsc.Execute = parser.Execute
 		}
 	}
 
@@ -291,6 +289,8 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 		wsc = NewConn(u, conn, subprotocol, compress, false)
 		wsc.Engine = parser.Engine
+		wsc.Execute = parser.Execute
+		vt.SetSession(wsc)
 		parser.ReadCloser = wsc
 	case *tls.Conn:
 		// Scenario 2: llib's *tls.Conn.
@@ -308,14 +308,14 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					nbhttpConn.Trasfered = true
 				}
 				vt.ResetRawInput()
-				parser = nbhttp.NewParser(nil, false, engine.ReadLimit, nbc.Execute)
-				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
-					parser.Execute = nbhttp.SyncExecutor
-				}
 				wsc = NewConn(u, vt, subprotocol, compress, false)
+				wsc.Engine = engine
+				wsc.Execute = nbc.Execute
+				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
+					wsc.Execute = nbhttp.SyncExecutor
+				}
+				nbc.SetSession(wsc)
 				parser.ReadCloser = wsc
-				parser.Engine = engine
-				nbc.SetSession(parser)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
 					defer func() {
 						if err := recover(); err != nil {
@@ -362,6 +362,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 				wsc.isBlockingMod = true
 				getParser()
+				if parser != nil {
+					wsc.Execute = parser.Execute
+					parser.ReadCloser = wsc
+				}
 			}
 		} else {
 			// 2.2 The conn is from nbio poller.
@@ -371,7 +375,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			}
 			wsc = NewConn(u, conn, subprotocol, compress, false)
 			wsc.Engine = parser.Engine
+			wsc.Execute = parser.Execute
 			parser.ReadCloser = wsc
+			nbc.SetSession(wsc)
 		}
 	case *net.TCPConn:
 		// Scenario 3: std's *net.TCPConn.
@@ -384,14 +390,14 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if nbhttpConn != nil {
 				nbhttpConn.Trasfered = true
 			}
-			parser = nbhttp.NewParser(nil, false, engine.ReadLimit, nbc.Execute)
-			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
-				parser.Execute = nbhttp.SyncExecutor
-			}
+
 			wsc = NewConn(u, nbc, subprotocol, compress, false)
-			parser.ReadCloser = wsc
-			parser.Engine = engine
-			nbc.SetSession(parser)
+			wsc.Engine = engine
+			wsc.Execute = nbc.Execute
+			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
+				wsc.Execute = nbhttp.SyncExecutor
+			}
+			nbc.SetSession(wsc)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
 				defer func() {
 					if err := recover(); err != nil {
@@ -402,7 +408,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					}
 				}()
 
-				errRead := parser.Read(data)
+				errRead := wsc.Read(data)
 				if errRead != nil {
 					logging.Debug("websocket Conn Read failed: %v", errRead)
 					c.CloseWithError(errRead)
@@ -418,12 +424,20 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 			wsc.isBlockingMod = true
 			getParser()
+			if parser != nil {
+				wsc.Execute = parser.Execute
+				parser.ReadCloser = wsc
+			}
 		}
 	default:
 		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
 		wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 		wsc.isBlockingMod = true
 		getParser()
+		if parser != nil {
+			wsc.Execute = parser.Execute
+			parser.ReadCloser = wsc
+		}
 	}
 
 	err = u.commResponse(wsc.Conn, responseHeader, challengeKey, subprotocol, compress)
@@ -443,6 +457,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	if parser != nil {
 		parser.ReadCloser = wsc
+		wsc.Execute = parser.Execute
 	}
 	wsc.isReadingByParser = isReadingByParser
 	if wsc.isBlockingMod && (!wsc.isReadingByParser) {

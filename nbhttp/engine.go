@@ -611,13 +611,11 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	engine.mux.Unlock()
 	engine._onOpen(conn.Conn)
 	processor := NewServerProcessor()
-	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	parser := NewParser(conn, engine, processor, false, nbc.Execute)
 	if engine.isOneshot {
 		parser.Execute = SyncExecutor
 	}
-	parser.Engine = engine
 	conn.Parser = parser
-	processor.(*ServerProcessor).parser = parser
 	nbc.SetSession(parser)
 	nbc.OnData(engine.DataHandler)
 	engine.AddConn(nbc)
@@ -655,10 +653,9 @@ func (engine *Engine) AddConnNonTLSBlocking(conn *Conn, tlsConfig *tls.Config, d
 	engine.mux.Unlock()
 	engine._onOpen(conn)
 	processor := NewServerProcessor()
-	parser := NewParser(processor, false, engine.ReadLimit, SyncExecutor)
+	parser := NewParser(conn, engine, processor, false, SyncExecutor)
 	parser.Engine = engine
 	conn.Parser = parser
-	processor.(*ServerProcessor).parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 	go engine.readConnBlocking(conn, parser, decrease)
 }
@@ -701,14 +698,13 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	tlsConn := tls.NewConn(nbc, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	conn = &Conn{Conn: tlsConn}
 	processor := NewServerProcessor()
-	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
+	parser := NewParser(conn, engine, processor, false, nbc.Execute)
 	if engine.isOneshot {
 		parser.Execute = SyncExecutor
 	}
 	parser.Conn = conn
 	parser.Engine = engine
 	conn.Parser = parser
-	processor.(*ServerProcessor).parser = parser
 	nbc.SetSession(parser)
 
 	nbc.OnData(engine.TLSDataHandler)
@@ -754,11 +750,8 @@ func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decr
 	tlsConn := tls.NewConn(underLayerConn, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	conn = &Conn{Conn: tlsConn}
 	processor := NewServerProcessor()
-	parser := NewParser(processor, false, engine.ReadLimit, SyncExecutor)
-	parser.Conn = conn
-	parser.Engine = engine
+	parser := NewParser(conn, engine, processor, false, SyncExecutor)
 	conn.Parser = parser
-	processor.(*ServerProcessor).parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 	tlsConn.SetSession(parser)
 	go engine.readTLSConnBlocking(conn, underLayerConn, tlsConn, parser, decrease)

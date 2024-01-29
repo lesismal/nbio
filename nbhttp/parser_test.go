@@ -130,7 +130,6 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	nRequest := 0
 	data = append(data, data...)
 
-	maxReadSize := 1024 * 1024 * 4
 	mux := &http.ServeMux{}
 	mux.HandleFunc("/", func(w http.ResponseWriter, request *http.Request) {
 		nRequest++
@@ -146,10 +145,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	engine := NewEngine(Config{
 		Handler: mux,
 	})
-	parser = NewParser(processor, isClient, maxReadSize, nil)
-	if sp, ok := processor.(*ServerProcessor); ok {
-		sp.parser = parser
-	}
+	parser = NewParser(conn, engine, processor, isClient, nil)
 	parser.Engine = engine
 	tBegin := time.Now()
 	loop := 10000
@@ -183,20 +179,16 @@ func newParser(isClient bool) *Parser {
 	engine := NewEngine(Config{
 		Handler: mux,
 	})
-	maxReadSize := 1024 * 1024 * 4
+	conn := newConn()
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response, error) {})
-		parser := NewParser(processor, isClient, maxReadSize, nil)
+		parser := NewParser(conn, engine, processor, isClient, nil)
 		parser.Engine = engine
 		return parser
 	}
-
-	conn := newConn()
 	processor := NewServerProcessor()
-	parser := NewParser(processor, isClient, maxReadSize, nil)
+	parser := NewParser(conn, engine, processor, isClient, nil)
 	parser.Conn = conn
-	parser.Engine = engine
-	processor.(*ServerProcessor).parser = parser
 	return parser
 }
 
@@ -270,18 +262,15 @@ var benchData = []byte("POST /joyent/http-parser HTTP/1.1\r\n" +
 	"Cache-Control: max-age=0\r\n\r\nb\r\nhello world\r\n0\r\n\r\n")
 
 func BenchmarkServerProcessor(b *testing.B) {
-	maxReadSize := 1024 * 1024 * 4
 	isClient := false
 	processor := NewServerProcessor()
-	parser := NewParser(processor, isClient, maxReadSize, nil)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
-	parser.Engine = NewEngine(Config{
+	engine := NewEngine(Config{
 		Handler: mux,
 	})
-	parser.Conn = newConn()
+	parser := NewParser(newConn(), engine, processor, isClient, nil)
 	defer parser.Conn.Close()
-
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
