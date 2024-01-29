@@ -772,7 +772,7 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 	var readCloser ReadCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
-		if !conn.Trasfered {
+		if readCloser != nil {
 			readCloser.CloseAndClean(err)
 		}
 		engine.mux.Lock()
@@ -794,10 +794,15 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		}
 		readCloser.Read(buffer[:n])
 		if conn.Trasfered {
+			parser.onClose = nil
+			parser.CloseAndClean(nil)
+			parser = nil
 			return
 		}
 		if parser != nil && parser.ReadCloser != nil {
 			readCloser = parser.ReadCloser
+			parser.onClose = nil
+			parser.CloseAndClean(nil)
 			parser = nil
 		}
 	}
@@ -817,7 +822,7 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 	var readCloser ReadCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
-		if !conn.Trasfered {
+		if readCloser != nil {
 			readCloser.CloseAndClean(err)
 		}
 		tlsConn.Close()
@@ -852,10 +857,15 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 					return
 				}
 				if conn.Trasfered {
+					parser.onClose = nil
+					parser.CloseAndClean(nil)
+					parser = nil
 					return
 				}
 				if parser != nil && parser.ReadCloser != nil {
 					readCloser = parser.ReadCloser
+					parser.onClose = nil
+					parser.CloseAndClean(nil)
 					parser = nil
 				}
 			}
