@@ -268,7 +268,8 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		nbResonse, ok = w.(*nbhttp.Response)
 		if ok {
 			parser = nbResonse.Parser
-			parser.Reader = wsc
+			parser.ReadCloser = wsc
+			wsc.execute = parser.Execute
 		}
 	}
 
@@ -290,7 +291,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 		wsc = NewConn(u, conn, subprotocol, compress, false)
 		wsc.Engine = parser.Engine
-		parser.Reader = wsc
+		parser.ReadCloser = wsc
 	case *tls.Conn:
 		// Scenario 2: llib's *tls.Conn.
 		nbc, ok = vt.Conn().(*nbio.Conn)
@@ -312,7 +313,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					parser.Execute = nbhttp.SyncExecutor
 				}
 				wsc = NewConn(u, vt, subprotocol, compress, false)
-				parser.Reader = wsc
+				parser.ReadCloser = wsc
 				parser.Engine = engine
 				nbc.SetSession(parser)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -370,7 +371,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			}
 			wsc = NewConn(u, conn, subprotocol, compress, false)
 			wsc.Engine = parser.Engine
-			parser.Reader = wsc
+			parser.ReadCloser = wsc
 		}
 	case *net.TCPConn:
 		// Scenario 3: std's *net.TCPConn.
@@ -388,7 +389,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				parser.Execute = nbhttp.SyncExecutor
 			}
 			wsc = NewConn(u, nbc, subprotocol, compress, false)
-			parser.Reader = wsc
+			parser.ReadCloser = wsc
 			parser.Engine = engine
 			nbc.SetSession(parser)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -441,7 +442,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if parser != nil {
-		parser.Reader = wsc
+		parser.ReadCloser = wsc
 	}
 	wsc.isReadingByParser = isReadingByParser
 	if wsc.isBlockingMod && (!wsc.isReadingByParser) {

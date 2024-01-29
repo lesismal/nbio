@@ -27,7 +27,30 @@ const (
 	MaxInt = int64(int(MaxUint >> 1))
 )
 
-type parserCommon struct {
+type ReadCloser interface {
+	UnderlayerConn() net.Conn
+	Read(data []byte) error
+	CloseAndClean(err error)
+}
+
+// Parser .
+type Parser struct {
+	mux sync.Mutex
+
+	cache []byte
+
+	errClose error
+
+	onClose func(p *Parser, err error)
+
+	ReadCloser ReadCloser
+
+	Engine *Engine
+
+	Conn net.Conn
+
+	Execute func(f func()) bool
+
 	Processor Processor
 
 	// http fields
@@ -47,27 +70,8 @@ type parserCommon struct {
 	headerExists bool
 }
 
-// Parser .
-type Parser struct {
-	*parserCommon
-	mux sync.Mutex
-
-	cache []byte
-
-	errClose error
-
-	onClose func(p *Parser, err error)
-
-	Reader interface {
-		Read(p *Parser, data []byte) error
-		CloseAndClean(err error)
-	}
-
-	Engine *Engine
-
-	Conn net.Conn
-
-	Execute func(f func()) bool
+func (p *Parser) UnderlayerConn() net.Conn {
+	return p.Conn
 }
 
 func (p *Parser) nextState(state int8) {
@@ -84,7 +88,7 @@ func (p *Parser) OnClose(h func(p *Parser, err error)) {
 }
 
 // Close .
-func (p *Parser) Close(err error) {
+func (p *Parser) CloseAndClean(err error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
@@ -96,9 +100,9 @@ func (p *Parser) Close(err error) {
 
 	p.errClose = err
 
-	if p.Reader != nil {
-		p.Reader.CloseAndClean(p.errClose)
-	}
+	// if p.ReadCloser != nil {
+	// 	p.ReadCloser.CloseWithError(p.errClose)
+	// }
 	if p.Processor != nil {
 		p.Processor.Close(p, p.errClose)
 	}
@@ -122,13 +126,6 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 		return -1, fmt.Errorf("chunk size greater than max int %d", chunkSize)
 	}
 	return int(chunkSize), nil
-}
-
-func (p *Parser) releaseHttpFields() {
-	if p.Processor != nil {
-		p.Processor.Clean(p)
-	}
-	p.parserCommon = nil
 }
 
 // Read .
@@ -155,12 +152,12 @@ func (p *Parser) Read(data []byte) error {
 	}
 
 UPGRADER:
-	if p.Reader != nil {
+	if p.ReadCloser != nil {
 		udata := data
 		if start > 0 {
 			udata = data[start:]
 		}
-		err := p.Reader.Read(p, udata)
+		err := p.ReadCloser.Read(udata)
 		if p.cache != nil {
 			mempool.Free(p.cache)
 			p.cache = nil
@@ -170,8 +167,8 @@ UPGRADER:
 
 	var c byte
 	for i := offset; i < len(data); i++ {
-		if p.Reader != nil {
-			p.releaseHttpFields()
+		if p.ReadCloser != nil {
+			p.Processor.Clean(p)
 			goto UPGRADER
 		}
 		c = data[i]
@@ -801,12 +798,10 @@ func NewParser(processor Processor, isClient bool, readLimit int, executor func(
 		}
 	}
 	p := &Parser{
-		parserCommon: &parserCommon{
-			state:     state,
-			isClient:  isClient,
-			Processor: processor,
-		},
-		Execute: executor,
+		state:     state,
+		isClient:  isClient,
+		Processor: processor,
+		Execute:   executor,
 	}
 	return p
 }

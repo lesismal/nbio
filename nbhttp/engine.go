@@ -495,17 +495,17 @@ func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			logging.Error("execute ReadCloser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-	parser := c.Session().(*Parser)
-	if parser == nil {
-		logging.Error("nil parser")
+	readerCloser := c.Session().(ReadCloser)
+	if readerCloser == nil {
+		logging.Error("nil ReadCloser")
 		return
 	}
-	err := parser.Read(data)
+	err := readerCloser.Read(data)
 	if err != nil {
-		logging.Debug("parser.Read failed: %v", err)
+		logging.Debug("ReadCloser.Read failed: %v", err)
 		c.CloseWithError(err)
 	}
 }
@@ -517,16 +517,16 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			logging.Error("execute parser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			logging.Error("execute ReadCloser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-	parser := c.Session().(*Parser)
-	if parser == nil {
-		logging.Error("nil parser")
+	readCloser := c.Session().(ReadCloser)
+	if readCloser == nil {
+		logging.Error("nil ReadCloser")
 		c.Close()
 		return
 	}
-	nbhttpConn, ok := parser.Processor.Conn().(*Conn)
+	nbhttpConn, ok := readCloser.UnderlayerConn().(*Conn)
 	if ok {
 		if tlsConn, ok := nbhttpConn.Conn.(*tls.Conn); ok {
 			defer tlsConn.ResetOrFreeBuffer()
@@ -541,9 +541,9 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 					return
 				}
 				if nread > 0 {
-					err := parser.Read(buffer[:nread])
+					err := readCloser.Read(buffer[:nread])
 					if err != nil {
-						logging.Debug("parser.Read failed: %v", err)
+						logging.Debug("ReadCloser.Read failed: %v", err)
 						c.CloseWithError(err)
 						return
 					}
@@ -610,7 +610,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
 	engine._onOpen(conn.Conn)
-	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	processor := NewServerProcessor()
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
 	if engine.isOneshot {
 		parser.Execute = SyncExecutor
@@ -654,7 +654,7 @@ func (engine *Engine) AddConnNonTLSBlocking(conn *Conn, tlsConfig *tls.Config, d
 	}
 	engine.mux.Unlock()
 	engine._onOpen(conn)
-	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	processor := NewServerProcessor()
 	parser := NewParser(processor, false, engine.ReadLimit, SyncExecutor)
 	parser.Engine = engine
 	conn.Parser = parser
@@ -700,7 +700,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	isNonBlock := true
 	tlsConn := tls.NewConn(nbc, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	conn = &Conn{Conn: tlsConn}
-	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	processor := NewServerProcessor()
 	parser := NewParser(processor, false, engine.ReadLimit, nbc.Execute)
 	if engine.isOneshot {
 		parser.Execute = SyncExecutor
@@ -753,7 +753,7 @@ func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decr
 	isNonBlock := true
 	tlsConn := tls.NewConn(underLayerConn, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	conn = &Conn{Conn: tlsConn}
-	processor := NewServerProcessor(conn, engine.Handler, engine.KeepaliveTime, !engine.DisableSendfile)
+	processor := NewServerProcessor()
 	parser := NewParser(processor, false, engine.ReadLimit, SyncExecutor)
 	parser.Conn = conn
 	parser.Engine = engine
@@ -775,12 +775,12 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
 	}
 
-	buf := readBufferPool.Malloc(engine.BlockingReadBufferSize)
-	defer readBufferPool.Free(buf)
-
+	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
+	var readCloser ReadCloser = parser
 	defer func() {
-		// go func() {
-		parser.Close(err)
+		readBufferPool.Free(buffer)
+
+		readCloser.CloseAndClean(err)
 		engine.mux.Lock()
 		switch vt := conn.Conn.(type) {
 		case *net.TCPConn, *net.UnixConn:
@@ -794,11 +794,15 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 	}()
 
 	for {
-		n, err = conn.Read(buf)
+		n, err = conn.Read(buffer)
 		if err != nil {
 			return
 		}
-		parser.Read(buf[:n])
+		readCloser.Read(buffer[:n])
+		if parser != nil && parser.ReadCloser != nil {
+			readCloser = parser.ReadCloser
+			parser = nil
+		}
 	}
 }
 
@@ -812,12 +816,12 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 	if readBufferPool == nil {
 		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
 	}
-
 	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
+	var readCloser ReadCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
 		if !conn.Trasfered {
-			parser.Close(err)
+			readCloser.CloseAndClean(err)
 			tlsConn.Close()
 		}
 
@@ -846,10 +850,14 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 				return
 			}
 			if nread > 0 {
-				err = parser.Read(buffer[:nread])
+				err = readCloser.Read(buffer[:nread])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
 					return
+				}
+				if parser != nil && parser.ReadCloser != nil {
+					readCloser = parser.ReadCloser
+					parser = nil
 				}
 			}
 			if nread == 0 {
@@ -1014,11 +1022,7 @@ func NewEngine(conf Config) *Engine {
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
 			switch vt := c.Session().(type) {
-			case *Parser:
-				vt.Close(err)
-			case interface {
-				CloseAndClean(error)
-			}:
+			case ReadCloser:
 				vt.CloseAndClean(err)
 			default:
 			}

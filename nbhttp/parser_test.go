@@ -107,9 +107,8 @@ func TestClientParserTrailer(t *testing.T) {
 func testParser(t *testing.T, isClient bool, data []byte) error {
 	parser := newParser(isClient)
 	defer func() {
-		c := parser.Processor.Conn()
-		if c != nil {
-			c.Close()
+		if parser.Conn != nil {
+			parser.Conn.Close()
 		}
 	}()
 	err := parser.Read(data)
@@ -138,13 +137,15 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	})
 	conn := newConn()
 	defer conn.Close()
-	processor := NewServerProcessor(conn, mux, DefaultKeepaliveTime, false)
+	processor := NewServerProcessor()
 	if isClient {
 		processor = NewClientProcessor(nil, func(*http.Response, error) {
 			nRequest++
 		})
 	}
-	engine := NewEngine(Config{})
+	engine := NewEngine(Config{
+		Handler: mux,
+	})
 	parser = NewParser(processor, isClient, maxReadSize, nil)
 	if sp, ok := processor.(*ServerProcessor); ok {
 		sp.parser = parser
@@ -177,7 +178,11 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 }
 
 func newParser(isClient bool) *Parser {
-	engine := NewEngine(Config{})
+	mux := &http.ServeMux{}
+	// mux.HandleFunc("/", pirntMessage)
+	engine := NewEngine(Config{
+		Handler: mux,
+	})
 	maxReadSize := 1024 * 1024 * 4
 	if isClient {
 		processor := NewClientProcessor(nil, func(*http.Response, error) {})
@@ -185,11 +190,11 @@ func newParser(isClient bool) *Parser {
 		parser.Engine = engine
 		return parser
 	}
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/", pirntMessage)
+
 	conn := newConn()
-	processor := NewServerProcessor(conn, mux, DefaultKeepaliveTime, false)
+	processor := NewServerProcessor()
 	parser := NewParser(processor, isClient, maxReadSize, nil)
+	parser.Conn = conn
 	parser.Engine = engine
 	processor.(*ServerProcessor).parser = parser
 	return parser
@@ -271,8 +276,9 @@ func BenchmarkServerProcessor(b *testing.B) {
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
 	conn := newConn()
 	defer conn.Close()
-	processor := NewServerProcessor(conn, mux, DefaultKeepaliveTime, false)
+	processor := NewServerProcessor()
 	parser := NewParser(processor, isClient, maxReadSize, nil)
+	parser.Conn = conn
 
 	b.ReportAllocs()
 	b.ResetTimer()

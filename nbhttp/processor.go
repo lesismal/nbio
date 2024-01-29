@@ -5,9 +5,7 @@
 package nbhttp
 
 import (
-	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -87,7 +85,7 @@ func releaseClientResponse(res *http.Response) {
 
 // Processor .
 type Processor interface {
-	Conn() net.Conn
+	// Conn() net.Conn
 	OnMethod(method string)
 	OnURL(uri string) error
 	OnProto(proto string) error
@@ -108,26 +106,17 @@ var (
 
 // ServerProcessor .
 type ServerProcessor struct {
-	// active int32
-
-	// mux     sync.Mutex
-	conn    net.Conn
 	parser  *Parser
 	request *http.Request
-	handler http.Handler
-	// executor func(index int, f func())
-
-	// resQueue       []*Response
-	keepaliveTime  time.Duration
-	enableSendfile bool
-	// isUpgrade      bool
-	remoteAddr string
 }
 
 // Conn .
-func (p *ServerProcessor) Conn() net.Conn {
-	return p.conn
-}
+// func (p *ServerProcessor) Conn() net.Conn {
+// 	if p.parser != nil {
+// 		return p.parser.Conn
+// 	}
+// 	return nil
+// }
 
 // OnMethod .
 func (p *ServerProcessor) OnMethod(method string) {
@@ -222,10 +211,11 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		return
 	}
 
-	if p.conn != nil {
-		request.RemoteAddr = p.remoteAddr
+	conn := parser.Conn
+	if conn != nil {
+		request.RemoteAddr = conn.RemoteAddr().String()
 		if parser.Engine.WriteTimeout > 0 {
-			p.conn.SetWriteDeadline(time.Now().Add(parser.Engine.WriteTimeout))
+			conn.SetWriteDeadline(time.Now().Add(parser.Engine.WriteTimeout))
 		}
 	}
 
@@ -269,34 +259,35 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = NewBodyReader(nil)
 	}
 
-	response := NewResponse(p.parser, request, p.enableSendfile)
+	response := NewResponse(parser, request)
 	if !parser.Execute(func() {
-		p.handler.ServeHTTP(response, request)
-		p.flushResponse(response)
+		parser.Engine.Handler.ServeHTTP(response, request)
+		p.flushResponse(parser, response)
 	}) {
-		releaseRequest(request, p.parser.Engine.RetainHTTPBody)
+		releaseRequest(request, parser.Engine.RetainHTTPBody)
 	}
 }
 
-func (p *ServerProcessor) flushResponse(res *Response) {
-	if p.conn != nil {
+func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
+	conn := parser.Conn
+	if conn != nil {
 		req := res.request
 		if !res.hijacked {
 			res.eoncodeHead()
-			if err := res.flushTrailer(p.conn); err != nil {
-				p.conn.Close()
-				releaseRequest(req, p.parser.Engine.RetainHTTPBody)
+			if err := res.flushTrailer(conn); err != nil {
+				conn.Close()
+				releaseRequest(req, parser.Engine.RetainHTTPBody)
 				releaseResponse(res)
 				return
 			}
 			if req.Close {
 				// the data may still in the send queue
-				p.conn.Close()
-			} else if p.parser == nil || p.parser.Reader == nil {
-				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+				conn.Close()
+			} else if parser == nil || parser.ReadCloser == nil {
+				conn.SetReadDeadline(time.Now().Add(parser.Engine.KeepaliveTime))
 			}
 		}
-		releaseRequest(req, p.parser.Engine.RetainHTTPBody)
+		releaseRequest(req, parser.Engine.RetainHTTPBody)
 		releaseResponse(res)
 	}
 }
@@ -316,28 +307,8 @@ func (p *ServerProcessor) Close(parser *Parser, err error) {
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.Duration, enableSendfile bool) Processor {
-	if handler == nil {
-		panic(errors.New("invalid handler for ServerProcessor: nil"))
-	}
-	// p := serverProcessorPool.Get().(*ServerProcessor)
-	// p.conn = conn
-	// p.handler = handler
-	// p.executor = executor
-	// p.keepaliveTime = keepaliveTime
-	// p.enableSendfile = enableSendfile
-	// p.remoteAddr = conn.RemoteAddr().String()
-	p := &ServerProcessor{
-		conn:           conn,
-		handler:        handler,
-		keepaliveTime:  keepaliveTime,
-		enableSendfile: enableSendfile,
-	}
-	if conn != nil {
-		p.remoteAddr = conn.RemoteAddr().String()
-	}
-
-	return p
+func NewServerProcessor() Processor {
+	return &ServerProcessor{}
 }
 
 // ClientProcessor .
@@ -348,12 +319,12 @@ type ClientProcessor struct {
 }
 
 // Conn .
-func (p *ClientProcessor) Conn() net.Conn {
-	if p.conn != nil {
-		return p.conn.conn
-	}
-	return nil
-}
+// func (p *ClientProcessor) Conn() net.Conn {
+// 	if p.conn != nil {
+// 		return p.conn.conn
+// 	}
+// 	return nil
+// }
 
 // OnMethod .
 func (p *ClientProcessor) OnMethod(method string) {
@@ -469,9 +440,9 @@ func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err e
 type EmptyProcessor struct{}
 
 // Conn .
-func (p *EmptyProcessor) Conn() net.Conn {
-	return nil
-}
+// func (p *EmptyProcessor) Conn() net.Conn {
+// 	return nil
+// }
 
 // OnMethod .
 func (p *EmptyProcessor) OnMethod(method string) {

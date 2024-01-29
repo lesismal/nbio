@@ -75,6 +75,12 @@ type Conn struct {
 	opcode                   MessageType
 	buffer                   []byte
 	message                  []byte
+
+	execute func(f func()) bool
+}
+
+func (c *Conn) UnderlayerConn() net.Conn {
+	return c.Conn
 }
 
 // IsClient .
@@ -110,9 +116,9 @@ func (c *Conn) Close() error {
 }
 
 // CloseWithError .
-func (c *Conn) CloseWithError(err error) error {
+func (c *Conn) CloseWithError(err error) {
 	c.SetCloseError(err)
-	return c.Close()
+	c.Close()
 }
 
 // SetCloseError .
@@ -129,22 +135,22 @@ func (c *Conn) CompressionEnabled() bool {
 	return c.compress
 }
 
-func (c *Conn) handleDataFrame(p *nbhttp.Parser, opcode MessageType, fin bool, data []byte) {
+func (c *Conn) handleDataFrame(opcode MessageType, fin bool, data []byte) {
 	h := c.dataFrameHandler
 	if c.isBlockingMod {
 		h(c, opcode, fin, data)
 	} else {
-		p.Execute(func() {
+		c.execute(func() {
 			h(c, opcode, fin, data)
 		})
 	}
 }
 
-func (c *Conn) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
+func (c *Conn) handleMessage(opcode MessageType, body []byte) {
 	if c.isBlockingMod {
 		c.handleWsMessage(opcode, body)
 	} else {
-		if !p.Execute(func() {
+		if !c.execute(func() {
 			c.handleWsMessage(opcode, body)
 		}) {
 			if len(body) > 0 {
@@ -154,14 +160,14 @@ func (c *Conn) handleMessage(p *nbhttp.Parser, opcode MessageType, body []byte) 
 	}
 }
 
-func (c *Conn) handleProtocolMessage(p *nbhttp.Parser, opcode MessageType, body []byte) {
+func (c *Conn) handleProtocolMessage(opcode MessageType, body []byte) {
 	if c.isBlockingMod {
 		c.handleWsMessage(opcode, body)
 		if len(body) > 0 && c.Engine.ReleaseWebsocketPayload {
 			c.Engine.BodyAllocator.Free(body)
 		}
 	} else {
-		if !p.Execute(func() {
+		if !c.execute(func() {
 			c.handleWsMessage(opcode, body)
 			if len(body) > 0 && c.Engine.ReleaseWebsocketPayload {
 				c.Engine.BodyAllocator.Free(body)
@@ -302,7 +308,7 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 }
 
 // Read .
-func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
+func (c *Conn) Read(data []byte) error {
 	oldLen := len(c.buffer)
 	readLimit := c.Engine.ReadLimit
 	if readLimit > 0 && (oldLen+len(data) > readLimit) {
@@ -350,7 +356,7 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 				if c.opcode == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
 					c.Conn.Close()
 				} else {
-					c.handleDataFrame(p, c.opcode, fin, frame)
+					c.handleDataFrame(c.opcode, fin, frame)
 				}
 			}
 			if bl > 0 && c.messageHandler != nil {
@@ -387,7 +393,7 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 							break
 						}
 					}
-					c.handleMessage(p, c.opcode, c.message)
+					c.handleMessage(c.opcode, c.message)
 				}
 				c.compress = false
 				c.expectingFragments = false
@@ -406,7 +412,7 @@ func (c *Conn) Read(p *nbhttp.Parser, data []byte) error {
 				frame = c.Engine.BodyAllocator.Malloc(len(body))
 				copy(frame, body)
 			}
-			c.handleProtocolMessage(p, opcode, frame)
+			c.handleProtocolMessage(opcode, frame)
 		}
 
 		if len(c.buffer) == 0 {
@@ -752,7 +758,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					_, err := c.Conn.Write(buf)
 					c.Engine.BodyAllocator.Free(buf)
 					if err != nil {
-						c.CloseWithError(err)
+						c.CloseAndClean(err)
 						return
 					}
 
@@ -861,7 +867,7 @@ func (c *Conn) HandleRead(bufSize int) {
 		if err != nil {
 			break
 		}
-		err = c.Read(nil, buf[:n])
+		err = c.Read(buf[:n])
 		if err != nil {
 			break
 		}
