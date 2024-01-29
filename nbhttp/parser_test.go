@@ -272,34 +272,24 @@ var benchData = []byte("POST /joyent/http-parser HTTP/1.1\r\n" +
 func BenchmarkServerProcessor(b *testing.B) {
 	maxReadSize := 1024 * 1024 * 4
 	isClient := false
-	mux := &http.ServeMux{}
-	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
-	conn := newConn()
-	defer conn.Close()
 	processor := NewServerProcessor()
 	parser := NewParser(processor, isClient, maxReadSize, nil)
-	parser.Conn = conn
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
+	parser.Engine = NewEngine(Config{
+		Handler: mux,
+	})
+	parser.Conn = newConn()
+	defer parser.Conn.Close()
 
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := parser.Read(benchData); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
-func BenchmarkEmpryProcessor(b *testing.B) {
-	maxReadSize := 1024 * 1024 * 4
-	isClient := false
-	// processor := NewEmptyProcessor()
-	parser := NewParser(nil, isClient, maxReadSize, nil)
-
-	b.ReportAllocs()
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		if err := parser.Read(benchData); err != nil {
-			b.Fatal(err)
+		for j := 0; j < 5; j++ {
+			err := parser.Read(benchData)
+			if err != nil {
+				b.Fatal(err)
+			}
 		}
 	}
 }

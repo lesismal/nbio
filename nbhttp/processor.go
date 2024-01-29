@@ -212,10 +212,11 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	conn := parser.Conn
+	engine := parser.Engine
 	if conn != nil {
 		request.RemoteAddr = conn.RemoteAddr().String()
-		if parser.Engine.WriteTimeout > 0 {
-			conn.SetWriteDeadline(time.Now().Add(parser.Engine.WriteTimeout))
+		if engine.WriteTimeout > 0 {
+			conn.SetWriteDeadline(time.Now().Add(engine.WriteTimeout))
 		}
 	}
 
@@ -261,10 +262,10 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 
 	response := NewResponse(parser, request)
 	if !parser.Execute(func() {
-		parser.Engine.Handler.ServeHTTP(response, request)
+		engine.Handler.ServeHTTP(response, request)
 		p.flushResponse(parser, response)
 	}) {
-		releaseRequest(request, parser.Engine.RetainHTTPBody)
+		releaseRequest(request, engine.RetainHTTPBody)
 	}
 }
 
