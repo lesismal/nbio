@@ -66,7 +66,6 @@ func clearBuffer(rw *bufio.ReadWriter) {
 	r.buf = nil
 	r.rd = nil
 	r.err = nil
-	rw.Reader = nil
 
 	w := (*struct {
 		err error
@@ -77,7 +76,9 @@ func clearBuffer(rw *bufio.ReadWriter) {
 	w.err = nil
 	w.buf = nil
 	w.wr = nil
+
 	rw.Writer = nil
+	rw.Reader = nil
 }
 
 type commonFields struct {
