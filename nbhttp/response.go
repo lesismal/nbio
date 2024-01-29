@@ -50,7 +50,7 @@ func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 		return nil, nil, errors.New("nil Proccessor")
 	}
 	res.hijacked = true
-	return res.Parser.Processor.Conn(), nil, nil
+	return res.Parser.Conn, nil, nil
 }
 
 // Header .
@@ -93,7 +93,7 @@ func (res *Response) WriteString(s string) (int, error) {
 // Write .
 func (res *Response) Write(data []byte) (int, error) {
 	l := len(data)
-	conn := res.Parser.Processor.Conn()
+	conn := res.Parser.Conn
 	if l == 0 || conn == nil {
 		return 0, nil
 	}
@@ -167,7 +167,7 @@ func (res *Response) Write(data []byte) (int, error) {
 
 // ReadFrom .
 func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
-	c := res.Parser.Processor.Conn()
+	c := res.Parser.Conn
 	if c == nil {
 		return 0, nil
 	}

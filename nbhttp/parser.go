@@ -191,7 +191,7 @@ UPGRADER:
 				if !isValidMethod(method) {
 					return ErrInvalidMethod
 				}
-				p.Processor.OnMethod(method)
+				p.Processor.OnMethod(p, method)
 				start = i + 1
 				p.nextState(statePathBefore)
 				continue
@@ -214,7 +214,7 @@ UPGRADER:
 		case statePath:
 			if c == ' ' {
 				var uri = string(data[start:i])
-				if err := p.Processor.OnURL(uri); err != nil {
+				if err := p.Processor.OnURL(p, uri); err != nil {
 					return err
 				}
 				start = i + 1
@@ -235,7 +235,7 @@ UPGRADER:
 				if p.proto == "" {
 					p.proto = string(data[start:i])
 				}
-				if err := p.Processor.OnProto(p.proto); err != nil {
+				if err := p.Processor.OnProto(p, p.proto); err != nil {
 					p.proto = ""
 					return err
 				}
@@ -255,7 +255,7 @@ UPGRADER:
 				if p.proto == "" {
 					p.proto = string(data[start:i])
 				}
-				if err := p.Processor.OnProto(p.proto); err != nil {
+				if err := p.Processor.OnProto(p, p.proto); err != nil {
 					p.proto = ""
 					return err
 				}
@@ -308,7 +308,7 @@ UPGRADER:
 				if p.status == "" {
 					p.status = string(data[start:i])
 				}
-				p.Processor.OnStatus(p.statusCode, p.status)
+				p.Processor.OnStatus(p, p.statusCode, p.status)
 				p.statusCode = 0
 				p.status = ""
 				p.nextState(stateStatusLF)
@@ -349,7 +349,7 @@ UPGRADER:
 					return err
 				}
 
-				p.Processor.OnContentLength(p.contentLength)
+				p.Processor.OnContentLength(p, p.contentLength)
 				err = p.parseTrailer()
 				if err != nil {
 					return err
@@ -402,7 +402,7 @@ UPGRADER:
 				default:
 				}
 
-				p.Processor.OnHeader(p.headerKey, p.headerValue)
+				p.Processor.OnHeader(p, p.headerKey, p.headerValue)
 				p.headerKey = ""
 				p.headerValue = ""
 
@@ -432,7 +432,7 @@ UPGRADER:
 				default:
 				}
 
-				p.Processor.OnHeader(p.headerKey, p.headerValue)
+				p.Processor.OnHeader(p, p.headerKey, p.headerValue)
 				p.headerKey = ""
 				p.headerValue = ""
 
@@ -463,7 +463,7 @@ UPGRADER:
 			cl := p.contentLength
 			left := len(data) - start
 			if left >= cl {
-				p.Processor.OnBody(data[start : start+cl])
+				p.Processor.OnBody(p, data[start:start+cl])
 				p.handleMessage()
 				start += cl
 				i = start - 1
@@ -530,7 +530,7 @@ UPGRADER:
 			cl := p.chunkSize
 			left := len(data) - start
 			if left >= cl {
-				p.Processor.OnBody(data[start : start+cl])
+				p.Processor.OnBody(p, data[start:start+cl])
 				start += cl
 				i = start - 1
 				p.nextState(stateBodyChunkDataCR)
@@ -597,7 +597,7 @@ UPGRADER:
 				if p.headerValue == "" {
 					p.headerValue = string(data[start:i])
 				}
-				p.Processor.OnTrailerHeader(p.headerKey, p.headerValue)
+				p.Processor.OnTrailerHeader(p, p.headerKey, p.headerValue)
 				p.headerKey = ""
 				p.headerValue = ""
 
@@ -625,7 +625,7 @@ UPGRADER:
 				}
 				delete(p.trailer, p.headerKey)
 
-				p.Processor.OnTrailerHeader(p.headerKey, p.headerValue)
+				p.Processor.OnTrailerHeader(p, p.headerKey, p.headerValue)
 				start = i + 1
 				p.headerKey = ""
 				p.headerValue = ""
