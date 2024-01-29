@@ -314,7 +314,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					wsc.Execute = nbhttp.SyncExecutor
 				}
 				nbc.SetSession(wsc)
-				parser.ReadCloser = wsc
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
 					defer func() {
 						if err := recover(); err != nil {
@@ -338,7 +337,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 							return
 						}
 						if nread > 0 {
-							errRead = parser.Read(buffer[:nread])
+							errRead = wsc.Read(buffer[:nread])
 							if err != nil {
 								logging.Debug("websocket Conn Read failed: %v", errRead)
 								c.CloseWithError(errRead)
