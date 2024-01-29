@@ -255,13 +255,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	if err != nil {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 	}
-	if brw.Reader != nil {
-		*brw.Reader = emptyReader
-		brw.Reader = nil
-	}
-	if brw.Writer != nil {
-		*brw.Writer = emptyWriter
-		brw.Writer = nil
+	if brw != nil {
+		if brw.Reader != nil {
+			*brw.Reader = emptyReader
+			brw.Reader = nil
+		}
+		if brw.Writer != nil {
+			*brw.Writer = emptyWriter
+			brw.Writer = nil
+		}
+		brw = nil
 	}
 
 	var wsc *Conn
