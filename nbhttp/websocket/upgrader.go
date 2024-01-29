@@ -68,15 +68,15 @@ func clearBuffer(rw *bufio.ReadWriter) {
 	r.err = nil
 	rw.Reader = nil
 
-	w2 := (*struct {
+	w := (*struct {
 		err error
 		buf []byte
 		n   int
 		wr  io.Writer
 	})(unsafe.Pointer(rw.Writer))
-	w2.err = nil
-	w2.buf = nil
-	w2.wr = nil
+	w.err = nil
+	w.buf = nil
+	w.wr = nil
 	rw.Writer = nil
 }
 
