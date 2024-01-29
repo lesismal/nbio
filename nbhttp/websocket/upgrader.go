@@ -291,7 +291,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		wsc.Engine = parser.Engine
 		wsc.Execute = parser.Execute
 		vt.SetSession(wsc)
-		parser.ReadCloser = wsc
 	case *tls.Conn:
 		// Scenario 2: llib's *tls.Conn.
 		nbc, ok = vt.Conn().(*nbio.Conn)
@@ -376,7 +375,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			wsc = NewConn(u, conn, subprotocol, compress, false)
 			wsc.Engine = parser.Engine
 			wsc.Execute = parser.Execute
-			parser.ReadCloser = wsc
 			nbc.SetSession(wsc)
 		}
 	case *net.TCPConn:
@@ -455,10 +453,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		wsc.openHandler(wsc)
 	}
 
-	if parser != nil {
-		parser.ReadCloser = wsc
-		wsc.Execute = parser.Execute
-	}
+	// if parser != nil {
+	// 	parser.ReadCloser = wsc
+	// 	wsc.Execute = parser.Execute
+	// }
 	wsc.isReadingByParser = isReadingByParser
 	if wsc.isBlockingMod && (!wsc.isReadingByParser) {
 		var handleRead = u.BlockingModHandleRead
