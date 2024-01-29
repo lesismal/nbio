@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
@@ -47,6 +48,9 @@ var (
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
 		ReleaseWebsocketPayload: true,
 	})
+
+	emptyReader bufio.Reader
+	emptyWriter bufio.Writer
 )
 
 type commonFields struct {
@@ -247,9 +251,17 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	if !ok {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
 	}
-	conn, _, err := h.Hijack()
+	conn, brw, err := h.Hijack()
 	if err != nil {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
+	}
+	if brw.Reader != nil {
+		*brw.Reader = emptyReader
+		brw.Reader = nil
+	}
+	if brw.Writer != nil {
+		*brw.Writer = emptyWriter
+		brw.Writer = nil
 	}
 
 	var wsc *Conn
