@@ -269,7 +269,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		if ok {
 			parser = nbResonse.Parser
 			parser.ReadCloser = wsc
-			wsc.execute = parser.Execute
+			wsc.Execute = parser.Execute
 		}
 	}
 

@@ -76,7 +76,7 @@ type Conn struct {
 	buffer                   []byte
 	message                  []byte
 
-	execute func(f func()) bool
+	Execute func(f func()) bool
 }
 
 func (c *Conn) UnderlayerConn() net.Conn {
@@ -140,7 +140,7 @@ func (c *Conn) handleDataFrame(opcode MessageType, fin bool, data []byte) {
 	if c.isBlockingMod {
 		h(c, opcode, fin, data)
 	} else {
-		c.execute(func() {
+		c.Execute(func() {
 			h(c, opcode, fin, data)
 		})
 	}
@@ -150,7 +150,7 @@ func (c *Conn) handleMessage(opcode MessageType, body []byte) {
 	if c.isBlockingMod {
 		c.handleWsMessage(opcode, body)
 	} else {
-		if !c.execute(func() {
+		if !c.Execute(func() {
 			c.handleWsMessage(opcode, body)
 		}) {
 			if len(body) > 0 {
@@ -167,7 +167,7 @@ func (c *Conn) handleProtocolMessage(opcode MessageType, body []byte) {
 			c.Engine.BodyAllocator.Free(body)
 		}
 	} else {
-		if !c.execute(func() {
+		if !c.Execute(func() {
 			c.handleWsMessage(opcode, body)
 			if len(body) > 0 && c.Engine.ReleaseWebsocketPayload {
 				c.Engine.BodyAllocator.Free(body)
