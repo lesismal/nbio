@@ -291,6 +291,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		wsc.Engine = parser.Engine
 		wsc.Execute = parser.Execute
 		vt.SetSession(wsc)
+		if nbhttpConn != nil {
+			nbhttpConn.Parser = nil
+		}
 	case *tls.Conn:
 		// Scenario 2: llib's *tls.Conn.
 		nbc, ok = vt.Conn().(*nbio.Conn)
@@ -312,6 +315,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				wsc.Execute = nbc.Execute
 				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
 					wsc.Execute = nbhttp.SyncExecutor
+				}
+				if nbhttpConn != nil {
+					nbhttpConn.Parser = nil
 				}
 				nbc.SetSession(wsc)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -363,6 +369,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				if parser != nil {
 					wsc.Execute = parser.Execute
 					parser.ReadCloser = wsc
+					if nbhttpConn != nil {
+						nbhttpConn.Parser = nil
+					}
 				}
 			}
 		} else {
@@ -375,6 +384,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			wsc.Engine = parser.Engine
 			wsc.Execute = parser.Execute
 			nbc.SetSession(wsc)
+			if nbhttpConn != nil {
+				nbhttpConn.Parser = nil
+			}
 		}
 	case *net.TCPConn:
 		// Scenario 3: std's *net.TCPConn.
@@ -393,6 +405,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			wsc.Execute = nbc.Execute
 			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
 				wsc.Execute = nbhttp.SyncExecutor
+			}
+			if nbhttpConn != nil {
+				nbhttpConn.Parser = nil
 			}
 			nbc.SetSession(wsc)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
@@ -424,6 +439,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if parser != nil {
 				wsc.Execute = parser.Execute
 				parser.ReadCloser = wsc
+				if nbhttpConn != nil {
+					nbhttpConn.Parser = nil
+				}
 			}
 		}
 	default:
@@ -434,6 +452,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		if parser != nil {
 			wsc.Execute = parser.Execute
 			parser.ReadCloser = wsc
+			if nbhttpConn != nil {
+				nbhttpConn.Parser = nil
+			}
 		}
 	}
 
