@@ -40,7 +40,7 @@ var (
 	DefaultBlockingModSendQueueInitSize = 4
 
 	// DefaultBlockingModSendQueueMaxSize .
-	DefaultBlockingModSendQueueMaxSize = 0
+	DefaultBlockingModSendQueueMaxSize uint16 = 0
 
 	DefaultBlockingModAsyncCloseDelay = time.Second / 10
 
@@ -156,7 +156,7 @@ type Upgrader struct {
 
 	// BlockingModSendQueueInitSize represents the max size of a Conn's send queue,
 	// only takes effect when `BlockingModAsyncWrite` is true.
-	BlockingModSendQueueMaxSize int
+	BlockingModSendQueueMaxSize uint16
 }
 
 // NewUpgrader .

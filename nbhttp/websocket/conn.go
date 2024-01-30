@@ -54,15 +54,15 @@ type Conn struct {
 
 	mux sync.Mutex
 
+	closeErr error
+
 	chSessionInited chan struct{}
 	session         interface{}
 
-	sendQueue     [][]byte
-	sendQueueSize int
-
 	subprotocol string
 
-	closeErr                 error
+	sendQueue                [][]byte
+	sendQueueSize            uint16
 	closed                   bool
 	isClient                 bool
 	remoteCompressionEnabled bool
@@ -739,7 +739,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	}
 
 	if c.sendQueue != nil {
-		if c.sendQueueSize > 0 && len(c.sendQueue) >= c.sendQueueSize {
+		if c.sendQueueSize > 0 && len(c.sendQueue) >= int(c.sendQueueSize) {
 			c.mux.Unlock()
 			c.Engine.BodyAllocator.Free(buf)
 			return ErrMessageSendQuqueIsFull
