@@ -63,20 +63,20 @@ type poller struct {
 
 func (p *poller) addConn(c *Conn) {
 	fd := c.fd
-	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
+	if fd >= len(connsUnix) {
+		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(connsUnix)))
 		return
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
-	p.g.connsUnix[fd] = c
+	connsUnix[fd] = c
 	p.addRead(fd)
 }
 
 func (p *poller) getConn(fd int) *Conn {
-	return p.g.connsUnix[fd]
+	return connsUnix[fd]
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -86,8 +86,8 @@ func (p *poller) deleteConn(c *Conn) {
 	fd := c.fd
 
 	if c.typ != ConnTypeUDPClientFromRead {
-		if c == p.g.connsUnix[fd] {
-			p.g.connsUnix[fd] = nil
+		if c == connsUnix[fd] {
+			connsUnix[fd] = nil
 		}
 		p.deleteEvent(fd)
 	}

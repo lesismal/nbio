@@ -167,9 +167,6 @@ type Config struct {
 	// ClientExecutor sets the executor for client callbacks.
 	ClientExecutor func(f func())
 
-	// TimerExecutor sets the executor for timer callbacks.
-	TimerExecutor func(f func())
-
 	// TLSAllocator sets the buffer allocator for TLS.
 	TLSAllocator tls.Allocator
 
@@ -979,7 +976,6 @@ func NewEngine(conf Config) *Engine {
 		MaxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
 		LockPoller:                   conf.LockPoller,
 		LockListener:                 conf.LockListener,
-		TimerExecute:                 conf.TimerExecutor,
 		EpollMod:                     conf.EpollMod,
 		EPOLLONESHOT:                 conf.EPOLLONESHOT,
 	}

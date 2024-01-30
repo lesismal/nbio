@@ -18,12 +18,11 @@ const (
 )
 
 type Timer struct {
-	name     string
-	executor func(f func())
+	name string
 }
 
-func New(name string, executor func(f func())) *Timer {
-	return &Timer{name: name, executor: executor}
+func New(name string) *Timer {
+	return &Timer{name: name}
 }
 
 // IsTimerRunning .

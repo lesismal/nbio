@@ -32,7 +32,7 @@ const (
 
 var (
 	// MaxOpenFiles .
-	MaxOpenFiles = 1024 * 1024 * 2
+	MaxOpenFiles = 1024*1024 + 8192
 )
 
 // Config Of Engine.
@@ -78,9 +78,6 @@ type Config struct {
 	// UDPReadTimeout sets the timeout for udp sessions.
 	UDPReadTimeout time.Duration
 
-	// TimerExecute sets the executor for timer callbacks.
-	TimerExecute func(f func())
-
 	// Listen is used to create listener for Engine.
 	Listen func(network, addr string) (net.Listener, error)
 
@@ -95,6 +92,11 @@ func NewGopher(conf Config) *Gopher {
 	return NewEngine(conf)
 }
 
+var (
+	initConns sync.Once
+	connsUnix []*Conn
+)
+
 // Engine is a manager of poller.
 type Engine struct {
 	*timer.Timer
@@ -102,8 +104,7 @@ type Engine struct {
 
 	Name string
 
-	Execute      func(f func())
-	TimerExecute func(f func())
+	Execute func(f func())
 
 	mux sync.Mutex
 
@@ -124,8 +125,7 @@ type Engine struct {
 	lockListener                 bool
 	lockPoller                   bool
 
-	connsStd  map[*Conn]struct{}
-	connsUnix []*Conn
+	connsStd map[*Conn]struct{}
 
 	listeners []*poller
 	pollers   []*poller
@@ -151,13 +151,13 @@ func (g *Engine) Stop() {
 	}
 
 	g.mux.Lock()
-	conns := g.connsStd
+	stdConns := g.connsStd
 	g.connsStd = map[*Conn]struct{}{}
-	connsUnix := g.connsUnix
+	unixConns := connsUnix
 	g.mux.Unlock()
 
 	g.wgConn.Done()
-	for c := range conns {
+	for c := range stdConns {
 		if c != nil {
 			cc := c
 			g.Async(func() {
@@ -165,7 +165,7 @@ func (g *Engine) Stop() {
 			})
 		}
 	}
-	for _, c := range connsUnix {
+	for _, c := range unixConns {
 		if c != nil {
 			cc := c
 			g.Async(func() {

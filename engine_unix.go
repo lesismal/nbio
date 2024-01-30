@@ -18,6 +18,9 @@ import (
 
 // Start init and start pollers.
 func (g *Engine) Start() error {
+	initConns.Do(func() {
+		connsUnix = make([]*Conn, MaxOpenFiles)
+	})
 	udpListeners := make([]*net.UDPConn, len(g.addrs))[0:0]
 	switch g.network {
 	case "unix", "tcp", "tcp4", "tcp6":
@@ -131,7 +134,7 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
-		Timer:                        timer.New(conf.Name, conf.TimerExecute),
+		Timer:                        timer.New(conf.Name),
 		Name:                         conf.Name,
 		network:                      conf.Network,
 		addrs:                        conf.Addrs,
@@ -148,7 +151,6 @@ func NewEngine(conf Config) *Engine {
 		lockPoller:                   conf.LockPoller,
 		listeners:                    make([]*poller, len(conf.Addrs))[0:0],
 		pollers:                      make([]*poller, conf.NPoller),
-		connsUnix:                    make([]*Conn, MaxOpenFiles),
 	}
 
 	g.initHandlers()
