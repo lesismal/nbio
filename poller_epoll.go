@@ -261,7 +261,7 @@ func (p *poller) resetRead(fd int) error {
 func (p *poller) setRead(fd int, op int) error {
 	switch p.g.epollMod {
 	case EPOLLET:
-		if op == syscall.EPOLL_CTL_MOD {
+		if op == syscall.EPOLL_CTL_MOD && p.g.EPOLLONESHOT != nbio.EPOLLONESHOT {
 			return nil
 		}
 		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{Fd: int32(fd), Events: syscall.EPOLLERR | syscall.EPOLLHUP | syscall.EPOLLRDHUP | syscall.EPOLLPRI | syscall.EPOLLIN | syscall.EPOLLOUT | EPOLLET | p.g.epollOneshot})
