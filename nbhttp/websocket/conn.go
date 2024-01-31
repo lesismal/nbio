@@ -49,7 +49,7 @@ const (
 
 // Conn .
 type Conn struct {
-	*commonFields
+	commonFields
 	net.Conn
 
 	mux sync.Mutex

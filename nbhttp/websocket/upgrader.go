@@ -70,7 +70,7 @@ type commonFields struct {
 
 // Upgrader .
 type Upgrader struct {
-	*commonFields
+	commonFields
 
 	// Subprotocols .
 	Subprotocols []string
@@ -128,7 +128,7 @@ type Upgrader struct {
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{
-		commonFields: &commonFields{
+		commonFields: commonFields{
 			Engine:                     DefaultEngine,
 			KeepaliveTime:              nbhttp.DefaultKeepaliveTime,
 			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
