@@ -1,7 +1,6 @@
 package websocket
 
 import (
-	"bufio"
 	"crypto/rand"
 	"crypto/sha1"
 	"encoding/base64"
@@ -48,40 +47,7 @@ var (
 	DefaultEngine = nbhttp.NewEngine(nbhttp.Config{
 		ReleaseWebsocketPayload: true,
 	})
-
-	emptyReader bufio.Reader
-	emptyWriter bufio.Writer
 )
-
-//go:nosplit
-func clearBuffer(rw *bufio.ReadWriter) {
-	*rw.Reader = emptyReader
-	*&rw.Writer = &emptyWriter
-	// r := (*struct {
-	// 	buf          []byte
-	// 	rd           io.Reader // reader provided by the client
-	// 	r, w         int       // buf read and write positions
-	// 	err          error
-	// 	lastByte     int // last byte read for UnreadByte; -1 means invalid
-	// 	lastRuneSize int // size of last rune read for UnreadRune; -1 means invalid
-	// })(unsafe.Pointer(rw.Reader))
-	// r.buf = nil
-	// r.rd = nil
-	// r.err = nil
-
-	// w := (*struct {
-	// 	err error
-	// 	buf []byte
-	// 	n   int
-	// 	wr  io.Writer
-	// })(unsafe.Pointer(rw.Writer))
-	// w.err = nil
-	// w.buf = nil
-	// w.wr = nil
-
-	rw.Reader = nil
-	rw.Writer = nil
-}
 
 type commonFields struct {
 	Engine                     *nbhttp.Engine
@@ -281,13 +247,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	if !ok {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, ErrUpgradeNotHijacker)
 	}
-	conn, brw, err := h.Hijack()
+	conn, _, err := h.Hijack()
 	if err != nil {
 		return nil, u.returnError(w, r, http.StatusInternalServerError, err)
-	}
-	if brw != nil {
-		clearBuffer(brw)
-		brw = nil
 	}
 
 	var wsc *Conn
