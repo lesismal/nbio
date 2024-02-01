@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"runtime"
 	"sync"
-	"syscall"
 	"time"
 	"unicode/utf8"
 	"unsafe"
@@ -204,7 +203,7 @@ type Config struct {
 // Engine .
 type Engine struct {
 	*nbio.Engine
-	*Config
+	Config
 
 	CheckUtf8 func(data []byte) bool
 
@@ -230,7 +229,7 @@ type Engine struct {
 
 	ExecuteClient func(f func())
 
-	isOneshot bool
+	// isOneshot bool
 }
 
 // OnOpen registers callback for new connection.
@@ -606,9 +605,9 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	engine._onOpen(conn.Conn)
 	processor := NewServerProcessor()
 	parser := NewParser(conn, engine, processor, false, nbc.Execute)
-	if engine.isOneshot {
-		parser.Execute = SyncExecutor
-	}
+	// if engine.isOneshot {
+	// 	parser.Execute = SyncExecutor
+	// }
 	conn.Parser = parser
 	nbc.SetSession(parser)
 	nbc.OnData(engine.DataHandler)
@@ -693,9 +692,9 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	conn = &Conn{Conn: tlsConn}
 	processor := NewServerProcessor()
 	parser := NewParser(conn, engine, processor, false, nbc.Execute)
-	if engine.isOneshot {
-		parser.Execute = SyncExecutor
-	}
+	// if engine.isOneshot {
+	// 	parser.Execute = SyncExecutor
+	// }
 	parser.Conn = conn
 	parser.Engine = engine
 	conn.Parser = parser
@@ -996,7 +995,7 @@ func NewEngine(conf Config) *Engine {
 
 	engine := &Engine{
 		Engine:        g,
-		Config:        &conf,
+		Config:        conf,
 		_onOpen:       func(c net.Conn) {},
 		_onClose:      func(c net.Conn, err error) {},
 		_onStop:       func() {},
@@ -1036,41 +1035,41 @@ func NewEngine(conf Config) *Engine {
 		c.DataHandler(c, data)
 	})
 
-	engine.isOneshot = (conf.EpollMod == nbio.EPOLLET && conf.EPOLLONESHOT == nbio.EPOLLONESHOT && runtime.GOOS == "linux")
-	if engine.isOneshot {
-		readBufferPool := conf.ReadBufferPool
-		if readBufferPool == nil {
-			readBufferPool = getReadBufferPool(conf.ReadBufferSize)
-		}
+	// engine.isOneshot = (conf.EpollMod == nbio.EPOLLET && conf.EPOLLONESHOT == nbio.EPOLLONESHOT && runtime.GOOS == "linux")
+	// if engine.isOneshot {
+	// 	readBufferPool := conf.ReadBufferPool
+	// 	if readBufferPool == nil {
+	// 		readBufferPool = getReadBufferPool(conf.ReadBufferSize)
+	// 	}
 
-		g.OnRead(func(c *nbio.Conn) {
-			serverExecutor(func() {
-				buf := readBufferPool.Malloc(conf.ReadBufferSize)
-				defer func() {
-					readBufferPool.Free(buf)
-					c.ResetPollerEvent()
-				}()
-				for {
-					n, err := c.Read(buf)
-					if n > 0 && c.DataHandler != nil {
-						c.DataHandler(c, buf[:n])
-					}
-					if errors.Is(err, syscall.EINTR) {
-						continue
-					}
-					if errors.Is(err, syscall.EAGAIN) {
-						break
-					}
-					if err != nil {
-						c.CloseWithError(err)
-					}
-					if n < len(buf) {
-						return
-					}
-				}
-			})
-		})
-	}
+	// 	g.OnRead(func(c *nbio.Conn) {
+	// 		serverExecutor(func() {
+	// 			buf := readBufferPool.Malloc(conf.ReadBufferSize)
+	// 			defer func() {
+	// 				readBufferPool.Free(buf)
+	// 				c.ResetPollerEvent()
+	// 			}()
+	// 			for {
+	// 				n, err := c.Read(buf)
+	// 				if n > 0 && c.DataHandler != nil {
+	// 					c.DataHandler(c, buf[:n])
+	// 				}
+	// 				if errors.Is(err, syscall.EINTR) {
+	// 					continue
+	// 				}
+	// 				if errors.Is(err, syscall.EAGAIN) {
+	// 					break
+	// 				}
+	// 				if err != nil {
+	// 					c.CloseWithError(err)
+	// 				}
+	// 				if n < len(buf) {
+	// 					return
+	// 				}
+	// 			}
+	// 		})
+	// 	})
+	// }
 
 	g.OnStop(func() {
 		engine._onStop()

@@ -128,11 +128,10 @@ type Engine struct {
 	onWrittenSize     func(c *Conn, b []byte, n int)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
-	// onWriteBufferFree func(c *Conn, buffer []byte)
-	beforeRead  func(c *Conn)
-	afterRead   func(c *Conn)
-	beforeWrite func(c *Conn)
-	onStop      func()
+	beforeRead        func(c *Conn)
+	afterRead         func(c *Conn)
+	beforeWrite       func(c *Conn)
+	onStop            func()
 }
 
 // Stop closes listeners/pollers/conns/timer.
