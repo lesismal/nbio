@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/taskpool"
 	"github.com/lesismal/nbio/timer"
 )
 
@@ -83,6 +84,9 @@ type Config struct {
 
 	// ListenUDP is used to create udp listener for Engine.
 	ListenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
+
+	AsyncRead bool
+	IOExecute func(f func([]byte))
 }
 
 // Gopher keeps old type to compatible with new name Engine.
@@ -99,8 +103,9 @@ type Engine struct {
 	sync.WaitGroup
 
 	Execute func(f func())
+	mux     sync.Mutex
 
-	mux sync.Mutex
+	isOneshot bool
 
 	wgConn sync.WaitGroup
 
@@ -125,6 +130,8 @@ type Engine struct {
 	afterRead         func(c *Conn)
 	beforeWrite       func(c *Conn)
 	onStop            func()
+
+	ioTaskPool *taskpool.IOTaskPool
 }
 
 // Stop closes listeners/pollers/conns/timer.

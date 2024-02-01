@@ -13,6 +13,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -93,12 +94,51 @@ type Conn struct {
 
 	execList []func()
 
+	readEvents int32
+
 	DataHandler func(c *Conn, data []byte)
 }
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
 	return c.fd
+}
+
+func (c *Conn) AsyncRead() {
+	cnt := atomic.AddInt32(&c.readEvents, 1)
+	if cnt > 2 {
+		atomic.AddInt32(&c.readEvents, -1)
+		return
+	}
+	p := c.p
+	g := p.g
+	g.IOExecute(func(buffer []byte) {
+		for atomic.AddInt32(&c.readEvents, -1) > 0 {
+			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
+				rc, n, err := c.ReadAndGetConn(buffer)
+				if n > 0 {
+					g.onData(rc, buffer[:n])
+				}
+				g.payback(c, buffer)
+				if errors.Is(err, syscall.EINTR) {
+					continue
+				}
+				if errors.Is(err, syscall.EAGAIN) {
+					break
+				}
+				if err != nil {
+					c.closeWithError(err)
+					break
+				}
+				if n < len(buffer) {
+					break
+				}
+			}
+			if g.isOneshot {
+				c.ResetPollerEvent()
+			}
+		}
+	})
 }
 
 // Read implements Read.

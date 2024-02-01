@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/taskpool"
 	"github.com/lesismal/nbio/timer"
 )
 
@@ -103,6 +104,14 @@ func (g *Engine) Start() error {
 	}
 
 	g.Timer.Start()
+	g.isOneshot = (g.EpollMod == EPOLLET && g.EPOLLONESHOT == EPOLLONESHOT)
+
+	if g.AsyncRead {
+		if g.IOExecute == nil {
+			g.ioTaskPool = taskpool.NewIO(0, 0, 0)
+			g.IOExecute = g.ioTaskPool.Go
+		}
+	}
 
 	if len(g.addrs) == 0 {
 		logging.Info("NBIO Engine[%v] start", g.Name)
