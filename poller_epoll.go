@@ -166,7 +166,9 @@ func (p *poller) readWriteLoop() {
 		p.g.MaxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
+	g := p.g
 	p.shutdown = false
+	isOneshot = g.isOneshot
 	asyncRead := g.AsyncRead
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
@@ -193,17 +195,17 @@ func (p *poller) readWriteLoop() {
 					}
 
 					if ev.Events&epollEventsRead != 0 {
-						if p.g.onRead == nil {
+						if g.onRead == nil {
 							if asyncRead {
 								c.AsyncRead()
 							} else {
-								for i := 0; i < p.g.MaxConnReadTimesPerEventLoop; i++ {
-									buffer := p.g.borrow(c)
+								for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
+									buffer := g.borrow(c)
 									rc, n, err := c.ReadAndGetConn(buffer)
 									if n > 0 {
-										p.g.onData(rc, buffer[:n])
+										g.onData(rc, buffer[:n])
 									}
-									p.g.payback(c, buffer)
+									g.payback(c, buffer)
 									if errors.Is(err, syscall.EINTR) {
 										continue
 									}
@@ -223,7 +225,7 @@ func (p *poller) readWriteLoop() {
 								}
 							}
 						} else {
-							p.g.onRead(c)
+							g.onRead(c)
 						}
 					}
 
