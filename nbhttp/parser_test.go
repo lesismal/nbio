@@ -1,9 +1,7 @@
 package nbhttp
 
 import (
-	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"net"
 	"net/http"
@@ -211,39 +209,40 @@ func newConn() net.Conn {
 	}
 	return conn
 }
-func pirntMessage(w http.ResponseWriter, request *http.Request) {
-	fmt.Printf("----------------------------------------------------------------\n")
-	fmt.Println("OnRequest")
-	fmt.Println("Method:", request.Method)
-	fmt.Println("Path:", request.URL.Path)
-	fmt.Println("Proto:", request.Proto)
-	fmt.Println("Host:", request.URL.Host)
-	fmt.Println("Rawpath:", request.URL.RawPath)
-	fmt.Println("Content-Length:", request.ContentLength)
-	for k, v := range request.Header {
-		fmt.Printf("Header: [\"%v\": \"%v\"]\n", k, v)
-	}
-	for k, v := range request.Trailer {
-		fmt.Printf("Trailer: [\"%v\": \"%v\"]\n", k, v)
-	}
-	body := request.Body
-	if body != nil {
-		nread := 0
-		buffer := make([]byte, 1024)
-		for {
-			n, err := body.Read(buffer)
-			if n > 0 {
-				nread += n
-			}
-			if errors.Is(err, io.EOF) {
-				break
-			}
-		}
-		fmt.Println("body:", string(buffer[:nread]))
-	} else {
-		fmt.Println("body: null")
-	}
-}
+
+// func printMessage(w http.ResponseWriter, request *http.Request) {
+// 	fmt.Printf("----------------------------------------------------------------\n")
+// 	fmt.Println("OnRequest")
+// 	fmt.Println("Method:", request.Method)
+// 	fmt.Println("Path:", request.URL.Path)
+// 	fmt.Println("Proto:", request.Proto)
+// 	fmt.Println("Host:", request.URL.Host)
+// 	fmt.Println("Rawpath:", request.URL.RawPath)
+// 	fmt.Println("Content-Length:", request.ContentLength)
+// 	for k, v := range request.Header {
+// 		fmt.Printf("Header: [\"%v\": \"%v\"]\n", k, v)
+// 	}
+// 	for k, v := range request.Trailer {
+// 		fmt.Printf("Trailer: [\"%v\": \"%v\"]\n", k, v)
+// 	}
+// 	body := request.Body
+// 	if body != nil {
+// 		nread := 0
+// 		buffer := make([]byte, 1024)
+// 		for {
+// 			n, err := body.Read(buffer)
+// 			if n > 0 {
+// 				nread += n
+// 			}
+// 			if errors.Is(err, io.EOF) {
+// 				break
+// 			}
+// 		}
+// 		fmt.Println("body:", string(buffer[:nread]))
+// 	} else {
+// 		fmt.Println("body: null")
+// 	}
+// }
 
 var benchData = []byte("POST /joyent/http-parser HTTP/1.1\r\n" +
 	"Host: github.com\r\n" +
