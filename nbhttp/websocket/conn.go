@@ -448,32 +448,6 @@ func (c *Conn) Read(data []byte) error {
 	return err
 }
 
-// SetCloseHandler .
-func (c *Conn) SetCloseHandler(h func(*Conn, int, string)) {
-	if h != nil {
-		c.closeMessageHandler = h
-	}
-}
-
-// SetPingHandler .
-func (c *Conn) SetPingHandler(h func(*Conn, string)) {
-	if h != nil {
-		c.pingMessageHandler = h
-	}
-}
-
-// SetPongHandler .
-func (c *Conn) SetPongHandler(h func(*Conn, string)) {
-	if h != nil {
-		c.pongMessageHandler = h
-	}
-}
-
-// OnOpen .
-func (c *Conn) OnOpen(h func(*Conn)) {
-	c.openHandler = h
-}
-
 // OnMessage .
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
