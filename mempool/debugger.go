@@ -84,10 +84,11 @@ func (d *debugger) incrFreeSlow(b []byte) {
 }
 
 func (d *debugger) String() string {
-	var ret string
 	if d.on {
-		b, _ := json.Marshal(d)
-		ret = string(b)
+		b, err := json.Marshal(d)
+		if err == nil {
+			return string(b)
+		}
 	}
-	return ret
+	return ""
 }
