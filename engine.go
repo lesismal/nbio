@@ -170,6 +170,10 @@ func (g *Engine) Stop() {
 
 	g.Timer.Stop()
 
+	if g.ioTaskPool != nil {
+		g.ioTaskPool.Stop()
+	}
+
 	for i := 0; i < g.NPoller; i++ {
 		g.pollers[i].stop()
 	}
