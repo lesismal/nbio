@@ -109,6 +109,7 @@ func (g *Engine) Start() error {
 	} else {
 		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.network, strings.Join(g.addrs, `", "`))
 	}
+
 	return nil
 }
 

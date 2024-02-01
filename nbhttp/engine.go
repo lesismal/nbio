@@ -332,7 +332,7 @@ func (e *Engine) startListeners() error {
 				if conf.pAddr != nil {
 					*conf.pAddr = conf.Addr
 				}
-				logging.Info("Engine[%v] Serve HTTPS On: [%v@%v]", e.Engine.Name, conf.Network, conf.Addr)
+				logging.Info("NBHTTP Engine[%v] Serve HTTPS On: [%v@%v]", e.Engine.Name, conf.Network, conf.Addr)
 
 				tlsConfig := conf.TLSConfig
 				if tlsConfig == nil {
@@ -381,7 +381,7 @@ func (e *Engine) startListeners() error {
 					*conf.pAddr = conf.Addr
 				}
 
-				logging.Info("Engine[%v] Serve HTTP On: [%v@%v]", e.Engine.Name, conf.Network, conf.Addr)
+				logging.Info("NBHTTP Engine[%v] Serve HTTP On: [%v@%v]", e.Engine.Name, conf.Network, conf.Addr)
 
 				switch e.IOMod {
 				case IOModMixed:
@@ -420,16 +420,18 @@ func (e *Engine) Start() error {
 		IOModBlocking:    "IOModBlocking",
 		IOModNonBlocking: "IOModNonBlocking",
 	}
+
+	err := e.Engine.Start()
+	if err != nil {
+		return err
+	}
+
 	if e.IOMod == IOModMixed {
 		logging.Info("NBHTTP Engine[%v] Start with %q, MaxBlockingOnline: %v", e.Engine.Name, modNames[e.IOMod], e.MaxBlockingOnline)
 	} else {
 		logging.Info("NBHTTP Engine[%v] Start with %q", e.Engine.Name, modNames[e.IOMod])
 	}
 
-	err := e.Engine.Start()
-	if err != nil {
-		return err
-	}
 	err = e.startListeners()
 	if err != nil {
 		e.Engine.Stop()
