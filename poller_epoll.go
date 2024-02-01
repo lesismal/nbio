@@ -168,7 +168,7 @@ func (p *poller) readWriteLoop() {
 
 	g := p.g
 	p.shutdown = false
-	isOneshot = g.isOneshot
+	isOneshot := g.isOneshot
 	asyncRead := g.AsyncRead
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
