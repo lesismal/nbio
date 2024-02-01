@@ -167,6 +167,7 @@ func (p *poller) readWriteLoop() {
 	}
 
 	p.shutdown = false
+	asyncRead := g.AsyncRead
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
@@ -193,29 +194,33 @@ func (p *poller) readWriteLoop() {
 
 					if ev.Events&epollEventsRead != 0 {
 						if p.g.onRead == nil {
-							for i := 0; i < p.g.MaxConnReadTimesPerEventLoop; i++ {
-								buffer := p.g.borrow(c)
-								rc, n, err := c.ReadAndGetConn(buffer)
-								if n > 0 {
-									p.g.onData(rc, buffer[:n])
+							if asyncRead {
+								c.AsyncRead()
+							} else {
+								for i := 0; i < p.g.MaxConnReadTimesPerEventLoop; i++ {
+									buffer := p.g.borrow(c)
+									rc, n, err := c.ReadAndGetConn(buffer)
+									if n > 0 {
+										p.g.onData(rc, buffer[:n])
+									}
+									p.g.payback(c, buffer)
+									if errors.Is(err, syscall.EINTR) {
+										continue
+									}
+									if errors.Is(err, syscall.EAGAIN) {
+										break
+									}
+									if err != nil {
+										c.closeWithError(err)
+										break
+									}
+									if n < len(buffer) {
+										break
+									}
 								}
-								p.g.payback(c, buffer)
-								if errors.Is(err, syscall.EINTR) {
-									continue
+								if isOneshot {
+									c.ResetPollerEvent()
 								}
-								if errors.Is(err, syscall.EAGAIN) {
-									break
-								}
-								if err != nil {
-									c.closeWithError(err)
-									break
-								}
-								if n < len(buffer) {
-									break
-								}
-							}
-							if isOneshot {
-								c.ResetPollerEvent()
 							}
 						} else {
 							p.g.onRead(c)
