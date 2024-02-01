@@ -869,6 +869,9 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 
 // NewEngine .
 func NewEngine(conf Config) *Engine {
+	if conf.Name == "" {
+		conf.Name = "NB"
+	}
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
