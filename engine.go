@@ -79,7 +79,7 @@ type Config struct {
 	UDPReadTimeout time.Duration
 
 	// TimerExecute sets the executor for timer callbacks.
-	TimerExecute func(f func())
+	// TimerExecute func(f func())
 
 	// Listen is used to create listener for Engine.
 	Listen func(network, addr string) (net.Listener, error)
@@ -97,6 +97,7 @@ func NewGopher(conf Config) *Gopher {
 
 // Engine is a manager of poller.
 type Engine struct {
+	Config
 	*timer.Timer
 	sync.WaitGroup
 
@@ -114,15 +115,15 @@ type Engine struct {
 	listen    func(network, addr string) (net.Listener, error)
 	listenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 
-	pollerNum                    int
-	readBufferSize               int
-	maxWriteBufferSize           int
-	maxConnReadTimesPerEventLoop int
-	udpReadTimeout               time.Duration
-	epollMod                     uint32
-	epollOneshot                 uint32
-	lockListener                 bool
-	lockPoller                   bool
+	// pollerNum                    int
+	// readBufferSize               int
+	// maxWriteBufferSize           int
+	// maxConnReadTimesPerEventLoop int
+	// udpReadTimeout               time.Duration
+	// epollMod                     uint32
+	// epollOneshot                 uint32
+	// lockListener                 bool
+	// lockPoller                   bool
 
 	connsStd  map[*Conn]struct{}
 	connsUnix []*Conn
@@ -181,7 +182,7 @@ func (g *Engine) Stop() {
 
 	g.Timer.Stop()
 
-	for i := 0; i < g.pollerNum; i++ {
+	for i := 0; i < g.NPoller; i++ {
 		g.pollers[i].stop()
 	}
 

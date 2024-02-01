@@ -172,8 +172,8 @@ func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 	var dstConn = c
 	if c.typ == ConnTypeUDPServer {
 		uc, ok := c.connUDP.getConn(c.p, c.fd, rAddr)
-		if g.udpReadTimeout > 0 {
-			uc.SetReadDeadline(time.Now().Add(g.udpReadTimeout))
+		if g.UDPReadTimeout > 0 {
+			uc.SetReadDeadline(time.Now().Add(g.UDPReadTimeout))
 		}
 		if !ok {
 			g.onOpen(uc)
@@ -669,7 +669,7 @@ func (c *Conn) doWrite(b []byte) (int, error) {
 
 func (c *Conn) overflow(n int) bool {
 	g := c.p.g
-	return g.maxWriteBufferSize > 0 && (c.left+n > g.maxWriteBufferSize)
+	return g.MaxWriteBufferSize > 0 && (c.left+n > g.MaxWriteBufferSize)
 }
 
 func (c *Conn) closeWithError(err error) error {

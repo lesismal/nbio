@@ -126,21 +126,11 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
-		Timer:              timer.New(conf.Name, conf.TimerExecute),
-		Name:               conf.Name,
-		network:            conf.Network,
-		addrs:              conf.Addrs,
-		listen:             conf.Listen,
-		listenUDP:          conf.ListenUDP,
-		pollerNum:          conf.NPoller,
-		readBufferSize:     conf.ReadBufferSize,
-		maxWriteBufferSize: conf.MaxWriteBufferSize,
-		udpReadTimeout:     conf.UDPReadTimeout,
-		lockListener:       conf.LockListener,
-		lockPoller:         conf.LockPoller,
-		listeners:          make([]*poller, len(conf.Addrs))[0:0],
-		pollers:            make([]*poller, conf.NPoller),
-		connsStd:           map[*Conn]struct{}{},
+		Config:    conf,
+		Timer:     timer.New(conf.Name, conf.TimerExecute),
+		listeners: make([]*poller, len(conf.Addrs))[0:0],
+		pollers:   make([]*poller, conf.NPoller),
+		connsStd:  map[*Conn]struct{}{},
 	}
 
 	g.initHandlers()

@@ -790,7 +790,6 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		if conn.Trasfered {
 			parser.onClose = nil
 			parser.CloseAndClean(nil)
-			parser = nil
 			return
 		}
 		if parser != nil && parser.ReadCloser != nil {
@@ -853,7 +852,6 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 				if conn.Trasfered {
 					parser.onClose = nil
 					parser.CloseAndClean(nil)
-					parser = nil
 					return
 				}
 				if parser != nil && parser.ReadCloser != nil {

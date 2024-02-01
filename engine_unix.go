@@ -53,7 +53,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
-	for i := 0; i < g.pollerNum; i++ {
+	for i := 0; i < g.NPoller; i++ {
 		p, err := newPoller(g, false, i)
 		if err != nil {
 			for j := 0; j < len(g.listeners); j++ {
@@ -68,8 +68,8 @@ func (g *Engine) Start() error {
 		g.pollers[i] = p
 	}
 
-	for i := 0; i < g.pollerNum; i++ {
-		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
+	for i := 0; i < g.NPoller; i++ {
+		g.pollers[i].ReadBuffer = make([]byte, g.ReadBufferSize)
 		g.Add(1)
 		go g.pollers[i].start()
 	}
@@ -131,24 +131,11 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
-		Timer:                        timer.New(conf.Name),
-		Name:                         conf.Name,
-		network:                      conf.Network,
-		addrs:                        conf.Addrs,
-		listen:                       conf.Listen,
-		listenUDP:                    conf.ListenUDP,
-		pollerNum:                    conf.NPoller,
-		readBufferSize:               conf.ReadBufferSize,
-		maxWriteBufferSize:           conf.MaxWriteBufferSize,
-		maxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
-		udpReadTimeout:               conf.UDPReadTimeout,
-		epollMod:                     conf.EpollMod,
-		epollOneshot:                 conf.EPOLLONESHOT,
-		lockListener:                 conf.LockListener,
-		lockPoller:                   conf.LockPoller,
-		listeners:                    make([]*poller, len(conf.Addrs))[0:0],
-		pollers:                      make([]*poller, conf.NPoller),
-		connsUnix:                    make([]*Conn, MaxOpenFiles),
+		Config:    conf,
+		Timer:     timer.New(conf.Name),
+		listeners: make([]*poller, len(conf.Addrs))[0:0],
+		pollers:   make([]*poller, conf.NPoller),
+		connsUnix: make([]*Conn, MaxOpenFiles),
 	}
 
 	g.initHandlers()
