@@ -113,7 +113,8 @@ func (c *Conn) AsyncRead() {
 	p := c.p
 	g := p.g
 	g.IOExecute(func(buffer []byte) {
-		for atomic.AddInt32(&c.readEvents, -1) > 0 {
+		defer c.ResetPollerEvent()
+		for {
 			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
 				rc, n, err := c.ReadAndGetConn(buffer)
 				if n > 0 {
@@ -128,14 +129,14 @@ func (c *Conn) AsyncRead() {
 				}
 				if err != nil {
 					c.closeWithError(err)
-					break
+					return
 				}
 				if n < len(buffer) {
 					break
 				}
 			}
-			if g.isOneshot {
-				c.ResetPollerEvent()
+			if atomic.AddInt32(&c.readEvents, -1) == 0 {
+				return
 			}
 		}
 	})
