@@ -115,8 +115,7 @@ type Engine struct {
 	listen    func(network, addr string) (net.Listener, error)
 	listenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 
-	connsStd  map[*Conn]struct{}
-	connsUnix []*Conn
+	connsStd map[*Conn]struct{}
 
 	listeners []*poller
 	pollers   []*poller
@@ -143,7 +142,6 @@ func (g *Engine) Stop() {
 	g.mux.Lock()
 	conns := g.connsStd
 	g.connsStd = map[*Conn]struct{}{}
-	connsUnix := g.connsUnix
 	g.mux.Unlock()
 
 	g.wgConn.Done()

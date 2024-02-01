@@ -10,8 +10,12 @@ package nbio
 import (
 	"errors"
 	"net"
+	"sync"
 	"syscall"
 )
+
+var connsUnixInit sync.Once
+var connsUnix []*Conn
 
 func init() {
 	var limit syscall.Rlimit
