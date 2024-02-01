@@ -99,9 +99,9 @@ func (g *Engine) Start() error {
 	// g.Timer.Start()
 
 	if len(g.addrs) == 0 {
-		logging.Info("NBIO[%v] start", g.Name)
+		logging.Info("NBIO Engine[%v] start", g.Name)
 	} else {
-		logging.Info("NBIO[%v] start listen on: [\"%v@%v\"]", g.Name, g.network, strings.Join(g.addrs, `", "`))
+		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.network, strings.Join(g.addrs, `", "`))
 	}
 	return nil
 }

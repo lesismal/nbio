@@ -421,9 +421,9 @@ func (e *Engine) Start() error {
 		IOModNonBlocking: "IOModNonBlocking",
 	}
 	if e.IOMod == IOModMixed {
-		logging.Info("NBHTTP[%v] Start with %q, MaxBlockingOnline: %v", e.Engine.Name, modNames[e.IOMod], e.MaxBlockingOnline)
+		logging.Info("NBHTTP Engine[%v] Start with %q, MaxBlockingOnline: %v", e.Engine.Name, modNames[e.IOMod], e.MaxBlockingOnline)
 	} else {
-		logging.Info("NBHTTP[%v] Start with %q", e.Engine.Name, modNames[e.IOMod])
+		logging.Info("NBHTTP Engine[%v] Start with %q", e.Engine.Name, modNames[e.IOMod])
 	}
 
 	err := e.Engine.Start()

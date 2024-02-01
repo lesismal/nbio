@@ -78,9 +78,6 @@ type Config struct {
 	// UDPReadTimeout sets the timeout for udp sessions.
 	UDPReadTimeout time.Duration
 
-	// TimerExecute sets the executor for timer callbacks.
-	// TimerExecute func(f func())
-
 	// Listen is used to create listener for Engine.
 	Listen func(network, addr string) (net.Listener, error)
 
@@ -101,10 +98,7 @@ type Engine struct {
 	*timer.Timer
 	sync.WaitGroup
 
-	Name string
-
-	Execute      func(f func())
-	TimerExecute func(f func())
+	Execute func(f func())
 
 	mux sync.Mutex
 
