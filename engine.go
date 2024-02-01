@@ -115,16 +115,6 @@ type Engine struct {
 	listen    func(network, addr string) (net.Listener, error)
 	listenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 
-	// pollerNum                    int
-	// readBufferSize               int
-	// maxWriteBufferSize           int
-	// maxConnReadTimesPerEventLoop int
-	// udpReadTimeout               time.Duration
-	// epollMod                     uint32
-	// epollOneshot                 uint32
-	// lockListener                 bool
-	// lockPoller                   bool
-
 	connsStd  map[*Conn]struct{}
 	connsUnix []*Conn
 

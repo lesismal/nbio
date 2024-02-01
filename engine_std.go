@@ -53,7 +53,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
-	for i := 0; i < g.pollerNum; i++ {
+	for i := 0; i < g.NPoller; i++ {
 		p, err := newPoller(g, false, i)
 		if err != nil {
 			for j := 0; j < len(g.listeners); j++ {
@@ -68,7 +68,7 @@ func (g *Engine) Start() error {
 		g.pollers[i] = p
 	}
 
-	for i := 0; i < g.pollerNum; i++ {
+	for i := 0; i < g.NPoller; i++ {
 		g.Add(1)
 		go g.pollers[i].start()
 	}
@@ -137,7 +137,7 @@ func NewEngine(conf Config) *Engine {
 
 	g.OnReadBufferAlloc(func(c *Conn) []byte {
 		if c.ReadBuffer == nil {
-			c.ReadBuffer = make([]byte, g.readBufferSize)
+			c.ReadBuffer = make([]byte, g.ReadBufferSize)
 		}
 		return c.ReadBuffer
 	})

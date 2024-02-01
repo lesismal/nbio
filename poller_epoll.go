@@ -164,7 +164,7 @@ func (p *poller) readWriteLoop() {
 	isOneshot := p.g.EpollMod == EPOLLET && p.g.EPOLLONESHOT == EPOLLONESHOT
 
 	if p.g.onRead == nil && p.g.EpollMod == EPOLLET {
-		p.g.maxConnReadTimesPerEventLoop = 1<<31 - 1
+		p.g.MaxConnReadTimesPerEventLoop = 1<<31 - 1
 	}
 
 	p.shutdown = false
@@ -194,7 +194,7 @@ func (p *poller) readWriteLoop() {
 
 					if ev.Events&epollEventsRead != 0 {
 						if p.g.onRead == nil {
-							for i := 0; i < p.g.maxConnReadTimesPerEventLoop; i++ {
+							for i := 0; i < p.g.MaxConnReadTimesPerEventLoop; i++ {
 								buffer := p.g.borrow(c)
 								rc, n, err := c.ReadAndGetConn(buffer)
 								if n > 0 {
