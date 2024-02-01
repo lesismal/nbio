@@ -49,7 +49,7 @@ const (
 
 // Conn .
 type Conn struct {
-	commonFields
+	*commonFields
 	net.Conn
 
 	mux sync.Mutex
@@ -61,10 +61,14 @@ type Conn struct {
 
 	subprotocol string
 
+	compressionLevel int
+	onClose          func(c *Conn, err error)
+
 	sendQueue                [][]byte
 	sendQueueSize            uint16
 	closed                   bool
 	isClient                 bool
+	enableCompression        bool
 	remoteCompressionEnabled bool
 	enableWriteCompression   bool
 	isBlockingMod            bool
@@ -76,6 +80,7 @@ type Conn struct {
 	buffer                   []byte
 	message                  []byte
 
+	Engine  *nbhttp.Engine
 	Execute func(f func()) bool
 }
 
@@ -816,12 +821,25 @@ func (c *Conn) Subprotocol() string {
 	return c.subprotocol
 }
 
-func NewConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool, asyncWrite bool) *Conn {
+func NewClientConn(opt *Options, c net.Conn, subprotocol string, remoteCompressionEnabled bool, asyncWrite bool) *Conn {
+	return newConn(opt, c, subprotocol, remoteCompressionEnabled, asyncWrite, true)
+}
+
+func NewServerConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool, asyncWrite bool) *Conn {
+	return newConn(u, c, subprotocol, remoteCompressionEnabled, asyncWrite, false)
+}
+
+func newConn(u *Upgrader, c net.Conn, subprotocol string, remoteCompressionEnabled bool, asyncWrite bool, isClient bool) *Conn {
 	wsc := &Conn{
-		commonFields:             u.commonFields,
+		commonFields:             &u.commonFields,
+		Engine:                   u.Engine,
 		Conn:                     c,
 		subprotocol:              subprotocol,
+		enableCompression:        u.enableCompression,
 		remoteCompressionEnabled: remoteCompressionEnabled,
+		compressionLevel:         u.compressionLevel,
+		onClose:                  u.onClose,
+		isClient:                 isClient,
 	}
 	wsc.EnableWriteCompression(remoteCompressionEnabled)
 	if asyncWrite {

@@ -28,6 +28,7 @@ const (
 type Dialer struct {
 	Engine *nbhttp.Engine
 
+	Options  *Options
 	Upgrader *Upgrader
 
 	Jar http.CookieJar
@@ -62,9 +63,12 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		defer d.Cancel()
 	}
 
-	upgrader := d.Upgrader
-	if upgrader == nil {
-		return nil, nil, errors.New("invalid Upgrader: nil")
+	options := d.Options
+	if options == nil {
+		options = d.Upgrader
+	}
+	if options == nil {
+		return nil, nil, errors.New("invalid Options: nil")
 	}
 
 	challengeKey, err := challengeKey()
@@ -244,7 +248,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 			break
 		}
 
-		wsConn = NewConn(upgrader, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled, false)
+		wsConn = NewClientConn(options, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled, false)
 		wsConn.isClient = true
 		wsConn.Engine = parser.Engine
 		wsConn.Execute = parser.Execute

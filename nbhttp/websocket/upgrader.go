@@ -50,13 +50,9 @@ var (
 )
 
 type commonFields struct {
-	Engine                     *nbhttp.Engine
 	KeepaliveTime              time.Duration
 	MessageLengthLimit         int
 	BlockingModAsyncCloseDelay time.Duration
-
-	enableCompression bool
-	compressionLevel  int
 
 	pingMessageHandler  func(c *Conn, appData string)
 	pongMessageHandler  func(c *Conn, appData string)
@@ -65,12 +61,20 @@ type commonFields struct {
 	openHandler      func(*Conn)
 	messageHandler   func(c *Conn, messageType MessageType, data []byte)
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
-	onClose          func(c *Conn, err error)
+}
+
+type Options = Upgrader
+
+func NewOptions() *Options {
+	return NewUpgrader()
 }
 
 // Upgrader .
 type Upgrader struct {
 	commonFields
+
+	// Engine .
+	Engine *nbhttp.Engine
 
 	// Subprotocols .
 	Subprotocols []string
@@ -123,17 +127,21 @@ type Upgrader struct {
 	// BlockingModSendQueueInitSize represents the max size of a Conn's send queue,
 	// only takes effect when `BlockingModAsyncWrite` is true.
 	BlockingModSendQueueMaxSize uint16
+
+	enableCompression bool
+	compressionLevel  int
+	onClose           func(c *Conn, err error)
 }
 
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
-			Engine:                     DefaultEngine,
 			KeepaliveTime:              nbhttp.DefaultKeepaliveTime,
 			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
-			compressionLevel:           defaultCompressionLevel,
 		},
+		compressionLevel:               defaultCompressionLevel,
+		Engine:                         DefaultEngine,
 		BlockingModReadBufferSize:      DefaultBlockingReadBufferSize,
 		BlockingModAsyncWrite:          DefaultBlockingModAsyncWrite,
 		BlockingModHandleRead:          DefaultBlockingModHandleRead,
@@ -287,7 +295,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		if !ok {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
-		wsc = NewConn(u, conn, subprotocol, compress, false)
+		wsc = NewServerConn(u, conn, subprotocol, compress, false)
 		wsc.Engine = parser.Engine
 		wsc.Execute = parser.Execute
 		vt.SetSession(wsc)
@@ -310,7 +318,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					nbhttpConn.Trasfered = true
 				}
 				vt.ResetRawInput()
-				wsc = NewConn(u, vt, subprotocol, compress, false)
+				wsc = NewServerConn(u, vt, subprotocol, compress, false)
 				wsc.Engine = engine
 				wsc.Execute = nbc.Execute
 				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
@@ -363,7 +371,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				}
 			} else {
 				// 2.1.2 Don't transfer the conn to poller.
-				wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
+				wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 				wsc.isBlockingMod = true
 				getParser()
 				if parser != nil {
@@ -380,7 +388,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if !ok {
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 			}
-			wsc = NewConn(u, conn, subprotocol, compress, false)
+			wsc = NewServerConn(u, conn, subprotocol, compress, false)
 			wsc.Engine = parser.Engine
 			wsc.Execute = parser.Execute
 			nbc.SetSession(wsc)
@@ -400,7 +408,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				nbhttpConn.Trasfered = true
 			}
 
-			wsc = NewConn(u, nbc, subprotocol, compress, false)
+			wsc = NewServerConn(u, nbc, subprotocol, compress, false)
 			wsc.Engine = engine
 			wsc.Execute = nbc.Execute
 			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
@@ -433,7 +441,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			}
 		} else {
 			// 3.2 Don't transfer the conn to poller.
-			wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
+			wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 			wsc.isBlockingMod = true
 			getParser()
 			if parser != nil {
@@ -446,7 +454,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 	default:
 		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
-		wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
+		wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 		wsc.isBlockingMod = true
 		getParser()
 		if parser != nil {
