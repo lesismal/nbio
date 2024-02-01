@@ -175,7 +175,6 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 
 func newParser(isClient bool) *Parser {
 	mux := &http.ServeMux{}
-	// mux.HandleFunc("/", pirntMessage)
 	engine := NewEngine(Config{
 		Handler: mux,
 	})

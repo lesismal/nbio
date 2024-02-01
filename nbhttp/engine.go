@@ -111,9 +111,6 @@ type Config struct {
 	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
 	NPoller int
 
-	// NParser represents parser goroutine num, it's set to NPoller by default.
-	NParser int
-
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
 	ReadLimit int
 
@@ -880,9 +877,6 @@ func NewEngine(conf Config) *Engine {
 	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU()
-	}
-	if conf.NParser <= 0 {
-		conf.NParser = conf.NPoller
 	}
 	if conf.ReadLimit <= 0 {
 		conf.ReadLimit = DefaultHTTPReadLimit

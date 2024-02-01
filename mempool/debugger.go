@@ -6,17 +6,19 @@ import (
 	"sync/atomic"
 )
 
+type sizeMap struct {
+	MallocCount int64 `json:"MallocCount"`
+	FreeCount   int64 `json:"FreeCount"`
+	NeedFree    int64 `json:"NeedFree"`
+}
+
 type debugger struct {
 	mux         sync.Mutex
 	on          bool
-	MallocCount int64
-	FreeCount   int64
-	NeedFree    int64
-	SizeMap     map[int]*struct {
-		MallocCount int64
-		FreeCount   int64
-		NeedFree    int64
-	}
+	MallocCount int64            `json:"MallocCount"`
+	FreeCount   int64            `json:"FreeCount"`
+	NeedFree    int64            `json:"NeedFree"`
+	SizeMap     map[int]*sizeMap `json:"SizeMap"`
 }
 
 func (d *debugger) SetDebug(dbg bool) {
@@ -35,21 +37,13 @@ func (d *debugger) incrMallocSlow(b []byte) {
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	if d.SizeMap == nil {
-		d.SizeMap = map[int]*struct {
-			MallocCount int64
-			FreeCount   int64
-			NeedFree    int64
-		}{}
+		d.SizeMap = map[int]*sizeMap{}
 	}
 	if v, ok := d.SizeMap[size]; ok {
 		v.MallocCount++
 		v.NeedFree++
 	} else {
-		d.SizeMap[size] = &struct {
-			MallocCount int64
-			FreeCount   int64
-			NeedFree    int64
-		}{
+		d.SizeMap[size] = &sizeMap{
 			MallocCount: 1,
 			NeedFree:    1,
 		}
@@ -72,11 +66,7 @@ func (d *debugger) incrFreeSlow(b []byte) {
 		v.FreeCount++
 		v.NeedFree--
 	} else {
-		d.SizeMap[size] = &struct {
-			MallocCount int64
-			FreeCount   int64
-			NeedFree    int64
-		}{
+		d.SizeMap[size] = &sizeMap{
 			MallocCount: 1,
 			NeedFree:    -1,
 		}

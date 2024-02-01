@@ -45,7 +45,7 @@ type Response struct {
 
 // Hijack .
 func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	if res.Parser.Processor == nil {
+	if res.Parser == nil {
 		return nil, nil, errors.New("nil Proccessor")
 	}
 	res.hijacked = true
