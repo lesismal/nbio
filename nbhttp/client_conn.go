@@ -266,9 +266,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 
 			c.conn = nbc
 			processor := NewClientProcessor(c, c.onResponse)
-			parser := NewParser(processor, true, engine.ReadLimit, nbc.Execute)
-			parser.Conn = nbc
-			parser.Engine = engine
+			parser := NewParser(nbc, engine, processor, true, nbc.Execute)
 			parser.OnClose(func(p *Parser, err error) {
 				c.CloseWithError(err)
 			})
@@ -321,7 +319,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			nbhttpConn := &Conn{Conn: tlsConn}
 			c.conn = nbhttpConn
 			processor := NewClientProcessor(c, c.onResponse)
-			parser := NewParser(processor, true, engine.ReadLimit, nbc.Execute)
+			parser := NewParser(nbhttpConn, engine, processor, true, nbc.Execute)
 			parser.Conn = nbhttpConn
 			parser.Engine = engine
 			parser.OnClose(func(p *Parser, err error) {

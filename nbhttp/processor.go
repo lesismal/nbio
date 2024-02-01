@@ -5,9 +5,7 @@
 package nbhttp
 
 import (
-	"errors"
 	"fmt"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -87,48 +85,41 @@ func releaseClientResponse(res *http.Response) {
 
 // Processor .
 type Processor interface {
-	Conn() net.Conn
-	OnMethod(method string)
-	OnURL(uri string) error
-	OnProto(proto string) error
-	OnStatus(code int, status string)
-	OnHeader(key, value string)
-	OnContentLength(contentLength int)
-	OnBody(data []byte)
-	OnTrailerHeader(key, value string)
+	// Conn() net.Conn
+	OnMethod(parser *Parser, method string)
+	OnURL(parser *Parser, uri string) error
+	OnProto(parser *Parser, proto string) error
+	OnStatus(parser *Parser, code int, status string)
+	OnHeader(parser *Parser, key, value string)
+	OnContentLength(parser *Parser, contentLength int)
+	OnBody(parser *Parser, data []byte)
+	OnTrailerHeader(parser *Parser, key, value string)
 	OnComplete(parser *Parser)
-	Close(p *Parser, err error)
+	Close(parser *Parser, err error)
+	Clean(parser *Parser)
 }
+
+var (
+	emptyServerProcessor = ServerProcessor{}
+	emptyClientProcessor = ClientProcessor{}
+)
 
 // ServerProcessor .
 type ServerProcessor struct {
-	// active int32
-
-	// mux     sync.Mutex
-	conn    net.Conn
-	parser  *Parser
 	request *http.Request
-	handler http.Handler
-	// executor func(index int, f func())
-
-	// resQueue       []*Response
-	keepaliveTime  time.Duration
-	enableSendfile bool
-	// isUpgrade      bool
-	remoteAddr string
 }
 
 // Conn .
-func (p *ServerProcessor) Conn() net.Conn {
-	return p.conn
-}
+// func (p *ServerProcessor) Conn() net.Conn {
+// 	return nil
+// }
 
 // OnMethod .
-func (p *ServerProcessor) OnMethod(method string) {
+func (p *ServerProcessor) OnMethod(parser *Parser, method string) {
 	if p.request == nil {
 		p.request = requestPool.Get().(*http.Request)
-		if p.parser != nil {
-			*p.request = *p.parser.Engine.emptyRequest
+		if parser != nil {
+			*p.request = *parser.Engine.emptyRequest
 		}
 		p.request.Method = method
 		p.request.Header = http.Header{}
@@ -138,7 +129,7 @@ func (p *ServerProcessor) OnMethod(method string) {
 }
 
 // OnURL .
-func (p *ServerProcessor) OnURL(rawurl string) error {
+func (p *ServerProcessor) OnURL(parser *Parser, rawurl string) error {
 	p.request.RequestURI = rawurl
 
 	justAuthority := p.request.Method == "CONNECT" && !strings.HasPrefix(rawurl, "/")
@@ -159,7 +150,7 @@ func (p *ServerProcessor) OnURL(rawurl string) error {
 }
 
 // OnProto .
-func (p *ServerProcessor) OnProto(proto string) error {
+func (p *ServerProcessor) OnProto(parser *Parser, proto string) error {
 	protoMajor, protoMinor, ok := http.ParseHTTPVersion(proto)
 	if !ok {
 		return fmt.Errorf("%s %q", "malformed HTTP version", proto)
@@ -171,12 +162,12 @@ func (p *ServerProcessor) OnProto(proto string) error {
 }
 
 // OnStatus .
-func (p *ServerProcessor) OnStatus(code int, status string) {
+func (p *ServerProcessor) OnStatus(parser *Parser, code int, status string) {
 
 }
 
 // OnHeader .
-func (p *ServerProcessor) OnHeader(key, value string) {
+func (p *ServerProcessor) OnHeader(parser *Parser, key, value string) {
 	values := p.request.Header[key]
 	values = append(values, value)
 	p.request.Header[key] = values
@@ -184,12 +175,12 @@ func (p *ServerProcessor) OnHeader(key, value string) {
 }
 
 // OnContentLength .
-func (p *ServerProcessor) OnContentLength(contentLength int) {
+func (p *ServerProcessor) OnContentLength(parser *Parser, contentLength int) {
 	p.request.ContentLength = int64(contentLength)
 }
 
 // OnBody .
-func (p *ServerProcessor) OnBody(data []byte) {
+func (p *ServerProcessor) OnBody(parser *Parser, data []byte) {
 	if p.request.Body == nil {
 		p.request.Body = NewBodyReader(data)
 	} else {
@@ -198,7 +189,7 @@ func (p *ServerProcessor) OnBody(data []byte) {
 }
 
 // OnTrailerHeader .
-func (p *ServerProcessor) OnTrailerHeader(key, value string) {
+func (p *ServerProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 	if p.request.Trailer == nil {
 		p.request.Trailer = http.Header{}
 	}
@@ -207,20 +198,18 @@ func (p *ServerProcessor) OnTrailerHeader(key, value string) {
 
 // OnComplete .
 func (p *ServerProcessor) OnComplete(parser *Parser) {
-	// p.mux.Lock()
 	request := p.request
 	p.request = nil
-	// p.mux.Unlock()
 
 	if request == nil {
 		return
 	}
 
-	if p.conn != nil {
-		request.RemoteAddr = p.remoteAddr
-		if parser.Engine.WriteTimeout > 0 {
-			p.conn.SetWriteDeadline(time.Now().Add(parser.Engine.WriteTimeout))
-		}
+	engine := parser.Engine
+	conn := parser.Conn
+	request.RemoteAddr = conn.RemoteAddr().String()
+	if parser.Engine.WriteTimeout > 0 {
+		conn.SetWriteDeadline(time.Now().Add(engine.WriteTimeout))
 	}
 
 	if request.URL.Host == "" {
@@ -263,69 +252,57 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 		request.Body = NewBodyReader(nil)
 	}
 
-	response := NewResponse(p.parser, request, p.enableSendfile)
+	response := NewResponse(parser, request)
 	if !parser.Execute(func() {
-		p.handler.ServeHTTP(response, request)
-		p.flushResponse(response)
+		engine.Handler.ServeHTTP(response, request)
+		p.flushResponse(parser, response)
 	}) {
-		releaseRequest(request, p.parser.Engine.RetainHTTPBody)
+		releaseRequest(request, engine.RetainHTTPBody)
 	}
 }
 
-func (p *ServerProcessor) flushResponse(res *Response) {
-	if p.conn != nil {
+func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
+	conn := parser.Conn
+	engine := parser.Engine
+	if conn != nil {
 		req := res.request
 		if !res.hijacked {
 			res.eoncodeHead()
-			if err := res.flushTrailer(p.conn); err != nil {
-				p.conn.Close()
-				releaseRequest(req, p.parser.Engine.RetainHTTPBody)
+			if err := res.flushTrailer(conn); err != nil {
+				conn.Close()
+				releaseRequest(req, engine.RetainHTTPBody)
 				releaseResponse(res)
 				return
 			}
 			if req.Close {
 				// the data may still in the send queue
-				p.conn.Close()
-			} else if p.parser == nil || p.parser.Reader == nil {
-				p.conn.SetReadDeadline(time.Now().Add(p.keepaliveTime))
+				conn.Close()
+			} else if parser.ReadCloser == nil {
+				conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 			}
 		}
-		releaseRequest(req, p.parser.Engine.RetainHTTPBody)
+		releaseRequest(req, engine.RetainHTTPBody)
 		releaseResponse(res)
 	}
 }
 
-// Close .
-func (p *ServerProcessor) Close(parser *Parser, err error) {
+// Clean .
+func (p *ServerProcessor) Clean(parser *Parser) {
 	if p.request != nil {
 		releaseRequest(p.request, parser.Engine.RetainHTTPBody)
 		p.request = nil
 	}
+	*p = emptyServerProcessor
+}
+
+// Close .
+func (p *ServerProcessor) Close(parser *Parser, err error) {
+	p.Clean(parser)
 }
 
 // NewServerProcessor .
-func NewServerProcessor(conn net.Conn, handler http.Handler, keepaliveTime time.Duration, enableSendfile bool) Processor {
-	if handler == nil {
-		panic(errors.New("invalid handler for ServerProcessor: nil"))
-	}
-	// p := serverProcessorPool.Get().(*ServerProcessor)
-	// p.conn = conn
-	// p.handler = handler
-	// p.executor = executor
-	// p.keepaliveTime = keepaliveTime
-	// p.enableSendfile = enableSendfile
-	// p.remoteAddr = conn.RemoteAddr().String()
-	p := &ServerProcessor{
-		conn:           conn,
-		handler:        handler,
-		keepaliveTime:  keepaliveTime,
-		enableSendfile: enableSendfile,
-	}
-	if conn != nil {
-		p.remoteAddr = conn.RemoteAddr().String()
-	}
-
-	return p
+func NewServerProcessor() Processor {
+	return &ServerProcessor{}
 }
 
 // ClientProcessor .
@@ -336,24 +313,24 @@ type ClientProcessor struct {
 }
 
 // Conn .
-func (p *ClientProcessor) Conn() net.Conn {
-	if p.conn != nil {
-		return p.conn.conn
-	}
-	return nil
-}
+// func (p *ClientProcessor) Conn() net.Conn {
+// 	if p.conn != nil {
+// 		return p.conn.conn
+// 	}
+// 	return nil
+// }
 
 // OnMethod .
-func (p *ClientProcessor) OnMethod(method string) {
+func (p *ClientProcessor) OnMethod(parser *Parser, method string) {
 }
 
 // OnURL .
-func (p *ClientProcessor) OnURL(uri string) error {
+func (p *ClientProcessor) OnURL(parser *Parser, uri string) error {
 	return nil
 }
 
 // OnProto .
-func (p *ClientProcessor) OnProto(proto string) error {
+func (p *ClientProcessor) OnProto(parser *Parser, proto string) error {
 	protoMajor, protoMinor, ok := http.ParseHTTPVersion(proto)
 	if !ok {
 		return fmt.Errorf("%s %q", "malformed HTTP version", proto)
@@ -375,23 +352,23 @@ func (p *ClientProcessor) OnProto(proto string) error {
 }
 
 // OnStatus .
-func (p *ClientProcessor) OnStatus(code int, status string) {
+func (p *ClientProcessor) OnStatus(parser *Parser, code int, status string) {
 	p.response.StatusCode = code
 	p.response.Status = status
 }
 
 // OnHeader .
-func (p *ClientProcessor) OnHeader(key, value string) {
+func (p *ClientProcessor) OnHeader(parser *Parser, key, value string) {
 	p.response.Header.Add(key, value)
 }
 
 // OnContentLength .
-func (p *ClientProcessor) OnContentLength(contentLength int) {
+func (p *ClientProcessor) OnContentLength(parser *Parser, contentLength int) {
 	p.response.ContentLength = int64(contentLength)
 }
 
 // OnBody .
-func (p *ClientProcessor) OnBody(data []byte) {
+func (p *ClientProcessor) OnBody(parser *Parser, data []byte) {
 	if p.response.Body == nil {
 		p.response.Body = NewBodyReader(data)
 	} else {
@@ -400,7 +377,7 @@ func (p *ClientProcessor) OnBody(data []byte) {
 }
 
 // OnTrailerHeader .
-func (p *ClientProcessor) OnTrailerHeader(key, value string) {
+func (p *ClientProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 	if p.response.Trailer == nil {
 		p.response.Trailer = http.Header{}
 	}
@@ -432,12 +409,17 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 	}
 }
 
-// Close .
-func (p *ClientProcessor) Close(parser *Parser, err error) {
+func (p *ClientProcessor) Clean(parser *Parser) {
 	if p.response != nil {
 		releaseClientResponse(p.response)
 	}
+	*p = emptyClientProcessor
+}
+
+// Close .
+func (p *ClientProcessor) Close(parser *Parser, err error) {
 	p.conn.CloseWithError(err)
+	p.Clean(parser)
 }
 
 // NewClientProcessor .
@@ -452,52 +434,57 @@ func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err e
 type EmptyProcessor struct{}
 
 // Conn .
-func (p *EmptyProcessor) Conn() net.Conn {
-	return nil
-}
+// func (p *EmptyProcessor) Conn() net.Conn {
+// 	return nil
+// }
 
 // OnMethod .
-func (p *EmptyProcessor) OnMethod(method string) {
+func (p *EmptyProcessor) OnMethod(parser *Parser, method string) {
 
 }
 
 // OnURL .
-func (p *EmptyProcessor) OnURL(uri string) error {
+func (p *EmptyProcessor) OnURL(parser *Parser, uri string) error {
 	return nil
 }
 
 // OnProto .
-func (p *EmptyProcessor) OnProto(proto string) error {
+func (p *EmptyProcessor) OnProto(parser *Parser, proto string) error {
 	return nil
 }
 
 // OnStatus .
-func (p *EmptyProcessor) OnStatus(code int, status string) {
+func (p *EmptyProcessor) OnStatus(parser *Parser, code int, status string) {
 
 }
 
 // OnHeader .
-func (p *EmptyProcessor) OnHeader(key, value string) {
+func (p *EmptyProcessor) OnHeader(parser *Parser, key, value string) {
 
 }
 
 // OnContentLength .
-func (p *EmptyProcessor) OnContentLength(contentLength int) {
+func (p *EmptyProcessor) OnContentLength(parser *Parser, contentLength int) {
 
 }
 
 // OnBody .
-func (p *EmptyProcessor) OnBody(data []byte) {
+func (p *EmptyProcessor) OnBody(parser *Parser, data []byte) {
 
 }
 
 // OnTrailerHeader .
-func (p *EmptyProcessor) OnTrailerHeader(key, value string) {
+func (p *EmptyProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 
 }
 
 // OnComplete .
 func (p *EmptyProcessor) OnComplete(parser *Parser) {
+
+}
+
+// Clean .
+func (p *EmptyProcessor) Clean(parser *Parser) {
 
 }
 

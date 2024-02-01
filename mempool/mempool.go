@@ -8,29 +8,12 @@ import (
 	"sync"
 )
 
-type Allocator interface {
-	Malloc(size int) []byte
-	Realloc(buf []byte, size int) []byte
-	Append(buf []byte, more ...byte) []byte
-	AppendString(buf []byte, more string) []byte
-	Free(buf []byte)
-}
-
-// DefaultMemPool .
-var DefaultMemPool = New(1024, 1024*1024*1024)
-
 // MemPool .
 type MemPool struct {
-	// Debug bool
-	// mux   sync.Mutex
-
+	*debugger
 	bufSize  int
 	freeSize int
 	pool     *sync.Pool
-
-	// allocCnt    uint64
-	// freeCnt     uint64
-	// allocStacks map[uintptr]string
 }
 
 // New .
@@ -46,6 +29,7 @@ func New(bufSize, freeSize int) Allocator {
 	}
 
 	mp := &MemPool{
+		debugger: &debugger{},
 		bufSize:  bufSize,
 		freeSize: freeSize,
 		pool:     &sync.Pool{},
@@ -55,21 +39,25 @@ func New(bufSize, freeSize int) Allocator {
 		buf := make([]byte, bufSize)
 		return &buf
 	}
-
 	return mp
 }
 
 // Malloc .
 func (mp *MemPool) Malloc(size int) []byte {
+	var ret []byte
 	if size > mp.freeSize {
-		return make([]byte, size)
+		ret = make([]byte, size)
+		mp.incrMalloc(ret)
+		return ret
 	}
 	pbuf := mp.pool.Get().(*[]byte)
 	n := cap(*pbuf)
 	if n < size {
 		*pbuf = append((*pbuf)[:n], make([]byte, size-n)...)
 	}
-	return (*pbuf)[:size]
+	ret = (*pbuf)[:size]
+	mp.incrMalloc(ret)
+	return ret
 }
 
 // Realloc .
@@ -104,71 +92,9 @@ func (mp *MemPool) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (mp *MemPool) Free(buf []byte) {
+	mp.incrFree(buf)
 	if cap(buf) > mp.freeSize {
 		return
 	}
 	mp.pool.Put(&buf)
-}
-
-// stdAllocator .
-type stdAllocator struct{}
-
-// Malloc .
-func (a *stdAllocator) Malloc(size int) []byte {
-	return make([]byte, size)
-}
-
-// Realloc .
-func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
-	}
-	newBuf := make([]byte, size)
-	copy(newBuf, buf)
-	return newBuf
-}
-
-// Free .
-func (a *stdAllocator) Free(buf []byte) {
-}
-
-func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
-	return append(buf, more...)
-}
-
-func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
-	return append(buf, more...)
-}
-
-func NewSTD() Allocator {
-	return &stdAllocator{}
-}
-
-// Malloc exports default package method.
-func Malloc(size int) []byte {
-	return DefaultMemPool.Malloc(size)
-}
-
-// Realloc exports default package method.
-func Realloc(buf []byte, size int) []byte {
-	return DefaultMemPool.Realloc(buf, size)
-}
-
-// Append exports default package method.
-func Append(buf []byte, more ...byte) []byte {
-	return DefaultMemPool.Append(buf, more...)
-}
-
-// AppendString exports default package method.
-func AppendString(buf []byte, more string) []byte {
-	return DefaultMemPool.AppendString(buf, more)
-}
-
-// Free exports default package method.
-func Free(buf []byte) {
-	DefaultMemPool.Free(buf)
-}
-
-func Init(bufSize, freeSize int) {
-	DefaultMemPool = New(bufSize, freeSize)
 }

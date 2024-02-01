@@ -131,7 +131,7 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
-		Timer:                        timer.New(conf.Name, conf.TimerExecute),
+		Timer:                        timer.New(conf.Name),
 		Name:                         conf.Name,
 		network:                      conf.Network,
 		addrs:                        conf.Addrs,
