@@ -105,15 +105,45 @@ func (c *Conn) Hash() int {
 }
 
 func (c *Conn) AsyncRead() {
+	g := c.p.g
+
+	if g.isOneshot {
+		g.IOExecute(func(buffer []byte) {
+			defer c.ResetPollerEvent()
+			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
+				rc, n, err := c.ReadAndGetConn(buffer)
+				if n > 0 {
+					g.onData(rc, buffer[:n])
+				}
+				g.payback(c, buffer)
+				if errors.Is(err, syscall.EINTR) {
+					continue
+				}
+				if errors.Is(err, syscall.EAGAIN) {
+					break
+				}
+				if err != nil {
+					c.closeWithError(err)
+					return
+				}
+				if n < len(buffer) {
+					break
+				}
+			}
+
+		})
+	}
+
 	cnt := atomic.AddInt32(&c.readEvents, 1)
-	if cnt > 2 {
+	if cnt > 3 {
 		atomic.AddInt32(&c.readEvents, -1)
 		return
 	}
-	p := c.p
-	g := p.g
+	if cnt > 1 {
+		return
+	}
+
 	g.IOExecute(func(buffer []byte) {
-		defer c.ResetPollerEvent()
 		for {
 			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
 				rc, n, err := c.ReadAndGetConn(buffer)
