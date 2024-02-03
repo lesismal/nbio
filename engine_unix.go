@@ -9,7 +9,6 @@ package nbio
 
 import (
 	"net"
-	"runtime"
 	"strings"
 
 	"github.com/lesismal/nbio/logging"
@@ -124,12 +123,11 @@ func (g *Engine) Start() error {
 
 // NewEngine is a factory impl.
 func NewEngine(conf Config) *Engine {
-	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
 		conf.Name = "NB"
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = cpuNum
+		conf.NPoller = 1
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize

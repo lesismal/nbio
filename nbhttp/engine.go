@@ -878,7 +878,7 @@ func NewEngine(conf Config) *Engine {
 		conf.MaxLoad = DefaultMaxLoad
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = runtime.NumCPU()
+		conf.NPoller = 1
 	}
 	if conf.ReadLimit <= 0 {
 		conf.ReadLimit = DefaultHTTPReadLimit
