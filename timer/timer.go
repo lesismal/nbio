@@ -7,6 +7,7 @@ package timer
 import (
 	"math"
 	"runtime"
+	"sync"
 	"time"
 	"unsafe"
 
@@ -18,11 +19,13 @@ const (
 )
 
 type Timer struct {
-	name string
+	name      string
+	asyncMux  sync.Mutex
+	asyncList []func()
 }
 
 func New(name string) *Timer {
-	return &Timer{name: name}
+	return &Timer{name: name, asyncList: make([]func(), 8)}
 }
 
 // IsTimerRunning .
@@ -59,16 +62,56 @@ func (t *Timer) AfterFunc(timeout time.Duration, f func()) *time.Timer {
 
 // Async executes f in another goroutine.
 func (t *Timer) Async(f func()) {
-	go func() {
-		defer func() {
-			err := recover()
-			if err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("Timer[%v] exec call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
+	t.asyncMux.Lock()
+	isHead := (len(t.asyncList) == 0)
+	t.asyncList = append(t.asyncList, f)
+	t.asyncMux.Unlock()
+	if isHead {
+		go func() {
+			i := 0
+			for {
+				t.asyncMux.Lock()
+				if i == len(t.asyncList) {
+					if cap(t.asyncList) > 1024 {
+						t.asyncList = make([]func(), 8)
+					} else {
+						t.asyncList = t.asyncList[0:0]
+					}
+					t.asyncMux.Unlock()
+					return
+				}
+				f := t.asyncList[i]
+				i++
+				t.asyncMux.Unlock()
+				func() {
+					defer func() {
+						err := recover()
+						if err != nil {
+							const size = 64 << 10
+							buf := make([]byte, size)
+							buf = buf[:runtime.Stack(buf, false)]
+							logging.Error("Timer[%v] async call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
+						}
+					}()
+					f()
+				}()
 			}
 		}()
-		f()
-	}()
+	}
 }
+
+// func (t *Timer) Async(f func()) {
+
+// 	go func() {
+// 		defer func() {
+// 			err := recover()
+// 			if err != nil {
+// 				const size = 64 << 10
+// 				buf := make([]byte, size)
+// 				buf = buf[:runtime.Stack(buf, false)]
+// 				logging.Error("Timer[%v] exec call failed: %v\n%v\n", t.name, err, *(*string)(unsafe.Pointer(&buf)))
+// 			}
+// 		}()
+// 		f()
+// 	}()
+// }
