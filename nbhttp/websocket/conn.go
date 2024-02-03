@@ -737,7 +737,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					_, err := c.Conn.Write(buf)
 					c.Engine.BodyAllocator.Free(buf)
 					if err != nil {
-						c.CloseAndClean(err)
+						c.CloseWithError(err)
 						return
 					}
 
