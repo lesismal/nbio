@@ -109,7 +109,6 @@ func (c *Conn) AsyncRead() {
 
 	if g.isOneshot {
 		g.IOExecute(func(buffer []byte) {
-			defer c.ResetPollerEvent()
 			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
 				rc, n, err := c.ReadAndGetConn(buffer)
 				if n > 0 {
@@ -130,7 +129,7 @@ func (c *Conn) AsyncRead() {
 					break
 				}
 			}
-
+			c.ResetPollerEvent()
 		})
 	}
 
