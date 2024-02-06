@@ -18,10 +18,10 @@ import (
 
 // Start init and start pollers.
 func (g *Engine) Start() error {
-	udpListeners := make([]*net.UDPConn, len(g.addrs))[0:0]
-	switch g.network {
+	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
+	switch g.Network {
 	case "tcp", "tcp4", "tcp6":
-		for i := range g.addrs {
+		for i := range g.Addrs {
 			ln, err := newPoller(g, true, i)
 			if err != nil {
 				for j := 0; j < i; j++ {
@@ -29,26 +29,26 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
-			g.addrs[i] = ln.listener.Addr().String()
+			g.Addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
 	case "udp", "udp4", "udp6":
-		for i, addrStr := range g.addrs {
-			addr, err := net.ResolveUDPAddr(g.network, addrStr)
+		for i, addrStr := range g.Addrs {
+			addr, err := net.ResolveUDPAddr(g.Network, addrStr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
 				}
 				return err
 			}
-			ln, err := g.listenUDP("udp", addr)
+			ln, err := g.ListenUDP("udp", addr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
 				}
 				return err
 			}
-			g.addrs[i] = ln.LocalAddr().String()
+			g.Addrs[i] = ln.LocalAddr().String()
 			udpListeners = append(udpListeners, ln)
 		}
 	}
@@ -98,10 +98,10 @@ func (g *Engine) Start() error {
 
 	// g.Timer.Start()
 
-	if len(g.addrs) == 0 {
+	if len(g.Addrs) == 0 {
 		logging.Info("NBIO Engine[%v] start", g.Name)
 	} else {
-		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.network, strings.Join(g.addrs, `", "`))
+		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.Network, strings.Join(g.Addrs, `", "`))
 	}
 	return nil
 }
