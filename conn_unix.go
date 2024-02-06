@@ -134,7 +134,7 @@ func (c *Conn) AsyncRead() {
 	}
 
 	cnt := atomic.AddInt32(&c.readEvents, 1)
-	if cnt > 3 {
+	if cnt > 2 {
 		atomic.AddInt32(&c.readEvents, -1)
 		return
 	}
