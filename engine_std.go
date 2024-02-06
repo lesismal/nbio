@@ -127,7 +127,7 @@ func NewEngine(conf Config) *Engine {
 
 	g := &Engine{
 		Config:    conf,
-		Timer:     timer.New(conf.Name, conf.TimerExecute),
+		Timer:     timer.New(conf.Name),
 		listeners: make([]*poller, len(conf.Addrs))[0:0],
 		pollers:   make([]*poller, conf.NPoller),
 		connsStd:  map[*Conn]struct{}{},

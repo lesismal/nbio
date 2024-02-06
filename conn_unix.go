@@ -104,7 +104,7 @@ func (c *Conn) Hash() int {
 	return c.fd
 }
 
-// in testing
+// AsyncRead .
 func (c *Conn) AsyncRead() {
 	g := c.p.g
 
