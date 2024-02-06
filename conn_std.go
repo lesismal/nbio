@@ -140,7 +140,7 @@ func (c *Conn) readUDP(b []byte) (int, error) {
 	var dstConn = c
 	if c.typ == ConnTypeUDPServer {
 		uc, ok := c.connUDP.getConn(c.p, rAddr)
-		if g.udpReadTimeout > 0 {
+		if g.UdpReadTimeout > 0 {
 			uc.SetReadDeadline(time.Now().Add(g.udpReadTimeout))
 		}
 		if !ok {

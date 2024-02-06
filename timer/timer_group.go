@@ -59,14 +59,14 @@ func (tg *TimerGroup) NextTimer() *Timer {
 }
 
 // NewGroup creates a TimerGroup.
-func NewGroup(name string, size int, executor func(f func())) *TimerGroup {
+func NewGroup(name string, size int) *TimerGroup {
 	if size <= 0 {
 		panic(fmt.Errorf("TimerGroup: invalid size: %v", size))
 	}
 
 	tg := &TimerGroup{size: uint32(size)}
 	for i := 0; i < size; i++ {
-		timer := New(name, executor)
+		timer := New(name)
 		tg.timers = append(tg.timers, timer)
 	}
 

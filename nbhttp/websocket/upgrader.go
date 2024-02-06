@@ -19,7 +19,6 @@ import (
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
 	"github.com/lesismal/nbio/logging"
-	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -40,7 +39,7 @@ var (
 	DefaultBlockingModSendQueueInitSize = 4
 
 	// DefaultBlockingModSendQueueMaxSize .
-	DefaultBlockingModSendQueueMaxSize = 0
+	DefaultBlockingModSendQueueMaxSize uint16 = 0
 
 	DefaultBlockingModAsyncCloseDelay = time.Second / 10
 
@@ -51,13 +50,9 @@ var (
 )
 
 type commonFields struct {
-	Engine                     *nbhttp.Engine
 	KeepaliveTime              time.Duration
 	MessageLengthLimit         int
 	BlockingModAsyncCloseDelay time.Duration
-
-	enableCompression bool
-	compressionLevel  int
 
 	pingMessageHandler  func(c *Conn, appData string)
 	pongMessageHandler  func(c *Conn, appData string)
@@ -66,12 +61,20 @@ type commonFields struct {
 	openHandler      func(*Conn)
 	messageHandler   func(c *Conn, messageType MessageType, data []byte)
 	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
-	onClose          func(c *Conn, err error)
+}
+
+type Options = Upgrader
+
+func NewOptions() *Options {
+	return NewUpgrader()
 }
 
 // Upgrader .
 type Upgrader struct {
 	commonFields
+
+	// Engine .
+	Engine *nbhttp.Engine
 
 	// Subprotocols .
 	Subprotocols []string
@@ -123,18 +126,22 @@ type Upgrader struct {
 
 	// BlockingModSendQueueInitSize represents the max size of a Conn's send queue,
 	// only takes effect when `BlockingModAsyncWrite` is true.
-	BlockingModSendQueueMaxSize int
+	BlockingModSendQueueMaxSize uint16
+
+	enableCompression bool
+	compressionLevel  int
+	onClose           func(c *Conn, err error)
 }
 
 // NewUpgrader .
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
-			Engine:                     DefaultEngine,
 			KeepaliveTime:              nbhttp.DefaultKeepaliveTime,
 			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
-			compressionLevel:           defaultCompressionLevel,
 		},
+		compressionLevel:               defaultCompressionLevel,
+		Engine:                         DefaultEngine,
 		BlockingModReadBufferSize:      DefaultBlockingReadBufferSize,
 		BlockingModAsyncWrite:          DefaultBlockingModAsyncWrite,
 		BlockingModHandleRead:          DefaultBlockingModHandleRead,
@@ -156,11 +163,11 @@ func NewUpgrader() *Upgrader {
 			c.WriteMessage(CloseMessage, nil)
 			return
 		}
-		buf := mempool.Malloc(len(text) + 2)
+		buf := u.Engine.BodyAllocator.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16(buf[:2], uint16(code))
 		copy(buf[2:], text)
 		c.WriteMessage(CloseMessage, buf)
-		mempool.Free(buf)
+		u.Engine.BodyAllocator.Free(buf)
 	}
 
 	return u
@@ -269,7 +276,6 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		nbResonse, ok = w.(*nbhttp.Response)
 		if ok {
 			parser = nbResonse.Parser
-			parser.Reader = wsc
 		}
 	}
 
@@ -289,9 +295,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		if !ok {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
-		wsc = NewConn(u, conn, subprotocol, compress, false)
+		wsc = NewServerConn(u, conn, subprotocol, compress, false)
 		wsc.Engine = parser.Engine
-		parser.Reader = wsc
+		wsc.Execute = parser.Execute
+		vt.SetSession(wsc)
+		if nbhttpConn != nil {
+			nbhttpConn.Parser = nil
+		}
 	case *tls.Conn:
 		// Scenario 2: llib's *tls.Conn.
 		nbc, ok = vt.Conn().(*nbio.Conn)
@@ -308,14 +318,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					nbhttpConn.Trasfered = true
 				}
 				vt.ResetRawInput()
-				parser = nbhttp.NewParser(nil, false, engine.ReadLimit, nbc.Execute)
+				wsc = NewServerConn(u, vt, subprotocol, compress, false)
+				wsc.Engine = engine
+				wsc.Execute = nbc.Execute
 				if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
-					parser.Execute = nbhttp.SyncExecutor
+					wsc.Execute = nbhttp.SyncExecutor
 				}
-				wsc = NewConn(u, vt, subprotocol, compress, false)
-				parser.Reader = wsc
-				parser.Engine = engine
-				nbc.SetSession(parser)
+				if nbhttpConn != nil {
+					nbhttpConn.Parser = nil
+				}
+				nbc.SetSession(wsc)
 				nbc.OnData(func(c *nbio.Conn, data []byte) {
 					defer func() {
 						if err := recover(); err != nil {
@@ -339,7 +351,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 							return
 						}
 						if nread > 0 {
-							errRead = parser.Read(buffer[:nread])
+							errRead = wsc.Read(buffer[:nread])
 							if err != nil {
 								logging.Debug("websocket Conn Read failed: %v", errRead)
 								c.CloseWithError(errRead)
@@ -359,9 +371,16 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				}
 			} else {
 				// 2.1.2 Don't transfer the conn to poller.
-				wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
+				wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 				wsc.isBlockingMod = true
 				getParser()
+				if parser != nil {
+					wsc.Execute = parser.Execute
+					parser.ReadCloser = wsc
+					if nbhttpConn != nil {
+						nbhttpConn.Parser = nil
+					}
+				}
 			}
 		} else {
 			// 2.2 The conn is from nbio poller.
@@ -369,9 +388,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if !ok {
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 			}
-			wsc = NewConn(u, conn, subprotocol, compress, false)
+			wsc = NewServerConn(u, conn, subprotocol, compress, false)
 			wsc.Engine = parser.Engine
-			parser.Reader = wsc
+			wsc.Execute = parser.Execute
+			nbc.SetSession(wsc)
+			if nbhttpConn != nil {
+				nbhttpConn.Parser = nil
+			}
 		}
 	case *net.TCPConn:
 		// Scenario 3: std's *net.TCPConn.
@@ -384,14 +407,17 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			if nbhttpConn != nil {
 				nbhttpConn.Trasfered = true
 			}
-			parser = nbhttp.NewParser(nil, false, engine.ReadLimit, nbc.Execute)
+
+			wsc = NewServerConn(u, nbc, subprotocol, compress, false)
+			wsc.Engine = engine
+			wsc.Execute = nbc.Execute
 			if engine.EpollMod == nbio.EPOLLET && engine.EPOLLONESHOT == nbio.EPOLLONESHOT {
-				parser.Execute = nbhttp.SyncExecutor
+				wsc.Execute = nbhttp.SyncExecutor
 			}
-			wsc = NewConn(u, nbc, subprotocol, compress, false)
-			parser.Reader = wsc
-			parser.Engine = engine
-			nbc.SetSession(parser)
+			if nbhttpConn != nil {
+				nbhttpConn.Parser = nil
+			}
+			nbc.SetSession(wsc)
 			nbc.OnData(func(c *nbio.Conn, data []byte) {
 				defer func() {
 					if err := recover(); err != nil {
@@ -402,7 +428,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					}
 				}()
 
-				errRead := parser.Read(data)
+				errRead := wsc.Read(data)
 				if errRead != nil {
 					logging.Debug("websocket Conn Read failed: %v", errRead)
 					c.CloseWithError(errRead)
@@ -415,15 +441,29 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			}
 		} else {
 			// 3.2 Don't transfer the conn to poller.
-			wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
+			wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 			wsc.isBlockingMod = true
 			getParser()
+			if parser != nil {
+				wsc.Execute = parser.Execute
+				parser.ReadCloser = wsc
+				if nbhttpConn != nil {
+					nbhttpConn.Parser = nil
+				}
+			}
 		}
 	default:
 		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
-		wsc = NewConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
+		wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 		wsc.isBlockingMod = true
 		getParser()
+		if parser != nil {
+			wsc.Execute = parser.Execute
+			parser.ReadCloser = wsc
+			if nbhttpConn != nil {
+				nbhttpConn.Parser = nil
+			}
+		}
 	}
 
 	err = u.commResponse(wsc.Conn, responseHeader, challengeKey, subprotocol, compress)
@@ -441,9 +481,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		wsc.openHandler(wsc)
 	}
 
-	if parser != nil {
-		parser.Reader = wsc
-	}
+	// if parser != nil {
+	// 	parser.ReadCloser = wsc
+	// 	wsc.Execute = parser.Execute
+	// }
 	wsc.isReadingByParser = isReadingByParser
 	if wsc.isBlockingMod && (!wsc.isReadingByParser) {
 		var handleRead = u.BlockingModHandleRead
@@ -524,44 +565,45 @@ func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHea
 }
 
 func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, challengeKey, subprotocol string, compress bool) error {
-	buf := mempool.Malloc(1024)[0:0]
-	buf = mempool.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
-	buf = mempool.Append(buf, acceptKeyBytes(challengeKey)...)
-	buf = mempool.AppendString(buf, "\r\n")
+	allocator := u.Engine.BodyAllocator
+	buf := allocator.Malloc(1024)[0:0]
+	buf = allocator.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
+	buf = allocator.Append(buf, acceptKeyBytes(challengeKey)...)
+	buf = allocator.AppendString(buf, "\r\n")
 	if subprotocol != "" {
-		buf = mempool.AppendString(buf, "Sec-WebSocket-Protocol: ")
-		buf = mempool.AppendString(buf, subprotocol)
-		buf = mempool.AppendString(buf, "\r\n")
+		buf = allocator.AppendString(buf, "Sec-WebSocket-Protocol: ")
+		buf = allocator.AppendString(buf, subprotocol)
+		buf = allocator.AppendString(buf, "\r\n")
 	}
 	if compress {
-		buf = mempool.AppendString(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
+		buf = allocator.AppendString(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
 	}
 	for k, vs := range responseHeader {
 		if k == "Sec-Websocket-Protocol" {
 			continue
 		}
 		for _, v := range vs {
-			buf = mempool.AppendString(buf, k)
-			buf = mempool.AppendString(buf, ": ")
+			buf = allocator.AppendString(buf, k)
+			buf = allocator.AppendString(buf, ": ")
 			for i := 0; i < len(v); i++ {
 				b := v[i]
 				if b <= 31 {
 					// prevent response splitting.
 					b = ' '
 				}
-				buf = mempool.Append(buf, b)
+				buf = allocator.Append(buf, b)
 			}
-			buf = mempool.AppendString(buf, "\r\n")
+			buf = allocator.AppendString(buf, "\r\n")
 		}
 	}
-	buf = mempool.AppendString(buf, "\r\n")
+	buf = allocator.AppendString(buf, "\r\n")
 
 	if u.HandshakeTimeout > 0 {
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
 	_, err := conn.Write(buf)
-	mempool.Free(buf)
+	allocator.Free(buf)
 	if err != nil {
 		conn.Close()
 		return err
