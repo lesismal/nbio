@@ -290,12 +290,12 @@ func (p *poller) deleteEvent(fd int) error {
 
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
-		if len(g.addrs) == 0 {
+		if len(g.Addrs) == 0 {
 			panic("invalid listener num")
 		}
 
-		addr := g.addrs[index%len(g.addrs)]
-		ln, err := g.Listen(g.network, addr)
+		addr := g.Addrs[index%len(g.Addrs)]
+		ln, err := g.Listen(g.Network, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -307,7 +307,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			isListener: isListener,
 			pollType:   "LISTENER",
 		}
-		if g.network == "unix" {
+		if g.Network == "unix" {
 			p.unixSockAddr = addr
 		}
 
