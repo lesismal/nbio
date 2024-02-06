@@ -65,25 +65,25 @@ type poller struct {
 
 func (p *poller) addConn(c *Conn) {
 	fd := c.fd
-	if fd >= len(connsUnix) {
-		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(connsUnix)))
+	if fd >= len(p.g.connsUnix) {
+		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
 		return
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
-	connsUnix[fd] = c
+	p.g.connsUnix[fd] = c
 	err := p.addRead(fd)
 	if err != nil {
-		connsUnix[fd] = nil
+		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
 }
 
 func (p *poller) getConn(fd int) *Conn {
-	return connsUnix[fd]
+	return p.g.connsUnix[fd]
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -93,8 +93,8 @@ func (p *poller) deleteConn(c *Conn) {
 	fd := c.fd
 
 	if c.typ != ConnTypeUDPClientFromRead {
-		if c == connsUnix[fd] {
-			connsUnix[fd] = nil
+		if c == p.g.connsUnix[fd] {
+			p.g.connsUnix[fd] = nil
 		}
 		p.deleteEvent(fd)
 	}
@@ -295,7 +295,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 		}
 
 		addr := g.addrs[index%len(g.addrs)]
-		ln, err := g.listen(g.network, addr)
+		ln, err := g.Listen(g.network, addr)
 		if err != nil {
 			return nil, err
 		}

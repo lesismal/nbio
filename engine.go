@@ -109,12 +109,8 @@ type Engine struct {
 
 	wgConn sync.WaitGroup
 
-	network   string
-	addrs     []string
-	listen    func(network, addr string) (net.Listener, error)
-	listenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
-
-	connsStd map[*Conn]struct{}
+	connsStd  map[*Conn]struct{}
+	connsUnix []*Conn
 
 	listeners []*poller
 	pollers   []*poller
@@ -143,6 +139,7 @@ func (g *Engine) Stop() {
 	g.mux.Lock()
 	conns := g.connsStd
 	g.connsStd = map[*Conn]struct{}{}
+	connsUnix := g.connsUnix
 	g.mux.Unlock()
 
 	g.wgConn.Done()

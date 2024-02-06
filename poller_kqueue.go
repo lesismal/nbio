@@ -63,20 +63,20 @@ type poller struct {
 
 func (p *poller) addConn(c *Conn) {
 	fd := c.fd
-	if fd >= len(connsUnix) {
-		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(connsUnix)))
+	if fd >= len(p.g.connsUnix) {
+		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
 		return
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
 	}
-	connsUnix[fd] = c
+	p.g.connsUnix[fd] = c
 	p.addRead(fd)
 }
 
 func (p *poller) getConn(fd int) *Conn {
-	return connsUnix[fd]
+	return p.g.connsUnix[fd]
 }
 
 func (p *poller) deleteConn(c *Conn) {
@@ -86,8 +86,8 @@ func (p *poller) deleteConn(c *Conn) {
 	fd := c.fd
 
 	if c.typ != ConnTypeUDPClientFromRead {
-		if c == connsUnix[fd] {
-			connsUnix[fd] = nil
+		if c == p.g.connsUnix[fd] {
+			p.g.connsUnix[fd] = nil
 		}
 		p.deleteEvent(fd)
 	}
@@ -244,7 +244,7 @@ func (p *poller) readWriteLoop() {
 		p.eventList = nil
 		p.mux.Unlock()
 		n, err := syscall.Kevent(p.kfd, changes, events, nil)
-		if err != nil && !errors.Is(err, syscall.EINTR) {
+		if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.ENOENT) {
 			logging.Error("NBIO[%v][%v_%v] Kevent failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 			return
 		}
@@ -273,12 +273,12 @@ func (p *poller) stop() {
 
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
-		if len(g.addrs) == 0 {
+		if len(g.Addrs) == 0 {
 			panic("invalid listener num")
 		}
 
-		addr := g.addrs[index%len(g.addrs)]
-		ln, err := g.listen(g.network, addr)
+		addr := g.Addrs[index%len(g.Addrs)]
+		ln, err := g.Listen(g.Network, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -290,7 +290,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			isListener: isListener,
 			pollType:   "LISTENER",
 		}
-		if g.network == "unix" {
+		if g.Network == "unix" {
 			p.unixSockAddr = addr
 		}
 

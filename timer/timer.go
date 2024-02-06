@@ -25,7 +25,7 @@ type Timer struct {
 }
 
 func New(name string) *Timer {
-	return &Timer{name: name, asyncList: make([]func(), 8)}
+	return &Timer{name: name, asyncList: make([]func(), 8)[0:0]}
 }
 
 // IsTimerRunning .
