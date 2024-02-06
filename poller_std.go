@@ -95,7 +95,7 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 func (p *poller) start() {
-	if p.g.lockListener {
+	if p.g.LockListener {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}

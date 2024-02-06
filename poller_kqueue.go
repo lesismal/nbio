@@ -179,7 +179,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 }
 
 func (p *poller) start() {
-	if p.g.lockPoller {
+	if p.g.LockPoller {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}
@@ -197,7 +197,7 @@ func (p *poller) start() {
 }
 
 func (p *poller) acceptorLoop() {
-	if p.g.lockListener {
+	if p.g.LockListener {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}
@@ -229,7 +229,7 @@ func (p *poller) acceptorLoop() {
 }
 
 func (p *poller) readWriteLoop() {
-	if p.g.lockPoller {
+	if p.g.LockPoller {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 	}
@@ -244,7 +244,8 @@ func (p *poller) readWriteLoop() {
 		p.eventList = nil
 		p.mux.Unlock()
 		n, err := syscall.Kevent(p.kfd, changes, events, nil)
-		if err != nil && !errors.Is(err, syscall.EINTR) {
+		if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EBADF) && !errors.Is(err, syscall.ENOENT) && !errors.Is(err, syscall.EINVAL) {
+			logging.Error("NBIO[%v][%v_%v] Kevent failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 			return
 		}
 
@@ -272,12 +273,12 @@ func (p *poller) stop() {
 
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
-		if len(g.addrs) == 0 {
+		if len(g.Addrs) == 0 {
 			panic("invalid listener num")
 		}
 
-		addr := g.addrs[index%len(g.addrs)]
-		ln, err := g.listen(g.network, addr)
+		addr := g.Addrs[index%len(g.Addrs)]
+		ln, err := g.Listen(g.Network, addr)
 		if err != nil {
 			return nil, err
 		}
@@ -289,7 +290,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 			isListener: isListener,
 			pollType:   "LISTENER",
 		}
-		if g.network == "unix" {
+		if g.Network == "unix" {
 			p.unixSockAddr = addr
 		}
 

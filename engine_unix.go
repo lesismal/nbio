@@ -9,19 +9,21 @@ package nbio
 
 import (
 	"net"
-	"runtime"
 	"strings"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/taskpool"
 	"github.com/lesismal/nbio/timer"
 )
 
 // Start init and start pollers.
 func (g *Engine) Start() error {
-	udpListeners := make([]*net.UDPConn, len(g.addrs))[0:0]
-	switch g.network {
+	g.connsUnix = make([]*Conn, MaxOpenFiles)
+
+	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
+	switch g.Network {
 	case "unix", "tcp", "tcp4", "tcp6":
-		for i := range g.addrs {
+		for i := range g.Addrs {
 			ln, err := newPoller(g, true, i)
 			if err != nil {
 				for j := 0; j < i; j++ {
@@ -29,31 +31,31 @@ func (g *Engine) Start() error {
 				}
 				return err
 			}
-			g.addrs[i] = ln.listener.Addr().String()
+			g.Addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
 	case "udp", "udp4", "udp6":
-		for i, addrStr := range g.addrs {
-			addr, err := net.ResolveUDPAddr(g.network, addrStr)
+		for i, addrStr := range g.Addrs {
+			addr, err := net.ResolveUDPAddr(g.Network, addrStr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
 				}
 				return err
 			}
-			ln, err := g.listenUDP("udp", addr)
+			ln, err := g.ListenUDP("udp", addr)
 			if err != nil {
 				for j := 0; j < i; j++ {
 					udpListeners[j].Close()
 				}
 				return err
 			}
-			g.addrs[i] = ln.LocalAddr().String()
+			g.Addrs[i] = ln.LocalAddr().String()
 			udpListeners = append(udpListeners, ln)
 		}
 	}
 
-	for i := 0; i < g.pollerNum; i++ {
+	for i := 0; i < g.NPoller; i++ {
 		p, err := newPoller(g, false, i)
 		if err != nil {
 			for j := 0; j < len(g.listeners); j++ {
@@ -68,8 +70,8 @@ func (g *Engine) Start() error {
 		g.pollers[i] = p
 	}
 
-	for i := 0; i < g.pollerNum; i++ {
-		g.pollers[i].ReadBuffer = make([]byte, g.readBufferSize)
+	for i := 0; i < g.NPoller; i++ {
+		g.pollers[i].ReadBuffer = make([]byte, g.ReadBufferSize)
 		g.Add(1)
 		go g.pollers[i].start()
 	}
@@ -99,23 +101,31 @@ func (g *Engine) Start() error {
 	}
 
 	g.Timer.Start()
+	g.isOneshot = (g.EpollMod == EPOLLET && g.EPOLLONESHOT == EPOLLONESHOT)
 
-	if len(g.addrs) == 0 {
-		logging.Info("NBIO[%v] start", g.Name)
-	} else {
-		logging.Info("NBIO[%v] start listen on: [\"%v@%v\"]", g.Name, g.network, strings.Join(g.addrs, `", "`))
+	if g.AsyncRead {
+		if g.IOExecute == nil {
+			g.ioTaskPool = taskpool.NewIO(0, 0, 0)
+			g.IOExecute = g.ioTaskPool.Go
+		}
 	}
+
+	if len(g.Addrs) == 0 {
+		logging.Info("NBIO Engine[%v] start", g.Name)
+	} else {
+		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.Network, strings.Join(g.Addrs, `", "`))
+	}
+
 	return nil
 }
 
 // NewEngine is a factory impl.
 func NewEngine(conf Config) *Engine {
-	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
 		conf.Name = "NB"
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = cpuNum
+		conf.NPoller = 1
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
@@ -131,24 +141,10 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
-		Timer:                        timer.New(conf.Name, conf.TimerExecute),
-		Name:                         conf.Name,
-		network:                      conf.Network,
-		addrs:                        conf.Addrs,
-		listen:                       conf.Listen,
-		listenUDP:                    conf.ListenUDP,
-		pollerNum:                    conf.NPoller,
-		readBufferSize:               conf.ReadBufferSize,
-		maxWriteBufferSize:           conf.MaxWriteBufferSize,
-		maxConnReadTimesPerEventLoop: conf.MaxConnReadTimesPerEventLoop,
-		udpReadTimeout:               conf.UDPReadTimeout,
-		epollMod:                     conf.EpollMod,
-		epollOneshot:                 conf.EPOLLONESHOT,
-		lockListener:                 conf.LockListener,
-		lockPoller:                   conf.LockPoller,
-		listeners:                    make([]*poller, len(conf.Addrs))[0:0],
-		pollers:                      make([]*poller, conf.NPoller),
-		connsUnix:                    make([]*Conn, MaxOpenFiles),
+		Config:    conf,
+		Timer:     timer.New(conf.Name),
+		listeners: make([]*poller, len(conf.Addrs))[0:0],
+		pollers:   make([]*poller, conf.NPoller),
 	}
 
 	g.initHandlers()

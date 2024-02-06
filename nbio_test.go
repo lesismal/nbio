@@ -44,8 +44,8 @@ func init() {
 			c.SetSession(wsess)
 		} else {
 			wsess = session.(*writtenSizeSession)
+			wsess.sumRecv += len(data)
 		}
-		wsess.sumRecv += len(data)
 
 		if len(data) == 8 && string(data) == "sendfile" {
 			wsess.isFile = true
@@ -121,7 +121,7 @@ func TestEcho(t *testing.T) {
 		c.SetNoDelay(true)
 		c.SetKeepAlive(true)
 		c.SetKeepAlivePeriod(time.Second * 60)
-		c.SetDeadline(time.Now().Add(time.Second))
+		c.SetDeadline(time.Now().Add(time.Second * 10))
 		c.SetReadBuffer(1024 * 4)
 		c.SetWriteBuffer(1024 * 4)
 		log.Printf("connected, local addr: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())

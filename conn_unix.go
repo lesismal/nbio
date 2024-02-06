@@ -13,6 +13,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -93,12 +94,81 @@ type Conn struct {
 
 	execList []func()
 
+	readEvents int32
+
 	DataHandler func(c *Conn, data []byte)
 }
 
 // Hash returns a hash code.
 func (c *Conn) Hash() int {
 	return c.fd
+}
+
+func (c *Conn) AsyncRead() {
+	g := c.p.g
+
+	if g.isOneshot {
+		g.IOExecute(func(buffer []byte) {
+			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
+				rc, n, err := c.ReadAndGetConn(buffer)
+				if n > 0 {
+					g.onData(rc, buffer[:n])
+				}
+				g.payback(c, buffer)
+				if errors.Is(err, syscall.EINTR) {
+					continue
+				}
+				if errors.Is(err, syscall.EAGAIN) {
+					break
+				}
+				if err != nil {
+					c.closeWithError(err)
+					return
+				}
+				if n < len(buffer) {
+					break
+				}
+			}
+			c.ResetPollerEvent()
+		})
+	}
+
+	cnt := atomic.AddInt32(&c.readEvents, 1)
+	if cnt > 2 {
+		atomic.AddInt32(&c.readEvents, -1)
+		return
+	}
+	if cnt > 1 {
+		return
+	}
+
+	g.IOExecute(func(buffer []byte) {
+		for {
+			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
+				rc, n, err := c.ReadAndGetConn(buffer)
+				if n > 0 {
+					g.onData(rc, buffer[:n])
+				}
+				g.payback(c, buffer)
+				if errors.Is(err, syscall.EINTR) {
+					continue
+				}
+				if errors.Is(err, syscall.EAGAIN) {
+					break
+				}
+				if err != nil {
+					c.closeWithError(err)
+					return
+				}
+				if n < len(buffer) {
+					break
+				}
+			}
+			if atomic.AddInt32(&c.readEvents, -1) == 0 {
+				return
+			}
+		}
+	})
 }
 
 // Read implements Read.
@@ -172,8 +242,8 @@ func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 	var dstConn = c
 	if c.typ == ConnTypeUDPServer {
 		uc, ok := c.connUDP.getConn(c.p, c.fd, rAddr)
-		if g.udpReadTimeout > 0 {
-			uc.SetReadDeadline(time.Now().Add(g.udpReadTimeout))
+		if g.UDPReadTimeout > 0 {
+			uc.SetReadDeadline(time.Now().Add(g.UDPReadTimeout))
 		}
 		if !ok {
 			g.onOpen(uc)
@@ -669,7 +739,7 @@ func (c *Conn) doWrite(b []byte) (int, error) {
 
 func (c *Conn) overflow(n int) bool {
 	g := c.p.g
-	return g.maxWriteBufferSize > 0 && (c.left+n > g.maxWriteBufferSize)
+	return g.MaxWriteBufferSize > 0 && (c.left+n > g.MaxWriteBufferSize)
 }
 
 func (c *Conn) closeWithError(err error) error {
