@@ -173,6 +173,7 @@ func (p *poller) readWriteLoop() {
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
+			logging.Error("NBIO[%v][%v_%v] EpollWait failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 			return
 		}
 

@@ -245,6 +245,7 @@ func (p *poller) readWriteLoop() {
 		p.mux.Unlock()
 		n, err := syscall.Kevent(p.kfd, changes, events, nil)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
+			logging.Error("NBIO[%v][%v_%v] Kevent failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 			return
 		}
 
