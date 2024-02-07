@@ -35,13 +35,14 @@ func init() {
 		isFile  bool
 	}
 	g.OnOpen(func(c *Conn) {
+		wsess := &writtenSizeSession{}
+		c.SetSession(wsess)
 		c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		var wsess *writtenSizeSession
 		if session := c.Session(); session == nil {
-			wsess = &writtenSizeSession{sumRecv: len(data)}
-			c.SetSession(wsess)
+			panic("invalid session nil")
 		} else {
 			wsess = session.(*writtenSizeSession)
 			wsess.sumRecv += len(data)

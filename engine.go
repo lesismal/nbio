@@ -33,7 +33,7 @@ const (
 
 var (
 	// MaxOpenFiles .
-	MaxOpenFiles = 1024 * 1024 * 1
+	MaxOpenFiles = 1024 * 1024 * 2
 )
 
 // Config Of Engine.
