@@ -45,8 +45,8 @@
 	- [Magics For HTTP and Websocket](#magics-for-http-and-websocket)
 		- [Different IOMod](#different-iomod)
 		- [Using Websocket With Std Server](#using-websocket-with-std-server)
-	- [Contributors](#contributors)
 	- [Credits](#credits)
+	- [Contributors](#contributors)
 	- [Star History](#star-history)
 
 ## Features
@@ -222,6 +222,12 @@ func main() {
 ```
 
 
+## Credits
+- [xtaci/gaio](https://github.com/xtaci/gaio)
+- [gorilla/websocket](https://github.com/gorilla/websocket)
+- [crossbario/autobahn](https://github.com/crossbario)
+
+
 ## Contributors
 Thanks Everyone:
 - [acgreek](https://github.com/acgreek)
@@ -240,12 +246,6 @@ Thanks Everyone:
 - [zbh255](https://github.com/zbh255)
 - [IceflowRE](https://github.com/IceflowRE)
 - [YanKawaYu](https://github.com/YanKawaYu)
-
-
-## Credits
-- [xtaci/gaio](https://github.com/xtaci/gaio)
-- [gorilla/websocket](https://github.com/gorilla/websocket)
-- [crossbario/autobahn](https://github.com/crossbario)
 
 
 ## Star History
