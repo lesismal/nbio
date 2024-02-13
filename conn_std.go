@@ -44,7 +44,7 @@ type Conn struct {
 
 	cache *bytes.Buffer
 
-	DataHandler func(c *Conn, data []byte)
+	dataHandler func(c *Conn, data []byte)
 }
 
 // Hash returns a hashcode.

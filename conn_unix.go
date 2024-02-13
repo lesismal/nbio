@@ -96,7 +96,7 @@ type Conn struct {
 
 	readEvents int32
 
-	DataHandler func(c *Conn, data []byte)
+	dataHandler func(c *Conn, data []byte)
 }
 
 // Hash returns a hash code.

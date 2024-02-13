@@ -55,7 +55,12 @@ func (c *Conn) IsUnix() bool {
 
 // OnData registers callback for data.
 func (c *Conn) OnData(h func(conn *Conn, data []byte)) {
-	c.DataHandler = h
+	c.dataHandler = h
+}
+
+// DataHandler returns data handler.
+func (c *Conn) DataHandler() func(conn *Conn, data []byte) {
+	return c.dataHandler
 }
 
 // Dial wraps net.Dial.

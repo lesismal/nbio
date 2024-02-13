@@ -1037,7 +1037,7 @@ func NewEngine(conf Config) *Engine {
 	})
 
 	g.OnData(func(c *nbio.Conn, data []byte) {
-		c.DataHandler(c, data)
+		c.DataHandler()(c, data)
 	})
 
 	// engine.isOneshot = (conf.EpollMod == nbio.EPOLLET && conf.EPOLLONESHOT == nbio.EPOLLONESHOT && runtime.GOOS == "linux")
