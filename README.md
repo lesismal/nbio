@@ -160,6 +160,8 @@ func main() {
 
 ## 1M Connections Benchmark
 
+For more details: [go-websocket-benchmark](https://github.com/lesismal/go-websocket-benchmark)
+
 ```sh
 # lsb_release -a
 LSB Version:    core-11.1.0ubuntu2-noarch:security-11.1.0ubuntu2-noarch
