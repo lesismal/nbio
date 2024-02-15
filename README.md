@@ -42,7 +42,7 @@
 		- [Websocket TLS Examples](#websocket-tls-examples)
 		- [Use With Other STD Based Frameworkds](#use-with-other-std-based-frameworkds)
 		- [More Examples](#more-examples)
-	- [1M Connections Benchmark](#1m-connections-benchmark)
+	- [1M Websocket Connections Benchmark](#1m-websocket-connections-benchmark)
 	- [Magics For HTTP and Websocket](#magics-for-http-and-websocket)
 		- [Different IOMod](#different-iomod)
 		- [Using Websocket With Std Server](#using-websocket-with-std-server)
@@ -158,7 +158,7 @@ func main() {
 
 
 
-## 1M Connections Benchmark
+## 1M Websocket Connections Benchmark
 
 For more details: [go-websocket-benchmark](https://github.com/lesismal/go-websocket-benchmark)
 
