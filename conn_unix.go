@@ -115,7 +115,6 @@ func (c *Conn) AsyncRead() {
 				if n > 0 {
 					g.onData(rc, buffer[:n])
 				}
-				g.payback(c, buffer)
 				if errors.Is(err, syscall.EINTR) {
 					continue
 				}
@@ -150,7 +149,6 @@ func (c *Conn) AsyncRead() {
 				if n > 0 {
 					g.onData(rc, buffer[:n])
 				}
-				g.payback(c, buffer)
 				if errors.Is(err, syscall.EINTR) {
 					continue
 				}
