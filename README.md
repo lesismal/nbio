@@ -198,29 +198,29 @@ run nbio_nonblocking server on cpu 0-3
 --------------------------------------------------------------
 BenchType  : BenchEcho
 Framework  : nbio_nonblocking
-TPS        : 79844
-EER        : 256.63
-Min        : 69.44us
-Avg        : 623.21ms
-Max        : 1.71s
-TP50       : 581.32ms
-TP75       : 796.61ms
-TP90       : 813.17ms
-TP95       : 823.89ms
-TP99       : 844.41ms
-Used       : 62.62s
+TPS        : 104713
+EER        : 280.33
+Min        : 56.90us
+Avg        : 95.36ms
+Max        : 2.29s
+TP50       : 62.82ms
+TP75       : 65.38ms
+TP90       : 89.38ms
+TP95       : 409.55ms
+TP99       : 637.95ms
+Used       : 47.75s
 Total      : 5000000
 Success    : 5000000
 Failed     : 0
 Conns      : 1000000
-Concurrency: 50000
+Concurrency: 10000
 Payload    : 1024
 CPU Min    : 0.00%
-CPU Avg    : 311.12%
-CPU Max    : 388.90%
-MEM Min    : 972.63M
-MEM Avg    : 975.25M
-MEM Max    : 978.77M
+CPU Avg    : 373.53%
+CPU Max    : 602.33%
+MEM Min    : 978.70M
+MEM Avg    : 979.88M
+MEM Max    : 981.14M
 --------------------------------------------------------------
 ```
 
