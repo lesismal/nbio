@@ -112,9 +112,9 @@ func (g *Engine) Start() error {
 	}
 
 	if len(g.Addrs) == 0 {
-		logging.Info("NBIO Engine[%v] start", g.Name)
+		logging.Info("NBIO Engine[%v] start with [%v eventloop]", g.Name, g.NPoller)
 	} else {
-		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.Network, strings.Join(g.Addrs, `", "`))
+		logging.Info("NBIO Engine[%v] start with [%v eventloop], listen on: [\"%v@%v\"]", g.Name, g.NPoller, g.Network, strings.Join(g.Addrs, `", "`))
 	}
 
 	return nil
