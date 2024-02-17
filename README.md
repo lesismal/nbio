@@ -42,6 +42,7 @@
 		- [Websocket TLS Examples](#websocket-tls-examples)
 		- [Use With Other STD Based Frameworkds](#use-with-other-std-based-frameworkds)
 		- [More Examples](#more-examples)
+	- [1M Websocket Connections Benchmark](#1m-websocket-connections-benchmark)
 	- [Magics For HTTP and Websocket](#magics-for-http-and-websocket)
 		- [Different IOMod](#different-iomod)
 		- [Using Websocket With Std Server](#using-websocket-with-std-server)
@@ -154,6 +155,76 @@ func main() {
 ### More Examples
 
 - [nbio-examples](https://github.com/lesismal/nbio-examples)
+
+
+
+## 1M Websocket Connections Benchmark
+
+For more details: [go-websocket-benchmark](https://github.com/lesismal/go-websocket-benchmark)
+
+```sh
+# lsb_release -a
+LSB Version:    core-11.1.0ubuntu2-noarch:security-11.1.0ubuntu2-noarch
+Distributor ID: Ubuntu
+Description:    Ubuntu 20.04.6 LTS
+Release:        20.04
+Codename:       focal
+
+# free
+              total        used        free      shared  buff/cache   available
+Mem:       24969564    15656352     3422212        1880     5891000     8899604
+Swap:             0           0           0
+
+# cat /proc/cpuinfo | grep processor
+processor       : 0
+processor       : 1
+processor       : 2
+processor       : 3
+processor       : 4
+processor       : 5
+processor       : 6
+processor       : 7
+processor       : 8
+processor       : 9
+processor       : 10
+processor       : 11
+processor       : 12
+processor       : 13
+processor       : 14
+processor       : 15
+
+
+# taskset
+run nbio_nonblocking server on cpu 0-3
+
+--------------------------------------------------------------
+BenchType  : BenchEcho
+Framework  : nbio_nonblocking
+TPS        : 104713
+EER        : 280.33
+Min        : 56.90us
+Avg        : 95.36ms
+Max        : 2.29s
+TP50       : 62.82ms
+TP75       : 65.38ms
+TP90       : 89.38ms
+TP95       : 409.55ms
+TP99       : 637.95ms
+Used       : 47.75s
+Total      : 5000000
+Success    : 5000000
+Failed     : 0
+Conns      : 1000000
+Concurrency: 10000
+Payload    : 1024
+CPU Min    : 0.00%
+CPU Avg    : 373.53%
+CPU Max    : 602.33%
+MEM Min    : 978.70M
+MEM Avg    : 979.88M
+MEM Max    : 981.14M
+--------------------------------------------------------------
+```
 
 
 ## Magics For HTTP and Websocket

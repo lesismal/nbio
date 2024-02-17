@@ -9,6 +9,7 @@ package nbio
 
 import (
 	"net"
+	"runtime"
 	"strings"
 
 	"github.com/lesismal/nbio/logging"
@@ -111,9 +112,9 @@ func (g *Engine) Start() error {
 	}
 
 	if len(g.Addrs) == 0 {
-		logging.Info("NBIO Engine[%v] start", g.Name)
+		logging.Info("NBIO Engine[%v] start with [%v eventloop]", g.Name, g.NPoller)
 	} else {
-		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.Network, strings.Join(g.Addrs, `", "`))
+		logging.Info("NBIO Engine[%v] start with [%v eventloop], listen on: [\"%v@%v\"]", g.Name, g.NPoller, g.Network, strings.Join(g.Addrs, `", "`))
 	}
 
 	return nil
@@ -125,7 +126,10 @@ func NewEngine(conf Config) *Engine {
 		conf.Name = "NB"
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = 1
+		conf.NPoller = runtime.NumCPU() / 4
+		if conf.NPoller == 0 {
+			conf.NPoller = 1
+		}
 	}
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
