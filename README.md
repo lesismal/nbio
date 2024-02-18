@@ -195,7 +195,7 @@ processor       : 15
 
 
 # taskset
-run nbio_nonblocking server on cpu 0-3
+run nbio_nonblocking server on cpu 0-7
 
 --------------------------------------------------------------
 BenchType  : BenchEcho
