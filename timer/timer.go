@@ -73,7 +73,7 @@ func (t *Timer) Async(f func()) {
 				t.asyncMux.Lock()
 				if i == len(t.asyncList) {
 					if cap(t.asyncList) > 1024 {
-						t.asyncList = make([]func(), 8)
+						t.asyncList = make([]func(), 0, 8)
 					} else {
 						t.asyncList = t.asyncList[0:0]
 					}
