@@ -580,17 +580,21 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	nbc, err := nbio.NBConn(conn.Conn)
 	if err != nil {
 		conn.Close()
+		decrease()
 		logging.Error("AddConnNonTLSNonBlocking failed: %v", err)
 		return
 	}
 	conn.Conn = nbc
 	if nbc.Session() != nil {
 		nbc.Close()
+		decrease()
+		logging.Error("AddConnNonTLSNonBlocking failed, invalid session: %v", nbc.Session())
 		return
 	}
 	key, err := conn2Array(nbc)
 	if err != nil {
 		nbc.Close()
+		decrease()
 		logging.Error("AddConnNonTLSNonBlocking failed: %v", err)
 		return
 	}
@@ -599,6 +603,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
+		decrease()
 		logging.Error("AddConnNonTLSNonBlocking failed: overload, already has %v online", engine.MaxLoad)
 		return
 	}
@@ -622,9 +627,9 @@ func (engine *Engine) AddConnNonTLSBlocking(conn *Conn, tlsConfig *tls.Config, d
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
-		logging.Error("AddConnNonTLSBlocking failed: overload, already has %v online", engine.MaxLoad)
 		conn.Close()
 		decrease()
+		logging.Error("AddConnNonTLSBlocking failed: overload, already has %v online", engine.MaxLoad)
 		return
 	}
 	switch vt := conn.Conn.(type) {
@@ -660,18 +665,21 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	nbc, err := nbio.NBConn(conn.Conn)
 	if err != nil {
 		conn.Close()
+		decrease()
 		logging.Error("AddConnTLSNonBlocking failed: %v", err)
 		return
 	}
 	conn.Conn = nbc
 	if nbc.Session() != nil {
 		nbc.Close()
+		decrease()
 		logging.Error("AddConnTLSNonBlocking failed: session should not be nil")
 		return
 	}
 	key, err := conn2Array(nbc)
 	if err != nil {
 		nbc.Close()
+		decrease()
 		logging.Error("AddConnTLSNonBlocking failed: %v", err)
 		return
 	}
@@ -680,6 +688,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	if len(engine.conns) >= engine.MaxLoad {
 		engine.mux.Unlock()
 		nbc.Close()
+		decrease()
 		logging.Error("AddConnTLSNonBlocking failed: overload, already has %v online", engine.MaxLoad)
 		return
 	}

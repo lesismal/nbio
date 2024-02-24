@@ -772,7 +772,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 		c.writeList = nil
 	}
 
-	if c.p.g != nil {
+	if c.p != nil {
 		c.p.deleteConn(c)
 	}
 
