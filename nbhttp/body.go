@@ -7,8 +7,6 @@ package nbhttp
 import (
 	"io"
 	"sync"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -22,10 +20,10 @@ var (
 
 // BodyReader implements io.ReadCloser and is to be used as HTTP body.
 type BodyReader struct {
-	index     int               // first buffer read index
-	left      int               // num of byte left
-	buffers   [][]byte          // buffers that storage HTTP body
-	allocator mempool.Allocator // allocator that manages buffers
+	index   int      // first buffer read index
+	left    int      // num of byte left
+	buffers [][]byte // buffers that storage HTTP body
+	engine  *Engine  // allocator that manages buffers
 }
 
 // Read reads body bytes to p, returns the num of bytes read and error.
@@ -39,7 +37,7 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 		b := br.buffers[0]
 		nc := copy(p[ncopy:], b[br.index:])
 		if nc+br.index >= len(b) {
-			br.allocator.Free(b)
+			br.engine.BodyAllocator.Free(b)
 			br.buffers = br.buffers[1:]
 			br.index = 0
 		} else {
@@ -55,7 +53,7 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 func (br *BodyReader) Close() error {
 	if br.buffers != nil {
 		for _, b := range br.buffers {
-			br.allocator.Free(b)
+			br.engine.BodyAllocator.Free(b)
 		}
 	}
 	*br = emptyBodyReader
@@ -64,14 +62,18 @@ func (br *BodyReader) Close() error {
 }
 
 // append appends data to buffers.
-func (br *BodyReader) append(data []byte) {
+func (br *BodyReader) append(data []byte) error {
 	if len(data) == 0 {
-		return
+		return nil
+	}
+
+	if br.engine.MaxHTTPBodySize > 0 && len(data)+br.left > br.engine.MaxHTTPBodySize {
+		return ErrTooLong
 	}
 
 	br.left += (len(data))
 	if len(br.buffers) == 0 {
-		b := br.allocator.Malloc(len(data))
+		b := br.engine.BodyAllocator.Malloc(len(data))
 		copy(b, data)
 		br.buffers = append(br.buffers, b)
 	} else {
@@ -86,11 +88,12 @@ func (br *BodyReader) append(data []byte) {
 			br.buffers[i] = b
 		}
 		if len(data) > 0 {
-			b = br.allocator.Malloc(len(data))
+			b = br.engine.BodyAllocator.Malloc(len(data))
 			copy(b, data)
 			br.buffers = append(br.buffers, b)
 		}
 	}
+	return nil
 }
 
 // RawBodyBuffers returns a reference of BodyReader's buffers.
@@ -109,8 +112,8 @@ func (br *BodyReader) RawBodyBuffers() [][]byte {
 }
 
 // NewBodyReader creates a BodyReader.
-func NewBodyReader(allocator mempool.Allocator) *BodyReader {
+func NewBodyReader(engine *Engine) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
-	br.allocator = allocator
+	br.engine = engine
 	return br
 }

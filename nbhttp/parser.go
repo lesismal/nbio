@@ -460,7 +460,10 @@ UPGRADER:
 			cl := p.contentLength
 			left := len(data) - start
 			if left >= cl {
-				p.Processor.OnBody(p, p.Engine.BodyAllocator, data[start:start+cl])
+				err := p.Processor.OnBody(p, data[start:start+cl])
+				if err != nil {
+					return err
+				}
 				p.handleMessage()
 				start += cl
 				i = start - 1
@@ -527,7 +530,10 @@ UPGRADER:
 			cl := p.chunkSize
 			left := len(data) - start
 			if left >= cl {
-				p.Processor.OnBody(p, p.Engine.BodyAllocator, data[start:start+cl])
+				err := p.Processor.OnBody(p, data[start:start+cl])
+				if err != nil {
+					return err
+				}
 				start += cl
 				i = start - 1
 				p.nextState(stateBodyChunkDataCR)

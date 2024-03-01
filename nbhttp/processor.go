@@ -11,8 +11,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -92,7 +90,7 @@ type Processor interface {
 	OnStatus(parser *Parser, code int, status string)
 	OnHeader(parser *Parser, key, value string)
 	OnContentLength(parser *Parser, contentLength int)
-	OnBody(parser *Parser, allocator mempool.Allocator, data []byte)
+	OnBody(parser *Parser, data []byte) error
 	OnTrailerHeader(parser *Parser, key, value string)
 	OnComplete(parser *Parser)
 	Close(parser *Parser, err error)
@@ -180,11 +178,11 @@ func (p *ServerProcessor) OnContentLength(parser *Parser, contentLength int) {
 }
 
 // OnBody .
-func (p *ServerProcessor) OnBody(parser *Parser, allocator mempool.Allocator, data []byte) {
+func (p *ServerProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.request.Body == nil {
-		p.request.Body = NewBodyReader(allocator)
+		p.request.Body = NewBodyReader(parser.Engine)
 	}
-	p.request.Body.(*BodyReader).append(data)
+	return p.request.Body.(*BodyReader).append(data)
 }
 
 // OnTrailerHeader .
@@ -367,11 +365,11 @@ func (p *ClientProcessor) OnContentLength(parser *Parser, contentLength int) {
 }
 
 // OnBody .
-func (p *ClientProcessor) OnBody(parser *Parser, allocator mempool.Allocator, data []byte) {
+func (p *ClientProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.response.Body == nil {
-		p.response.Body = NewBodyReader(allocator)
+		p.response.Body = NewBodyReader(parser.Engine)
 	}
-	p.response.Body.(*BodyReader).append(data)
+	return p.response.Body.(*BodyReader).append(data)
 }
 
 // OnTrailerHeader .
@@ -467,8 +465,8 @@ func (p *EmptyProcessor) OnContentLength(parser *Parser, contentLength int) {
 }
 
 // OnBody .
-func (p *EmptyProcessor) OnBody(parser *Parser, allocator mempool.Allocator, data []byte) {
-
+func (p *EmptyProcessor) OnBody(parser *Parser, data []byte) error {
+	return nil
 }
 
 // OnTrailerHeader .
