@@ -12,94 +12,104 @@ import (
 )
 
 var (
-	bodyReaderPool = sync.Pool{
+	emptyBodyReader = BodyReader{}
+	bodyReaderPool  = sync.Pool{
 		New: func() interface{} {
 			return &BodyReader{}
 		},
 	}
 )
 
-// BodyReader .
+// BodyReader implements io.ReadCloser and is to be used as HTTP body.
 type BodyReader struct {
-	index  int
-	buffer []byte
+	index     int               // first buffer read index
+	left      int               // num of byte left
+	buffers   [][]byte          // buffers that storage HTTP body
+	allocator mempool.Allocator // allocator that manages buffers
 }
 
-// Read implements io.Reader.
+// Read reads body bytes to p, returns the num of bytes read and error.
 func (br *BodyReader) Read(p []byte) (int, error) {
 	need := len(p)
-	available := len(br.buffer) - br.index
-	if available <= 0 {
+	if br.left <= 0 {
 		return 0, io.EOF
 	}
-	if available >= need {
-		copy(p, br.buffer[br.index:br.index+need])
-		br.index += need
-		// if available == need {
-		// 	br.Close()
-		// }
-		return need, nil
+	ncopy := 0
+	for ncopy < need && br.left > 0 {
+		b := br.buffers[0]
+		nc := copy(p[ncopy:], b[br.index:])
+		if nc+br.index > len(b) {
+			br.allocator.Free(b)
+			br.buffers = br.buffers[1:]
+			br.index = 0
+		} else {
+			br.index += nc
+		}
+		ncopy += nc
+		br.left -= nc
 	}
-	copy(p[:available], br.buffer[br.index:])
-	br.index += available
-	return available, io.EOF
+	return ncopy, nil
 }
 
-// Append .
-func (br *BodyReader) Append(data []byte) {
-	if len(data) > 0 {
-		if br.buffer == nil {
-			br.buffer = mempool.Malloc(len(data))
-			copy(br.buffer, data)
-		} else {
-			br.buffer = mempool.Append(br.buffer, data...)
+// Close frees buffers and resets itself to empty value.
+func (br *BodyReader) Close() error {
+	if br.buffers != nil {
+		for _, b := range br.buffers {
+			br.allocator.Free(b)
+		}
+	}
+	*br = emptyBodyReader
+	bodyReaderPool.Put(br)
+	return nil
+}
+
+// append appends data to buffers.
+func (br *BodyReader) append(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+
+	if len(br.buffers) == 0 {
+		b := br.allocator.Malloc(len(data))
+		copy(b, data)
+		br.buffers = append(br.buffers, b)
+	} else {
+		i := len(br.buffers) - 1
+		b := br.buffers[i]
+		l := len(b)
+		bLeft := cap(b) - len(b)
+		if bLeft > 0 {
+			b = b[:cap(b)]
+			nc := copy(b[l:], data)
+			data = data[nc:]
+			br.buffers[i] = b
+		}
+		if len(data) > 0 {
+			b = br.allocator.Malloc(len(data))
+			copy(b, data)
+			br.buffers = append(br.buffers, b)
 		}
 	}
 }
 
-// RawBody returns BodyReader's buffer directly,
-// the buffer returned would be released to the mempool after http handler func,
-// the application layer should not hold it any longer after the http handler func.
-func (br *BodyReader) RawBody() []byte {
-	return br.buffer
-}
-
-// TakeOver returns BodyReader's buffer,
-// the buffer returned would not be released to the mempool after http handler func,
-// the application layer could hold it longer and should manage when to release the buffer to the mempool.
-func (br *BodyReader) TakeOver() []byte {
-	b := br.buffer
-	br.buffer = nil
-	br.index = 0
-	return b
-}
-
-// Close implements io. Closer.
-func (br *BodyReader) Close() error {
-	if br.buffer != nil {
-		mempool.Free(br.buffer)
-		br.buffer = nil
-		br.index = 0
+// RawBodyBuffers returns a reference of BodyReader's buffers.
+// The buffers returned will be closed and released by allocator automatically after http handler is called,
+// users should not free the buffers and should not hold it any longer after the http handler func.
+func (br *BodyReader) RawBodyBuffers() [][]byte {
+	buffers := make([][]byte, len(br.buffers))
+	for i, b := range br.buffers {
+		if i == 0 {
+			buffers[i] = b[br.index:]
+		} else {
+			buffers[i] = b
+		}
 	}
-	return nil
-}
-
-// Reset resets fields of BodyReader but not reput the buffer to the pool.
-func (br *BodyReader) Reset() error {
-	if br.buffer != nil {
-		br.buffer = nil
-		br.index = 0
-	}
-	return nil
+	return buffers
 }
 
 // NewBodyReader creates a BodyReader.
-func NewBodyReader(data []byte) *BodyReader {
+func NewBodyReader(allocator mempool.Allocator) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
-	if len(data) > 0 {
-		br.buffer = mempool.Malloc(len(data))
-		copy(br.buffer, data)
-	}
-	br.index = 0
+	br.allocator = allocator
 	return br
 }
