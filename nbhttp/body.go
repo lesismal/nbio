@@ -38,7 +38,7 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 	for ncopy < need && br.left > 0 {
 		b := br.buffers[0]
 		nc := copy(p[ncopy:], b[br.index:])
-		if nc+br.index > len(b) {
+		if nc+br.index >= len(b) {
 			br.allocator.Free(b)
 			br.buffers = br.buffers[1:]
 			br.index = 0
@@ -69,6 +69,7 @@ func (br *BodyReader) append(data []byte) {
 		return
 	}
 
+	br.left += (len(data))
 	if len(br.buffers) == 0 {
 		b := br.allocator.Malloc(len(data))
 		copy(b, data)
