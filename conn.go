@@ -21,9 +21,11 @@ const (
 	ConnTypeTCP ConnType = iota + 1
 	// ConnTypeUDPServer represents UDP Conn used as a listener.
 	ConnTypeUDPServer
-	// ConnTypeUDPClientFromRead represents UDP Conn that is sending data to our UDP Server from peer.
+	// ConnTypeUDPClientFromRead represents UDP connection that
+	// is sending data to our UDP Server from peer.
 	ConnTypeUDPClientFromRead
-	// ConnTypeUDPClientFromDial represents UDP Conn that is sending data to other UDP Server from ourselves.
+	// ConnTypeUDPClientFromDial represents UDP Conn that is sending
+	// data to other UDP Server from ourselves.
 	ConnTypeUDPClientFromDial
 	// ConnTypeUnix represents Unix Conn.
 	ConnTypeUnix
@@ -55,12 +57,17 @@ func (c *Conn) IsUnix() bool {
 
 // OnData registers Conn's data handler.
 // Notice:
-//  1. The data readed by the poller is not handled by this Conn's data handler by default.
-//  2. The data readed by the poller is handled by nbio.Engine's data handler which is registered by nbio.Engine.OnData by default.
-//  3. This Conn's data handler is used to customize your implementation, you can set different data handler for different Conns,
+//  1. The data readed by the poller is not handled by this Conn's data
+//     handler by default.
+//  2. The data readed by the poller is handled by nbio.Engine's data
+//     handler which is registered by nbio.Engine.OnData by default.
+//  3. This Conn's data handler is used to customize your implementation,
+//     you can set different data handler for different Conns,
 //     and call Conn's data handler in nbio.Engine's data handler.
 //     For example:
-//     engine.OnData(func(c *nbio.Conn, data byte){ c.DataHandler()(c, data) })
+//     engine.OnData(func(c *nbio.Conn, data byte){
+//     c.DataHandler()(c, data)
+//     })
 //     conn1.OnData(yourDatahandler1)
 //     conn2.OnData(yourDatahandler2)
 func (c *Conn) OnData(h func(conn *Conn, data []byte)) {
@@ -113,14 +120,28 @@ func (c *Conn) ExecuteLen() int {
 	return n
 }
 
-// Execute executes the job.
+// Execute is used to run the job.
 //
-// If the job is the head of the Conn's job list, it will call the nbio.Engine.Execute(that is handled by a goroutine pool by default,
-// users can customize it) to execute all of the jobs in the job list;
-// Else it will push the job to the back of the job list and wait to be called.
-// This guarantees there's at most one flow or goroutine running job/jobs for each Conn.
+// How it works:
+// If the job is the head/first of the Conn's job list, it will call the
+// nbio.Engine.Execute to run all the jobs in the job list that include:
+//  1. This job
+//  2. New jobs that are pushed to the back of the list before this job
+//     is done.
+//  3. nbio.Engine.Execute returns until there's no more jobs in the job
+//     list.
+//
+// Else if the job is not the head/first of the job list, it will push the
+// job to the back of the job list and wait to be called.
+// This guarantees there's at most one flow or goroutine running job/jobs
+// for each Conn.
 // This guarantees all the jobs are executed in order.
-// Notice: The job wouldn't be executed or pushed to the back of the job list if the Conn is closed.
+//
+// Notice:
+//  1. The job wouldn't run or pushed to the back of the job list if the
+//     connection is closed.
+//  2. nbio.Engine.Execute is handled by a goroutine pool by default, users
+//     can customize it.
 func (c *Conn) Execute(job func()) bool {
 	c.mux.Lock()
 	if c.closed {
@@ -134,46 +155,52 @@ func (c *Conn) Execute(job func()) bool {
 
 	// If there's no job running, run Engine.Execute to run this job
 	// and new jobs appended before this head job is done.
-	if isHead {
-		c.p.g.Execute(func() {
-			i := 0
-			for {
-				func() {
-					defer func() {
-						if err := recover(); err != nil {
-							const size = 64 << 10
-							buf := make([]byte, size)
-							buf = buf[:runtime.Stack(buf, false)]
-							logging.Error("conn execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-						}
-					}()
-					job()
-				}()
-
-				c.mux.Lock()
-				i++
-				if len(c.jobList) == i { // all jobs done
-					// set nil to release the job and gc
-					c.jobList[i-1] = nil
-					// reuse the slice
-					c.jobList = c.jobList[0:0]
-					c.mux.Unlock()
-					return
-				}
-				// get next job
-				job = c.jobList[i]
-				// set nil to release the job and gc
-				c.jobList[i] = nil
-				c.mux.Unlock()
-			}
-		})
+	if !isHead {
+		return true
 	}
+	c.p.g.Execute(func() {
+		i := 0
+		for {
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						const size = 64 << 10
+						buf := make([]byte, size)
+						buf = buf[:runtime.Stack(buf, false)]
+						logging.Error("conn execute failed: %v\n%v\n",
+							err,
+							*(*string)(unsafe.Pointer(&buf)),
+						)
+					}
+				}()
+				job()
+			}()
+
+			c.mux.Lock()
+			i++
+			if len(c.jobList) == i { // all jobs done
+				// set nil to release the job and gc
+				c.jobList[i-1] = nil
+				// reuse the slice
+				c.jobList = c.jobList[0:0]
+				c.mux.Unlock()
+				return
+			}
+			// get next job
+			job = c.jobList[i]
+			// set nil to release the job and gc
+			c.jobList[i] = nil
+			c.mux.Unlock()
+		}
+	})
 
 	return true
 }
 
-// MustExecute implements a similar function as Execute did, but will still execute or push the job to the
-// back of the job list no matter whether Conn has been closed, it guarantees the job to be executed.
+// MustExecute implements a similar function as Execute did,
+// but will still execute or push the job to the
+// back of the job list no matter whether Conn has been closed,
+// it guarantees the job to be executed.
 // This is used to handle the close event in nbio/nbhttp.
 func (c *Conn) MustExecute(job func()) {
 	c.mux.Lock()
@@ -183,38 +210,42 @@ func (c *Conn) MustExecute(job func()) {
 
 	// If there's no job running, run Engine.Execute to run this job
 	// and new jobs appended before this head job is done.
-	if isHead {
-		c.p.g.Execute(func() {
-			i := 0
-			for {
-				func() {
-					defer func() {
-						if err := recover(); err != nil {
-							const size = 64 << 10
-							buf := make([]byte, size)
-							buf = buf[:runtime.Stack(buf, false)]
-							logging.Error("conn execute failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-						}
-					}()
-					job()
-				}()
-
-				c.mux.Lock()
-				i++
-				if len(c.jobList) == i {
-					// set nil to release the job and gc
-					c.jobList[i-1] = nil
-					// reuse the slice
-					c.jobList = c.jobList[0:0]
-					c.mux.Unlock()
-					return
-				}
-				// get next job
-				job = c.jobList[i]
-				// set nil to release the job and gc
-				c.jobList[i] = nil
-				c.mux.Unlock()
-			}
-		})
+	if !isHead {
+		return
 	}
+	c.p.g.Execute(func() {
+		i := 0
+		for {
+			func() {
+				defer func() {
+					if err := recover(); err != nil {
+						const size = 64 << 10
+						buf := make([]byte, size)
+						buf = buf[:runtime.Stack(buf, false)]
+						logging.Error("conn execute failed: %v\n%v\n",
+							err,
+							*(*string)(unsafe.Pointer(&buf)),
+						)
+					}
+				}()
+				job()
+			}()
+
+			c.mux.Lock()
+			i++
+			if len(c.jobList) == i {
+				// set nil to release the job and gc
+				c.jobList[i-1] = nil
+				// reuse the slice
+				c.jobList = c.jobList[0:0]
+				c.mux.Unlock()
+				return
+			}
+			// get next job
+			job = c.jobList[i]
+			// set nil to release the job and gc
+			c.jobList[i] = nil
+			c.mux.Unlock()
+		}
+	})
 }

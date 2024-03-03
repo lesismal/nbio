@@ -82,9 +82,9 @@ type Conn struct {
 	// used for write deadline.
 	wTimer *time.Timer
 
-	// how many bytes are left in this connection's cache and wait to be written.
+	// how many bytes are cached and wait to be written.
 	left int
-	// cache for buffers that is wait to be written or files to be sent.
+	// cache for buffers or files to be sent.
 	writeList []*toWrite
 
 	typ    ConnType
@@ -147,8 +147,8 @@ func (c *Conn) AsyncRead() {
 		})
 	}
 
-	// If is not EPOLLONESHOT, the reading event may be re-dispatched for more than once,
-	// here we reduce the duplicate reading events.
+	// If is not EPOLLONESHOT, the reading event may be re-dispatched for more than
+	// once, here we reduce the duplicate reading events.
 	cnt := atomic.AddInt32(&c.readEvents, 1)
 	if cnt > 2 {
 		atomic.AddInt32(&c.readEvents, -1)
@@ -190,8 +190,9 @@ func (c *Conn) AsyncRead() {
 
 // Read .
 // Depracated .
-// It was used to customize users' reading implementation, but better to use ReadAndGetConn instead, which
-// can handle different types of connection and returns the consistent connection instance for UDP.
+// It was used to customize users' reading implementation, but better to use
+// `ReadAndGetConn` instead, which can handle different types of connection and
+// returns the consistent connection instance for UDP.
 // Notice: non-blocking interface, should not be used as you use std.
 func (c *Conn) Read(b []byte) (int, error) {
 	// When the connection is closed and the fd is reused on Unix,
@@ -215,8 +216,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 // ReadAndGetConn handles reading for different types of connection.
 // It returns the real connection:
 //  1. For Non-UDP connection, it returns the Conn itself.
-//  2. For UDP connection, it may be a UDP Server fd, then it returns consistent Conn for
-//     the same socket which has the same local addr and remote addr.
+//  2. For UDP connection, it may be a UDP Server fd, then it returns consistent
+//     Conn for the same socket which has the same local addr and remote addr.
 //
 // Notice: non-blocking interface, should not be used as you use std.
 func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
@@ -289,8 +290,8 @@ func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 // Write writes data to the connection.
 // Notice:
 //  1. This is a non-blocking interface, but you can use it as you use std.
-//  2. When it can't write all the data now, the connection will cache the data left to be written
-//     and wait for the writing event then try to flush it.
+//  2. When it can't write all the data now, the connection will cache the data
+//     left to be written and wait for the writing event then try to flush it.
 func (c *Conn) Write(b []byte) (int, error) {
 	// c.p.g.beforeWrite(c)
 
@@ -301,7 +302,9 @@ func (c *Conn) Write(b []byte) (int, error) {
 	}
 
 	n, err := c.write(b)
-	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
+	if err != nil &&
+		!errors.Is(err, syscall.EINTR) &&
+		!errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
@@ -343,7 +346,9 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 	default:
 		n, err = c.writev(in)
 	}
-	if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
+	if err != nil &&
+		!errors.Is(err, syscall.EINTR) &&
+		!errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
 		c.closeWithErrorWithoutLock(err)
@@ -411,12 +416,16 @@ func (c *Conn) SetDeadline(t time.Time) error {
 		if !t.IsZero() {
 			g := c.p.g
 			if c.rTimer == nil {
-				c.rTimer = g.AfterFunc(time.Until(t), func() { c.closeWithError(errReadTimeout) })
+				c.rTimer = g.AfterFunc(time.Until(t), func() {
+					c.closeWithError(errReadTimeout)
+				})
 			} else {
 				c.rTimer.Reset(time.Until(t))
 			}
 			if c.wTimer == nil {
-				c.wTimer = g.AfterFunc(time.Until(t), func() { c.closeWithError(errWriteTimeout) })
+				c.wTimer = g.AfterFunc(time.Until(t), func() {
+					c.closeWithError(errWriteTimeout)
+				})
 			} else {
 				c.wTimer.Reset(time.Until(t))
 			}
@@ -443,7 +452,9 @@ func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) err
 	}
 	if !t.IsZero() {
 		if *timer == nil {
-			*timer = c.p.g.AfterFunc(time.Until(t), func() { c.closeWithError(returnErr) })
+			*timer = c.p.g.AfterFunc(time.Until(t), func() {
+				c.closeWithError(returnErr)
+			})
 		} else {
 			(*timer).Reset(time.Until(t))
 		}
@@ -455,12 +466,14 @@ func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) err
 }
 
 // SetReadDeadline sets the deadline for future Read calls.
-// When the user doesn't update the deadline and the deadline exceeds, the connection will be closed.
+// When the user doesn't update the deadline and the deadline exceeds,
+// the connection will be closed.
 // If it is time.Zero, SetReadDeadline will clear the deadline.
 //
 // Notice:
 //  1. Users should update the read deadline in time.
-//  2. For example, call SetReadDeadline whenever a new WebSocket message is received.
+//  2. For example, call SetReadDeadline whenever a new WebSocket message
+//     is received.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	return c.setDeadline(&c.rTimer, errReadTimeout, t)
 }
@@ -468,9 +481,10 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline sets the deadline for future data writing.
 // If it is time.Zero, SetReadDeadline will clear the deadline.
 //
-// If the next Write call writes all the data succesfully and there's no data left to bewritten,
-// the deadline timer will be cleared automatically;
-// Else when the user doesn't update the deadline and the deadline exceeds, the connection will be closed.
+// If the next Write call writes all the data succesfully and there's no data
+// left to bewritten, the deadline timer will be cleared automatically;
+// Else when the user doesn't update the deadline and the deadline exceeds,
+// the connection will be closed.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return c.setDeadline(&c.wTimer, errWriteTimeout, t)
 }
@@ -481,30 +495,60 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 // sent as soon as possible after a Write.
 func (c *Conn) SetNoDelay(nodelay bool) error {
 	if nodelay {
-		return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 1)
+		return syscall.SetsockoptInt(
+			c.fd,
+			syscall.IPPROTO_TCP,
+			syscall.TCP_NODELAY,
+			1,
+		)
 	}
-	return syscall.SetsockoptInt(c.fd, syscall.IPPROTO_TCP, syscall.TCP_NODELAY, 0)
+	return syscall.SetsockoptInt(
+		c.fd,
+		syscall.IPPROTO_TCP,
+		syscall.TCP_NODELAY,
+		0,
+	)
 }
 
 // SetReadBuffer sets the size of the operating system's
 // receive buffer associated with the connection.
 func (c *Conn) SetReadBuffer(bytes int) error {
-	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_RCVBUF, bytes)
+	return syscall.SetsockoptInt(
+		c.fd,
+		syscall.SOL_SOCKET,
+		syscall.SO_RCVBUF,
+		bytes,
+	)
 }
 
 // SetWriteBuffer sets the size of the operating system's
 // transmit buffer associated with the connection.
 func (c *Conn) SetWriteBuffer(bytes int) error {
-	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_SNDBUF, bytes)
+	return syscall.SetsockoptInt(
+		c.fd,
+		syscall.SOL_SOCKET,
+		syscall.SO_SNDBUF,
+		bytes,
+	)
 }
 
 // SetKeepAlive sets whether the operating system should send
 // keep-alive messages on the connection.
 func (c *Conn) SetKeepAlive(keepalive bool) error {
 	if keepalive {
-		return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 1)
+		return syscall.SetsockoptInt(
+			c.fd,
+			syscall.SOL_SOCKET,
+			syscall.SO_KEEPALIVE,
+			1,
+		)
 	}
-	return syscall.SetsockoptInt(c.fd, syscall.SOL_SOCKET, syscall.SO_KEEPALIVE, 0)
+	return syscall.SetsockoptInt(
+		c.fd,
+		syscall.SOL_SOCKET,
+		syscall.SO_KEEPALIVE,
+		0,
+	)
 }
 
 // SetKeepAlivePeriod sets period between keep-alives.
@@ -512,20 +556,35 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	if runtime.GOOS == "linux" {
 		d += (time.Second - time.Nanosecond)
 		secs := int(d.Seconds())
-		if err := syscall.SetsockoptInt(c.fd, IPPROTO_TCP, TCP_KEEPINTVL, secs); err != nil {
+		if err := syscall.SetsockoptInt(
+			c.fd,
+			IPPROTO_TCP,
+			TCP_KEEPINTVL,
+			secs,
+		); err != nil {
 			return err
 		}
-		return syscall.SetsockoptInt(c.fd, IPPROTO_TCP, TCP_KEEPIDLE, secs)
+		return syscall.SetsockoptInt(
+			c.fd,
+			IPPROTO_TCP,
+			TCP_KEEPIDLE,
+			secs,
+		)
 	}
 	return errors.New("not supported")
 }
 
 // SetLinger .
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
-	return syscall.SetsockoptLinger(c.fd, syscall.SOL_SOCKET, syscall.SO_LINGER, &syscall.Linger{
-		Onoff:  onoff,  // 1
-		Linger: linger, // 0
-	})
+	return syscall.SetsockoptLinger(
+		c.fd,
+		syscall.SOL_SOCKET,
+		syscall.SO_LINGER,
+		&syscall.Linger{
+			Onoff:  onoff,  // 1
+			Linger: linger, // 0
+		},
+	)
 }
 
 // Session returns user session.
@@ -566,7 +625,9 @@ func (c *Conn) write(b []byte) (int, error) {
 
 	if len(c.writeList) == 0 {
 		n, err := c.doWrite(b)
-		if err != nil && !errors.Is(err, syscall.EINTR) && !errors.Is(err, syscall.EAGAIN) {
+		if err != nil &&
+			!errors.Is(err, syscall.EINTR) &&
+			!errors.Is(err, syscall.EAGAIN) {
 			return n, err
 		}
 		if n < 0 {
@@ -643,6 +704,7 @@ func (c *Conn) appendWrite(t *toWrite) {
 	}
 }
 
+// flush cached data to the fd when writing available.
 func (c *Conn) flush() error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -876,12 +938,14 @@ type udpConn struct {
 func (u *udpConn) Close() error {
 	parent := u.parent
 	if parent.connUDP != u {
-		// this connection is created by a UDP server when reading, clear self from the UDP server.
+		// This connection is created by reding from a UDP server,
+		// need to clear itself from the UDP server.
 		parent.mux.Lock()
 		delete(parent.connUDP.conns, u.rAddrKey)
 		parent.mux.Unlock()
 	} else {
-		// this connection is a UDP server or dialer, close self, and close all children if this is a server.
+		// This connection is a UDP server or dialer, need to close itself
+		// and close all children if this is a server.
 		syscall.Close(u.parent.fd)
 		for _, c := range u.conns {
 			c.Close()
