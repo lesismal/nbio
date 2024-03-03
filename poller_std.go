@@ -67,7 +67,7 @@ func (p *poller) readConn(c *Conn) {
 	}
 }
 
-func (p *poller) addConn(c *Conn, virtualUDPConn ...interface{}) error {
+func (p *poller) addConn(c *Conn) error {
 	c.p = p
 	p.g.mux.Lock()
 	p.g.connsStd[c] = struct{}{}
