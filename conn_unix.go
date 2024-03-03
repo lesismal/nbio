@@ -481,7 +481,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 // SetWriteDeadline sets the deadline for future data writing.
 // If it is time.Zero, SetReadDeadline will clear the deadline.
 //
-// If the next Write call writes all the data succesfully and there's no data
+// If the next Write call writes all the data successfully and there's no data
 // left to bewritten, the deadline timer will be cleared automatically;
 // Else when the user doesn't update the deadline and the deadline exceeds,
 // the connection will be closed.

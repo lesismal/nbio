@@ -9,7 +9,7 @@ import (
 
 func TestBodyReader(t *testing.T) {
 	engine := NewEngine(Config{})
-	b1 := make([]byte, 1997)
+	b1 := make([]byte, 0, 1997)
 	rand.Read(b1)
 	b2 := make([]byte, 4096)
 	rand.Read(b2)

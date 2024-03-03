@@ -155,45 +155,9 @@ func (c *Conn) Execute(job func()) bool {
 
 	// If there's no job running, run Engine.Execute to run this job
 	// and new jobs appended before this head job is done.
-	if !isHead {
-		return true
+	if isHead {
+		c.execute(job)
 	}
-	c.p.g.Execute(func() {
-		i := 0
-		for {
-			func() {
-				defer func() {
-					if err := recover(); err != nil {
-						const size = 64 << 10
-						buf := make([]byte, size)
-						buf = buf[:runtime.Stack(buf, false)]
-						logging.Error("conn execute failed: %v\n%v\n",
-							err,
-							*(*string)(unsafe.Pointer(&buf)),
-						)
-					}
-				}()
-				job()
-			}()
-
-			c.mux.Lock()
-			i++
-			if len(c.jobList) == i { // all jobs done
-				// set nil to release the job and gc
-				c.jobList[i-1] = nil
-				// reuse the slice
-				c.jobList = c.jobList[0:0]
-				c.mux.Unlock()
-				return
-			}
-			// get next job
-			job = c.jobList[i]
-			// set nil to release the job and gc
-			c.jobList[i] = nil
-			c.mux.Unlock()
-		}
-	})
-
 	return true
 }
 
@@ -210,9 +174,12 @@ func (c *Conn) MustExecute(job func()) {
 
 	// If there's no job running, run Engine.Execute to run this job
 	// and new jobs appended before this head job is done.
-	if !isHead {
-		return
+	if isHead {
+		c.execute(job)
 	}
+}
+
+func (c *Conn) execute(job func()) {
 	c.p.g.Execute(func() {
 		i := 0
 		for {
