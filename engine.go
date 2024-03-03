@@ -122,10 +122,10 @@ type Engine struct {
 	onWrittenSize     func(c *Conn, b []byte, n int)
 	onReadBufferAlloc func(c *Conn) []byte
 	onReadBufferFree  func(c *Conn, buffer []byte)
-	beforeRead        func(c *Conn)
-	afterRead         func(c *Conn)
-	beforeWrite       func(c *Conn)
-	onStop            func()
+	// beforeRead  func(c *Conn)
+	// afterRead   func(c *Conn)
+	// beforeWrite func(c *Conn)
+	onStop func()
 
 	ioTaskPool *taskpool.IOTaskPool
 }
@@ -270,6 +270,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	g.onReadBufferFree = h
 }
 
+// Depracated .
 // OnWriteBufferRelease registers callback for write buffer memory release.
 // func (g *Engine) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 // 	if h == nil {
@@ -280,30 +281,32 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 
 // BeforeRead registers callback before syscall.Read
 // the handler would be called on windows.
-func (g *Engine) BeforeRead(h func(c *Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.beforeRead = h
-}
+// func (g *Engine) BeforeRead(h func(c *Conn)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.beforeRead = h
+// }
 
+// Depracated .
 // AfterRead registers callback after syscall.Read
 // the handler would be called on *nix.
-func (g *Engine) AfterRead(h func(c *Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.afterRead = h
-}
+// func (g *Engine) AfterRead(h func(c *Conn)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.afterRead = h
+// }
 
+// Depracated .
 // BeforeWrite registers callback befor syscall.Write and syscall.Writev
 // the handler would be called on windows.
-func (g *Engine) BeforeWrite(h func(c *Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.beforeWrite = h
-}
+// func (g *Engine) BeforeWrite(h func(c *Conn)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.beforeWrite = h
+// }
 
 // OnStop registers callback before Engine is stopped.
 func (g *Engine) OnStop(h func()) {
@@ -333,9 +336,9 @@ func (g *Engine) initHandlers() {
 	g.OnReadBufferAlloc(g.PollerBuffer)
 	g.OnReadBufferFree(func(c *Conn, buffer []byte) {})
 	// g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
-	g.BeforeRead(func(c *Conn) {})
-	g.AfterRead(func(c *Conn) {})
-	g.BeforeWrite(func(c *Conn) {})
+	// g.BeforeRead(func(c *Conn) {})
+	// g.AfterRead(func(c *Conn) {})
+	// g.BeforeWrite(func(c *Conn) {})
 	g.OnStop(func() {})
 
 	if g.Execute == nil {

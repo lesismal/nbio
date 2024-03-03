@@ -55,7 +55,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		return remain, nil
 	}
 
-	c.p.g.beforeWrite(c)
+	// c.p.g.beforeWrite(c)
 
 	var (
 		n     int
