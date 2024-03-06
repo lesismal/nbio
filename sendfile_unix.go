@@ -43,8 +43,20 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		remain = size - offset
 	}
 
+	// f.Fd() will set the fd to blocking mod.
+	// We need to set the fd to non-blocking mod again.
 	src := int(f.Fd())
+	err = syscall.SetNonblock(src, true)
+	if err != nil {
+		c.closeWithErrorWithoutLock(err)
+		return 0, err
+	}
+
+	// If c.writeList is not empty, the socket is not writable now.
+	// We push this File to writeList and wait to send it when writable.
 	if len(c.writeList) > 0 {
+		// After this Sendfile func returns, fs will be closed by the caller.
+		// So we need to dup the fd and close it when we don't need it any more.
 		src, err = syscall.Dup(src)
 		if err != nil {
 			c.closeWithErrorWithoutLock(err)
@@ -63,12 +75,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		total = remain
 	)
 
-	err = syscall.SetNonblock(src, true)
-	if err != nil {
-		c.closeWithErrorWithoutLock(err)
-		return 0, err
-	}
-
 	for remain > 0 {
 		n = maxSendfileSize
 		if int64(n) > remain {
@@ -86,6 +92,8 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 			continue
 		}
 		if errors.Is(err, syscall.EAGAIN) {
+			// After this Sendfile func returns, fs will be closed by the caller.
+			// So we need to dup the fd and close it when we don't need it any more.
 			src, err = syscall.Dup(src)
 			if err == nil {
 				t := newToWriteFile(src, offset, remain)

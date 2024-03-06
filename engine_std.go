@@ -16,8 +16,9 @@ import (
 	"github.com/lesismal/nbio/timer"
 )
 
-// Start init and start pollers.
+// Start inits and starts pollers.
 func (g *Engine) Start() error {
+	// Create listener pollers.
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
 	switch g.Network {
 	case "tcp", "tcp4", "tcp6":
@@ -53,6 +54,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
+	// Create IO pollers.
 	for i := 0; i < g.NPoller; i++ {
 		p, err := newPoller(g, false, i)
 		if err != nil {
@@ -68,15 +70,19 @@ func (g *Engine) Start() error {
 		g.pollers[i] = p
 	}
 
+	// Start IO pollers.
 	for i := 0; i < g.NPoller; i++ {
 		g.Add(1)
 		go g.pollers[i].start()
 	}
+
+	// Start TCP/Unix listener pollers.
 	for _, l := range g.listeners {
 		g.Add(1)
 		go l.start()
 	}
 
+	// Start UDP listener pollers.
 	for _, ln := range udpListeners {
 		_, err := g.AddConn(ln)
 		if err != nil {
@@ -99,14 +105,25 @@ func (g *Engine) Start() error {
 	// g.Timer.Start()
 
 	if len(g.Addrs) == 0 {
-		logging.Info("NBIO Engine[%v] start", g.Name)
+		logging.Info("NBIO Engine[%v] start with [%v eventloop, MaxOpenFiles: %v]",
+			g.Name,
+			g.NPoller,
+			MaxOpenFiles,
+		)
 	} else {
-		logging.Info("NBIO Engine[%v] start listen on: [\"%v@%v\"]", g.Name, g.Network, strings.Join(g.Addrs, `", "`))
+		logging.Info("NBIO Engine[%v] start with [%v eventloop], listen on: [\"%v@%v\"], MaxOpenFiles: %v",
+			g.Name,
+			g.NPoller,
+			g.Network,
+			strings.Join(g.Addrs, `", "`),
+			MaxOpenFiles,
+		)
 	}
+
 	return nil
 }
 
-// NewEngine is a factory impl.
+// NewEngine creates an Engine and init default configurations.
 func NewEngine(conf Config) *Engine {
 	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
