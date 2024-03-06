@@ -24,15 +24,9 @@ func writev(fd int, bs [][]byte) (int, error) {
 	}
 
 	if len(iovs) > 0 {
-		var n int
-		var err error
 		var _p0 = unsafe.Pointer(&iovs[0])
-		var r0, _, e1 = syscall.Syscall(syscall.SYS_WRITEV, uintptr(fd), uintptr(_p0), uintptr(len(iovs)))
-		n = int(r0)
-		if e1 != 0 {
-			err = syscall.Errno(e1)
-		}
-		return n, err
+		var n, _, err = syscall.Syscall(syscall.SYS_WRITEV, uintptr(fd), uintptr(_p0), uintptr(len(iovs)))
+		return int(n), err
 	}
 
 	return 0, nil
