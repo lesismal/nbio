@@ -61,6 +61,26 @@ func (br *BodyReader) Close() error {
 	return nil
 }
 
+// Index returns current head buffer's reading index.
+func (br *BodyReader) Index() int {
+	return br.index
+}
+
+// Left returns how many bytes are left for reading.
+func (br *BodyReader) Left() int {
+	return br.left
+}
+
+// Buffers returns the buffers that store the HTTP Body.
+func (br *BodyReader) Buffers() [][]byte {
+	return br.buffers
+}
+
+// Engine returns Engine that creates this HTTP Body.
+func (br *BodyReader) Engine() *Engine {
+	return br.engine
+}
+
 // append appends data to buffers.
 func (br *BodyReader) append(data []byte) error {
 	if len(data) == 0 {
@@ -96,9 +116,10 @@ func (br *BodyReader) append(data []byte) error {
 	return nil
 }
 
-// RawBodyBuffers returns a reference of BodyReader's buffers.
-// The buffers returned will be closed and released by allocator automatically after http handler is called,
-// users should not free the buffers and should not hold it any longer after the http handler func.
+// RawBodyBuffers returns a reference of BodyReader's current buffers.
+// The buffers returned will be closed(released automatically when closed)
+// HTTP Handler is called, users should not free the buffers and should
+// not hold it any longer after the HTTP Handler is called.
 func (br *BodyReader) RawBodyBuffers() [][]byte {
 	buffers := make([][]byte, len(br.buffers))
 	for i, b := range br.buffers {
@@ -109,6 +130,14 @@ func (br *BodyReader) RawBodyBuffers() [][]byte {
 		}
 	}
 	return buffers
+}
+
+// TakeOver returns BodyReader's buffers.
+// The buffers returned will not be closed automatically after HTTP Handler
+// is called, users could hold the buffers longer, but should also call Close
+// when they don't need to hold it any longer.
+func (br *BodyReader) TakeOver() [][]byte {
+	return br.buffers
 }
 
 // NewBodyReader creates a BodyReader.
