@@ -145,6 +145,7 @@ func (c *Conn) AsyncRead() {
 			}
 			c.ResetPollerEvent()
 		})
+		return
 	}
 
 	// If is not EPOLLONESHOT, the reading event may be re-dispatched for more than

@@ -14,8 +14,11 @@ import (
 )
 
 var (
-	emptyRequest        = http.Request{}
-	emptyResponse       = Response{}
+	// used to reset a http.Request to empty value.
+	emptyRequest = http.Request{}
+	// used to reset a Response to empty value.
+	emptyResponse = Response{}
+	// used to reset a http.Response to empty value.
 	emptyClientResponse = http.Response{}
 
 	requestPool = sync.Pool{

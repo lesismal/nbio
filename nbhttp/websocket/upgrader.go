@@ -453,7 +453,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			}
 		}
 	default:
-		// Scenario 4: Unknown conn type, mostly is std's *tls.Conn, from std's http.Server.
+		// Scenario 4: Unknown conn type, mostly is std *tls.Conn, from std http.Server.
 		wsc = NewServerConn(u, conn, subprotocol, compress, u.BlockingModAsyncWrite)
 		wsc.isBlockingMod = true
 		getParser()

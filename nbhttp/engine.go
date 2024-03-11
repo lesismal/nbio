@@ -555,7 +555,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
-// AddConnTLSNonBlocking .
+// AddTransferredConn .
 func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	key, err := conn2Array(nbc)
 	if err != nil {
