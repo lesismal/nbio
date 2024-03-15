@@ -131,6 +131,7 @@ func (c *Conn) AsyncRead() {
 			}
 			c.ResetPollerEvent()
 		})
+		return
 	}
 
 	cnt := atomic.AddInt32(&c.readEvents, 1)
