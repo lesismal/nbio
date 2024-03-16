@@ -35,7 +35,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 	}
 	stat, err := f.Stat()
 	if err != nil {
-		c.closeWithErrorWithoutLock(err)
 		return 0, err
 	}
 	size := stat.Size()
@@ -48,7 +47,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 	src := int(f.Fd())
 	err = syscall.SetNonblock(src, true)
 	if err != nil {
-		c.closeWithErrorWithoutLock(err)
 		return 0, err
 	}
 
@@ -59,7 +57,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		// So we need to dup the fd and close it when we don't need it any more.
 		src, err = syscall.Dup(src)
 		if err != nil {
-			c.closeWithErrorWithoutLock(err)
 			return 0, err
 		}
 		t := newToWriteFile(src, offset, remain)
@@ -98,16 +95,12 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 			if err == nil {
 				t := newToWriteFile(src, offset, remain)
 				c.appendWrite(t)
-				// err = syscall.SetNonblock(src, true)
-				// if err != nil {
-				// 	c.closeWithErrorWithoutLock(err)
-				// 	return 0, err
-				// }
 				c.modWrite()
 			}
 			break
 		}
 		if err != nil {
+			c.closed = true
 			c.closeWithErrorWithoutLock(err)
 			return 0, err
 		}

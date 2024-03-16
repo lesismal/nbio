@@ -106,7 +106,7 @@ func (p *poller) deleteConn(c *Conn) {
 		if c == p.g.connsUnix[fd] {
 			p.g.connsUnix[fd] = nil
 		}
-		p.deleteEvent(fd)
+		// p.deleteEvent(fd)
 	}
 
 	if c.typ != ConnTypeUDPServer {
@@ -259,8 +259,6 @@ func (p *poller) readWriteLoop() {
 						c.closeWithError(io.EOF)
 						continue
 					}
-				} else {
-					syscall.Close(fd)
 				}
 			}
 		}

@@ -89,7 +89,7 @@ func (p *poller) deleteConn(c *Conn) {
 		if c == p.g.connsUnix[fd] {
 			p.g.connsUnix[fd] = nil
 		}
-		p.deleteEvent(fd)
+		// p.deleteEvent(fd)
 	}
 
 	if c.typ != ConnTypeUDPServer {
@@ -172,9 +172,6 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 		if ev.Filter&syscall.EVFILT_WRITE == syscall.EVFILT_WRITE {
 			c.flush()
 		}
-	} else {
-		syscall.Close(fd)
-		// p.deleteEvent(fd)
 	}
 }
 
