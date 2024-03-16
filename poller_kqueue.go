@@ -123,14 +123,14 @@ func (p *poller) modWrite(fd int) {
 	// p.trigger()
 }
 
-func (p *poller) deleteEvent(fd int) {
-	p.mux.Lock()
-	p.eventList = append(p.eventList,
-		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_READ},
-		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
-	p.mux.Unlock()
-	p.trigger()
-}
+// func (p *poller) deleteEvent(fd int) {
+// 	p.mux.Lock()
+// 	p.eventList = append(p.eventList,
+// 		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_READ},
+// 		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
+// 	p.mux.Unlock()
+// 	p.trigger()
+// }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if ev.Flags&syscall.EV_DELETE > 0 {

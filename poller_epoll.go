@@ -358,14 +358,14 @@ func (p *poller) modWrite(fd int) error {
 	}
 }
 
-func (p *poller) deleteEvent(fd int) error {
-	return syscall.EpollCtl(
-		p.epfd,
-		syscall.EPOLL_CTL_DEL,
-		fd,
-		&syscall.EpollEvent{Fd: int32(fd)},
-	)
-}
+// func (p *poller) deleteEvent(fd int) error {
+// 	return syscall.EpollCtl(
+// 		p.epfd,
+// 		syscall.EPOLL_CTL_DEL,
+// 		fd,
+// 		&syscall.EpollEvent{Fd: int32(fd)},
+// 	)
+// }
 
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
