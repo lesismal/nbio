@@ -235,7 +235,7 @@ func (p *poller) readWriteLoop() {
 						continue
 					}
 				} else {
-					syscall.Close(fd)
+					// syscall.Close(fd)
 					// p.deleteEvent(fd)
 				}
 			}
