@@ -37,9 +37,10 @@ type ReadCloser interface {
 type Parser struct {
 	mux sync.Mutex
 
+	// cache for half packet.
 	cache []byte
 
-	errClose error
+	// errClose error
 
 	onClose func(p *Parser, err error)
 
@@ -47,8 +48,10 @@ type Parser struct {
 
 	Engine *Engine
 
+	// Underlayer Conn.
 	Conn net.Conn
 
+	// used to call message handler when got a full Request/Response.
 	Execute func(f func()) bool
 
 	Processor Processor
@@ -98,13 +101,13 @@ func (p *Parser) CloseAndClean(err error) {
 
 	p.state = stateClose
 
-	p.errClose = err
+	// p.errClose = err
 
 	// if p.ReadCloser != nil {
 	// 	p.ReadCloser.CloseWithError(p.errClose)
 	// }
 	if p.Processor != nil {
-		p.Processor.Close(p, p.errClose)
+		p.Processor.Close(p, err)
 	}
 	if len(p.cache) > 0 {
 		mempool.Free(p.cache)
@@ -785,7 +788,7 @@ func (p *Parser) handleMessage() {
 	}
 }
 
-// NewParser .
+// NewParser creates an HTTP parser.
 func NewParser(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
