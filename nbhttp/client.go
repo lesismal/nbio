@@ -74,6 +74,7 @@ func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
 				Timeout:         c.Timeout,
 				IdleConnTimeout: c.IdleConnTimeout,
 				TLSClientConfig: c.TLSClientConfig,
+				Dial:            c.Dial,
 				Proxy:           c.Proxy,
 				CheckRedirect:   c.CheckRedirect,
 			}
@@ -121,6 +122,8 @@ type Client struct {
 	IdleConnTimeout time.Duration
 
 	TLSClientConfig *tls.Config
+
+	Dial func(network, addr string) (net.Conn, error)
 
 	Proxy func(*http.Request) (*url.URL, error)
 
