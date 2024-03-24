@@ -40,7 +40,7 @@ type Conn struct {
 	// user session.
 	session interface{}
 
-	execList []func()
+	jobList []func()
 
 	cache *bytes.Buffer
 
@@ -69,24 +69,6 @@ func (c *Conn) Read(b []byte) (int, error) {
 	return nread, err
 }
 
-// ReadUDP .
-func (c *Conn) ReadUDP(b []byte) (*Conn, int, error) {
-	if c.closeErr != nil {
-		return c, 0, c.closeErr
-	}
-
-	var reader io.Reader = c.conn
-	if c.cache != nil {
-		reader = c.cache
-	}
-	nread, err := reader.Read(b)
-	if c.closeErr == nil {
-		c.closeErr = err
-	}
-
-	return c, nread, err
-}
-
 func (c *Conn) read(b []byte) (int, error) {
 	var err error
 	var nread int
@@ -104,7 +86,7 @@ func (c *Conn) read(b []byte) (int, error) {
 
 func (c *Conn) readTCP(b []byte) (int, error) {
 	g := c.p.g
-	g.beforeRead(c)
+	// g.beforeRead(c)
 	nread, err := c.conn.Read(b)
 	if c.closeErr == nil {
 		c.closeErr = err
@@ -187,8 +169,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 }
 
 func (c *Conn) writeTCP(b []byte) (int, error) {
-	c.p.g.beforeWrite(c)
-
+	// c.p.g.beforeWrite(c)
 	nwrite, err := c.conn.Write(b)
 	if err != nil {
 		if c.closeErr == nil {

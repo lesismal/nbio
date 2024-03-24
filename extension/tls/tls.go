@@ -1,5 +1,7 @@
 package tls
 
+// deprecated.
+
 import (
 	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"

@@ -550,7 +550,10 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 
 // Session returns user session.
 func (c *Conn) Session() interface{} {
-	return c.session
+	if c.chSessionInited == nil {
+		return c.session
+	}
+	return c.SessionWithLock()
 }
 
 // SessionWithLock returns user session with lock, returns as soon as the session has been seted.
@@ -583,12 +586,12 @@ func (c *Conn) SessionWithContext(ctx context.Context) interface{} {
 // SetSession sets user session.
 func (c *Conn) SetSession(session interface{}) {
 	c.mux.Lock()
+	c.session = session
 	if c.chSessionInited != nil {
 		close(c.chSessionInited)
 		c.chSessionInited = nil
 	}
 	c.mux.Unlock()
-	c.session = session
 }
 
 type writeBuffer struct {
@@ -605,36 +608,33 @@ func (w *writeBuffer) Close() error {
 // CloseAndClean .
 func (c *Conn) CloseAndClean(err error) {
 	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+		return
+	}
+
+	c.closed = true
+
 	if c.chSessionInited != nil {
 		close(c.chSessionInited)
 		c.chSessionInited = nil
 	}
 
-	closed := c.closed
-	c.closed = true
-	if closed {
-		c.mux.Unlock()
-		return
-	} else {
-		for i, b := range c.sendQueue {
-			if b != nil {
-				c.Engine.BodyAllocator.Free(b)
-				c.sendQueue[i] = nil
-			}
-		}
-
-		if c.closeErr == nil {
-			c.closeErr = err
+	for i, b := range c.sendQueue {
+		if b != nil {
+			c.Engine.BodyAllocator.Free(b)
+			c.sendQueue[i] = nil
 		}
 	}
+
+	if c.closeErr == nil {
+		c.closeErr = err
+	}
+
 	c.mux.Unlock()
 
 	if c.Conn != nil {
 		c.Conn.Close()
-	}
-
-	if c.onClose != nil {
-		c.onClose(c, c.closeErr)
 	}
 
 	if c.buffer != nil {
@@ -644,6 +644,10 @@ func (c *Conn) CloseAndClean(err error) {
 	if c.message != nil {
 		c.Engine.BodyAllocator.Free(c.message)
 		c.message = nil
+	}
+
+	if c.onClose != nil {
+		c.onClose(c, c.closeErr)
 	}
 }
 

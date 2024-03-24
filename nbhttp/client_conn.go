@@ -43,6 +43,8 @@ type ClientConn struct {
 
 	TLSClientConfig *tls.Config
 
+	Dial func(network, addr string) (net.Conn, error)
+
 	Proxy func(*http.Request) (*url.URL, error)
 
 	CheckRedirect func(req *http.Request, via []*http.Request) error
@@ -213,14 +215,23 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 		}
 		addr := host + ":" + port
 
+		var dialer = c.Dial
 		var netDial netDialerFunc
 		if confTimeout <= 0 {
+			if dialer == nil {
+				dialer = net.Dial
+			}
 			netDial = func(network, addr string) (net.Conn, error) {
-				return net.Dial(network, addr)
+				return dialer(network, addr)
 			}
 		} else {
+			if dialer == nil {
+				dialer = func(network, addr string) (net.Conn, error) {
+					return net.DialTimeout(network, addr, timeout)
+				}
+			}
 			netDial = func(network, addr string) (net.Conn, error) {
-				conn, err := net.DialTimeout(network, addr, timeout)
+				conn, err := dialer(network, addr)
 				if err == nil {
 					conn.SetReadDeadline(deadline)
 				}

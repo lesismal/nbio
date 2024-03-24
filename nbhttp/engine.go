@@ -113,6 +113,9 @@ type Config struct {
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
 	ReadLimit int
 
+	// MaxHTTPBodySize represents the max size of HTTP body for parser reading.
+	MaxHTTPBodySize int
+
 	// ReadBufferSize represents buffer size for reading, it's set to 64k by default.
 	ReadBufferSize int
 
@@ -552,7 +555,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	}
 }
 
-// AddConnTLSNonBlocking .
+// AddTransferredConn .
 func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	key, err := conn2Array(nbc)
 	if err != nil {

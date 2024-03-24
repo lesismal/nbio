@@ -25,8 +25,11 @@ const (
 	connTypLTLS byte = 5
 )
 
+// We can use this array-value as map key to reduce gc cost.
+// Ref: https://github.com/lesismal/nbio/pull/304#issuecomment-1583880587
 type connValue [connValueSize]byte
 
+// Convert net.Conn to array value.
 func conn2Array(conn net.Conn) (connValue, error) {
 	var p uintptr
 	var b connValue
@@ -60,6 +63,7 @@ func conn2Array(conn net.Conn) (connValue, error) {
 	return b, nil
 }
 
+// Convert array value to net.Conn.
 func array2Conn(b connValue) (net.Conn, error) {
 	var p uintptr
 	switch uintptrSize {

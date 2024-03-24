@@ -91,5 +91,6 @@ var (
 )
 
 var (
+	// ErrServiceOverload .
 	ErrServiceOverload = errors.New("service overload")
 )

@@ -80,7 +80,8 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 		copy(newLAddr.IP, lAddrUDP.IP)
 
 		c.lAddr = &newLAddr
-		// c.lAddr = lAddrUDP
+
+		// no remote addr, this is a listener
 		if rAddr == nil {
 			c.typ = ConnTypeUDPServer
 			c.connUDP = &udpConn{
@@ -88,6 +89,7 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 				conns:  map[udpAddrKey]*Conn{},
 			}
 		} else {
+			// has remote addr, this is a dialer
 			c.typ = ConnTypeUDPClientFromDial
 			c.connUDP = &udpConn{
 				parent: c,
