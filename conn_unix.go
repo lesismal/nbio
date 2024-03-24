@@ -748,11 +748,17 @@ func (c *Conn) flush() error {
 			return err
 		}
 
+		writevSize := 65536
 		iovc = iovc[0:0]
-		for i := 0; i < len(c.writeList); i++ {
+		for i := 0; i < len(c.writeList) && i < 1024; i++ {
 			head = c.writeList[i]
 			if head.buf != nil {
-				iovc = append(iovc, head.buf[head.offset:])
+				b := head.buf[head.offset:]
+				writevSize -= len(b)
+				if writevSize < 0 {
+					break
+				}
+				iovc = append(iovc, b)
 			} else {
 				break
 			}
