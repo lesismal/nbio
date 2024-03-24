@@ -59,8 +59,8 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		t := newToWriteFile(src, offset, remain)
-		c.appendWrite(t)
+		c.newToWriteFile(src, offset, remain)
+		// c.appendWrite(t)
 		return remain, nil
 	}
 
@@ -93,8 +93,8 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 			// So we need to dup the fd and close it when we don't need it any more.
 			src, err = syscall.Dup(src)
 			if err == nil {
-				t := newToWriteFile(src, offset, remain)
-				c.appendWrite(t)
+				c.newToWriteFile(src, offset, remain)
+				// c.appendWrite(t)
 				c.modWrite()
 			}
 			break

@@ -31,20 +31,47 @@ var (
 	}
 )
 
-func newToWriteBuf(buf []byte) *toWrite {
-	t := poolToWrite.New().(*toWrite)
-	b := mempool.Malloc(len(buf))
-	copy(b, buf)
-	t.buf = b
-	return t
+func (c *Conn) newToWriteBuf(buf []byte) {
+	c.left += len(buf)
+
+	appendBuffer := func() {
+		t := poolToWrite.New().(*toWrite)
+		b := mempool.Malloc(len(buf))
+		copy(b, buf)
+		t.buf = b
+		c.writeList = append(c.writeList, t)
+	}
+
+	if len(c.writeList) == 0 {
+		appendBuffer()
+		return
+	}
+
+	tail := c.writeList[len(c.writeList)-1]
+	if tail.buf == nil {
+		appendBuffer()
+	} else {
+		l := len(buf)
+		tailLen := len(tail.buf)
+		if tailLen+l > 65536 {
+			appendBuffer()
+		} else {
+			if cap(tail.buf) < tailLen+l {
+				b := mempool.Malloc(tailLen + l)[:tailLen]
+				copy(b, tail.buf)
+				tail.buf = b
+			}
+			tail.buf = append(tail.buf, buf...)
+		}
+	}
 }
 
-func newToWriteFile(fd int, offset, remain int64) *toWrite {
+func (c *Conn) newToWriteFile(fd int, offset, remain int64) {
 	t := poolToWrite.New().(*toWrite)
 	t.fd = fd
 	t.offset = offset
 	t.remain = remain
-	return t
+	c.writeList = append(c.writeList, t)
 }
 
 func releaseToWrite(t *toWrite) {
@@ -636,14 +663,14 @@ func (c *Conn) write(b []byte) (int, error) {
 		}
 		left := len(b) - n
 		if left > 0 && c.typ == ConnTypeTCP {
-			t := newToWriteBuf(b[n:])
-			c.appendWrite(t)
+			c.newToWriteBuf(b[n:])
+			// c.appendWrite(t)
 		}
 		return len(b), nil
 	}
 
-	t := newToWriteBuf(b)
-	c.appendWrite(t)
+	c.newToWriteBuf(b)
+	// c.appendWrite(t)
 
 	return len(b), nil
 }
@@ -658,8 +685,8 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	}
 	if len(c.writeList) > 0 {
 		for _, v := range in {
-			t := newToWriteBuf(v)
-			c.appendWrite(t)
+			c.newToWriteBuf(v)
+			// c.appendWrite(t)
 		}
 		return size, nil
 	}
@@ -672,15 +699,15 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 			for i := 0; i < len(in) && n > 0; i++ {
 				b := in[i]
 				if n == 0 {
-					t := newToWriteBuf(b)
-					c.appendWrite(t)
+					c.newToWriteBuf(b)
+					// c.appendWrite(t)
 				} else {
 					if n < len(b) {
 						if onWrittenSize != nil {
 							onWrittenSize(c, b[:n], n)
 						}
-						t := newToWriteBuf(b[n:])
-						c.appendWrite(t)
+						c.newToWriteBuf(b[n:])
+						// c.appendWrite(t)
 						n = 0
 					} else {
 						if onWrittenSize != nil {
@@ -698,12 +725,12 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	return nwrite, err
 }
 
-func (c *Conn) appendWrite(t *toWrite) {
-	c.writeList = append(c.writeList, t)
-	if t.buf != nil {
-		c.left += len(t.buf)
-	}
-}
+// func (c *Conn) appendWrite(t *toWrite) {
+// c.writeList = append(c.writeList, t)
+// if t.buf != nil {
+// 	c.left += len(t.buf)
+// }
+// }
 
 // flush cached data to the fd when writing available.
 func (c *Conn) flush() error {
@@ -743,6 +770,8 @@ func (c *Conn) flush() error {
 						releaseToWrite(head)
 						c.writeList = nil
 					}
+				} else {
+					break
 				}
 			}
 			return err
@@ -759,8 +788,6 @@ func (c *Conn) flush() error {
 					break
 				}
 				iovc = append(iovc, b)
-			} else {
-				break
 			}
 		}
 
@@ -791,6 +818,8 @@ func (c *Conn) flush() error {
 						n -= headLeft
 					}
 				}
+			} else {
+				break
 			}
 		}
 		return err
