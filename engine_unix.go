@@ -21,8 +21,11 @@ import (
 func (g *Engine) Start() error {
 	g.connsUnix = make([]*Conn, MaxOpenFiles)
 
-	// Create listener pollers.
+	// Create pollers and listeners.
+	g.pollers = make([]*poller, g.NPoller)
+	g.listeners = make([]*poller, len(g.Addrs))[0:0]
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
+
 	switch g.Network {
 	case "unix", "tcp", "tcp4", "tcp6":
 		for i := range g.Addrs {
@@ -160,10 +163,8 @@ func NewEngine(conf Config) *Engine {
 	}
 
 	g := &Engine{
-		Config:    conf,
-		Timer:     timer.New(conf.Name),
-		listeners: make([]*poller, len(conf.Addrs))[0:0],
-		pollers:   make([]*poller, conf.NPoller),
+		Config: conf,
+		Timer:  timer.New(conf.Name),
 	}
 
 	g.initHandlers()
