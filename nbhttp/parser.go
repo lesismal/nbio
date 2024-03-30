@@ -27,9 +27,9 @@ const (
 	MaxInt = int64(int(MaxUint >> 1))
 )
 
-type ReadCloser interface {
+type ParserCloser interface {
 	UnderlayerConn() net.Conn
-	Read(data []byte) error
+	Parse(data []byte) error
 	CloseAndClean(err error)
 }
 
@@ -44,7 +44,7 @@ type Parser struct {
 
 	onClose func(p *Parser, err error)
 
-	ReadCloser ReadCloser
+	ParserCloser ParserCloser
 
 	Engine *Engine
 
@@ -132,7 +132,7 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 }
 
 // Read .
-func (p *Parser) Read(data []byte) error {
+func (p *Parser) Parse(data []byte) error {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
@@ -155,12 +155,12 @@ func (p *Parser) Read(data []byte) error {
 	}
 
 UPGRADER:
-	if p.ReadCloser != nil {
+	if p.ParserCloser != nil {
 		udata := data
 		if start > 0 {
 			udata = data[start:]
 		}
-		err := p.ReadCloser.Read(udata)
+		err := p.ParserCloser.Parse(udata)
 		if p.cache != nil {
 			mempool.Free(p.cache)
 			p.cache = nil
@@ -170,7 +170,7 @@ UPGRADER:
 
 	var c byte
 	for i := offset; i < len(data); i++ {
-		if p.ReadCloser != nil {
+		if p.ParserCloser != nil {
 			p.Processor.Clean(p)
 			goto UPGRADER
 		}

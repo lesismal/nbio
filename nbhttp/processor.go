@@ -277,7 +277,7 @@ func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 			if req.Close {
 				// the data may still in the send queue
 				conn.Close()
-			} else if parser.ReadCloser == nil {
+			} else if parser.ParserCloser == nil {
 				conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 			}
 		}

@@ -493,17 +493,17 @@ func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			logging.Error("execute ReadCloser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			logging.Error("execute ParserCloser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-	readerCloser := c.Session().(ReadCloser)
+	readerCloser := c.Session().(ParserCloser)
 	if readerCloser == nil {
-		logging.Error("nil ReadCloser")
+		logging.Error("nil ParserCloser")
 		return
 	}
-	err := readerCloser.Read(data)
+	err := readerCloser.Parse(data)
 	if err != nil {
-		logging.Debug("ReadCloser.Read failed: %v", err)
+		logging.Debug("ParserCloser.Read failed: %v", err)
 		c.CloseWithError(err)
 	}
 }
@@ -515,16 +515,16 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 			const size = 64 << 10
 			buf := make([]byte, size)
 			buf = buf[:runtime.Stack(buf, false)]
-			logging.Error("execute ReadCloser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
+			logging.Error("execute ParserCloser failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
 		}
 	}()
-	readCloser := c.Session().(ReadCloser)
-	if readCloser == nil {
-		logging.Error("nil ReadCloser")
+	parserCloser := c.Session().(ParserCloser)
+	if parserCloser == nil {
+		logging.Error("nil ParserCloser")
 		c.Close()
 		return
 	}
-	nbhttpConn, ok := readCloser.UnderlayerConn().(*Conn)
+	nbhttpConn, ok := parserCloser.UnderlayerConn().(*Conn)
 	if ok {
 		if tlsConn, ok := nbhttpConn.Conn.(*tls.Conn); ok {
 			defer tlsConn.ResetOrFreeBuffer()
@@ -539,9 +539,9 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 					return
 				}
 				if nread > 0 {
-					err := readCloser.Read(buffer[:nread])
+					err := parserCloser.Parse(buffer[:nread])
 					if err != nil {
-						logging.Debug("ReadCloser.Read failed: %v", err)
+						logging.Debug("ParserCloser.Read failed: %v", err)
 						c.CloseWithError(err)
 						return
 					}
@@ -776,11 +776,11 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 	}
 
 	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
-	var readCloser ReadCloser = parser
+	var parserCloser ParserCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
 		if !conn.Trasfered {
-			readCloser.CloseAndClean(err)
+			parserCloser.CloseAndClean(err)
 		}
 		engine.mux.Lock()
 		switch vt := conn.Conn.(type) {
@@ -799,14 +799,14 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		if err != nil {
 			return
 		}
-		readCloser.Read(buffer[:n])
+		parserCloser.Parse(buffer[:n])
 		if conn.Trasfered {
 			parser.onClose = nil
 			parser.CloseAndClean(nil)
 			return
 		}
-		if parser != nil && parser.ReadCloser != nil {
-			readCloser = parser.ReadCloser
+		if parser != nil && parser.ParserCloser != nil {
+			parserCloser = parser.ParserCloser
 			parser.onClose = nil
 			parser.CloseAndClean(nil)
 			parser = nil
@@ -825,11 +825,11 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
 	}
 	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
-	var readCloser ReadCloser = parser
+	var parserCloser ParserCloser = parser
 	defer func() {
 		readBufferPool.Free(buffer)
 		if !conn.Trasfered {
-			readCloser.CloseAndClean(err)
+			parserCloser.CloseAndClean(err)
 			tlsConn.Close()
 		}
 		engine.mux.Lock()
@@ -857,7 +857,7 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 				return
 			}
 			if nread > 0 {
-				err = readCloser.Read(buffer[:nread])
+				err = parserCloser.Parse(buffer[:nread])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
 					return
@@ -867,8 +867,8 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 					parser.CloseAndClean(nil)
 					return
 				}
-				if parser != nil && parser.ReadCloser != nil {
-					readCloser = parser.ReadCloser
+				if parser != nil && parser.ParserCloser != nil {
+					parserCloser = parser.ParserCloser
 					parser.onClose = nil
 					parser.CloseAndClean(nil)
 					parser = nil
@@ -1038,7 +1038,7 @@ func NewEngine(conf Config) *Engine {
 	g.OnClose(func(c *nbio.Conn, err error) {
 		c.MustExecute(func() {
 			switch vt := c.Session().(type) {
-			case ReadCloser:
+			case ParserCloser:
 				vt.CloseAndClean(err)
 			default:
 			}

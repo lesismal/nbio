@@ -351,9 +351,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 							return
 						}
 						if nread > 0 {
-							errRead = wsc.Read(buffer[:nread])
+							errRead = wsc.Parse(buffer[:nread])
 							if err != nil {
-								logging.Debug("websocket Conn Read failed: %v", errRead)
+								logging.Debug("websocket Conn Parse failed: %v", errRead)
 								c.CloseWithError(errRead)
 								return
 							}
@@ -376,7 +376,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				getParser()
 				if parser != nil {
 					wsc.Execute = parser.Execute
-					parser.ReadCloser = wsc
+					parser.ParserCloser = wsc
 					if nbhttpConn != nil {
 						nbhttpConn.Parser = nil
 					}
@@ -428,9 +428,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 					}
 				}()
 
-				errRead := wsc.Read(data)
+				errRead := wsc.Parse(data)
 				if errRead != nil {
-					logging.Debug("websocket Conn Read failed: %v", errRead)
+					logging.Debug("websocket Conn Parse failed: %v", errRead)
 					c.CloseWithError(errRead)
 					return
 				}
@@ -446,7 +446,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			getParser()
 			if parser != nil {
 				wsc.Execute = parser.Execute
-				parser.ReadCloser = wsc
+				parser.ParserCloser = wsc
 				if nbhttpConn != nil {
 					nbhttpConn.Parser = nil
 				}
@@ -459,7 +459,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		getParser()
 		if parser != nil {
 			wsc.Execute = parser.Execute
-			parser.ReadCloser = wsc
+			parser.ParserCloser = wsc
 			if nbhttpConn != nil {
 				nbhttpConn.Parser = nil
 			}
