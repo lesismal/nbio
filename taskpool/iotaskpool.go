@@ -53,7 +53,7 @@ func NewIO(concurrent, queueSize, bufSize int, v ...interface{}) *IOTaskPool {
 		queueSize = 1024
 	}
 	if bufSize <= 0 {
-		bufSize = 1024 * 32
+		bufSize = 1024 * 64
 	}
 
 	tp := &IOTaskPool{
