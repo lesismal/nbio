@@ -349,6 +349,7 @@ func (c *Conn) Parse(data []byte) error {
 	var err error
 	var body []byte
 	var frame []byte
+	var protocolMessage []byte
 	var opcode MessageType
 	var ok, fin, compress bool
 	for !c.closed {
@@ -393,12 +394,8 @@ func (c *Conn) Parse(data []byte) error {
 				}
 			default:
 				if len(body) > 0 {
-					if c.isMessageTooLarge(len(body)) {
-						err = ErrMessageTooLarge
-						return
-					}
-					frame = c.Engine.BodyAllocator.Malloc(len(body))
-					copy(frame, body)
+					protocolMessage = c.Engine.BodyAllocator.Malloc(len(body))
+					copy(protocolMessage, body)
 				}
 			}
 		}()
@@ -441,7 +438,7 @@ func (c *Conn) Parse(data []byte) error {
 					c.expectingFragments = true
 				}
 			default:
-				c.handleProtocolMessage(opcode, frame)
+				c.handleProtocolMessage(opcode, protocolMessage)
 			}
 		} else {
 			goto Exit
