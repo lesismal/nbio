@@ -112,7 +112,7 @@ func (g *Engine) Start() error {
 	g.Timer.Start()
 	g.isOneshot = (g.EpollMod == EPOLLET && g.EPOLLONESHOT == EPOLLONESHOT)
 
-	if g.AsyncRead {
+	if g.AsyncReadInPoller {
 		if g.IOExecute == nil {
 			g.ioTaskPool = taskpool.NewIO(0, 0, 0)
 			g.IOExecute = g.ioTaskPool.Go
@@ -145,6 +145,9 @@ func NewEngine(conf Config) *Engine {
 	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU() / 4
+		if conf.AsyncReadInPoller {
+			conf.NPoller = 1
+		}
 		if conf.NPoller == 0 {
 			conf.NPoller = 1
 		}

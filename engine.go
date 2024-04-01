@@ -86,12 +86,12 @@ type Config struct {
 	// ListenUDP is used to create udp listener for Engine.
 	ListenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 
-	// AsyncRead represents how the reading events and reading are handled
+	// AsyncReadInPoller represents how the reading events and reading are handled
 	// by epoll goroutine:
 	// true : epoll goroutine handles the reading events only, another goroutine
 	//        pool will handles the reading.
 	// false: epoll goroutine handles both the reading events and the reading.
-	AsyncRead bool
+	AsyncReadInPoller bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
 	IOExecute func(f func([]byte))
 }

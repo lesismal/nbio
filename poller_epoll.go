@@ -188,7 +188,7 @@ func (p *poller) readWriteLoop() {
 	g := p.g
 	p.shutdown = false
 	isOneshot := g.isOneshot
-	asyncReadEnabled := g.AsyncRead && (g.EpollMod == EPOLLET)
+	asyncReadEnabled := g.AsyncReadInPoller && (g.EpollMod == EPOLLET)
 	for !p.shutdown {
 		n, err := syscall.EpollWait(p.epfd, events, msec)
 		if err != nil && !errors.Is(err, syscall.EINTR) {
