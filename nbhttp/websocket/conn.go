@@ -456,6 +456,10 @@ func (c *Conn) Parse(data []byte) error {
 				c.handleProtocolMessage(opcode, frame)
 			}
 		}
+
+		if len(data) == 0 {
+			return nil
+		}
 	}
 
 Exit:
