@@ -463,7 +463,7 @@ Exit:
 				copy(c.bytesCached, data)
 			}
 		} else { // When using the origin data passed to this `Parse` func:
-			c.bytesCached = allocator.Malloc(len(c.bytesCached))
+			c.bytesCached = allocator.Malloc(len(data))
 			copy(c.bytesCached, data)
 		}
 	} else { // The data bytes were all consumed:
