@@ -202,12 +202,13 @@ type Config struct {
 	// WebsocketDecompressor .
 	WebsocketDecompressor func(r io.Reader) io.ReadCloser
 
-	// SyncRead represents how the reading events and reading are handled
+	// AsyncRead represents how the reading events and reading are handled
 	// by epoll goroutine:
-	// false: epoll goroutine handles the reading events only, another goroutine
-	//        pool will handles the reading. false is the defalt value.
-	// true : epoll goroutine handles both the reading events and the reading.
-	SyncRead bool
+	// true : epoll goroutine handles the reading events only, another goroutine
+	//        pool will handles the reading.
+	// false: epoll goroutine handles both the reading events and the reading.
+	//        false is by defalt.
+	AsyncRead bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
 	IOExecute func(f func([]byte))
 }
@@ -898,13 +899,12 @@ func NewEngine(conf Config) *Engine {
 	if conf.MaxLoad <= 0 {
 		conf.MaxLoad = DefaultMaxLoad
 	}
-	if !conf.SyncRead {
-		if conf.NPoller <= 0 {
-			conf.NPoller = 1
-		}
-	} else if conf.NPoller <= 0 {
+	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU() / 4
 		if conf.NPoller == 0 {
+			conf.NPoller = 1
+		}
+		if conf.AsyncRead {
 			conf.NPoller = 1
 		}
 	}
@@ -1002,7 +1002,7 @@ func NewEngine(conf Config) *Engine {
 		LockListener:                 conf.LockListener,
 		EpollMod:                     conf.EpollMod,
 		EPOLLONESHOT:                 conf.EPOLLONESHOT,
-		AsyncRead:                    !conf.SyncRead,
+		AsyncRead:                    conf.AsyncRead,
 		IOExecute:                    conf.IOExecute,
 	}
 	g := nbio.NewEngine(gopherConf)
