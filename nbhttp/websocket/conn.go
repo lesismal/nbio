@@ -76,9 +76,9 @@ type Conn struct {
 	isInReadingLoop          bool
 	expectingFragments       bool
 	compress                 bool
-	opcode                   MessageType
-	cache                    []byte
+	msgType                  MessageType
 	message                  []byte
+	bytesCached              []byte
 
 	Engine  *nbhttp.Engine
 	Execute func(f func()) bool
@@ -258,27 +258,33 @@ ErrExit:
 	c.Close()
 }
 
-func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2, res3 bool, err error) {
-	l := int64(len(c.cache))
-	headLen := int64(2)
+func (c *Conn) nextFrame(data []byte) ([]byte, MessageType, []byte, bool, bool, bool, error) {
+	var (
+		opcode                    MessageType
+		body                      []byte
+		ok, fin, res1, res2, res3 bool
+		err                       error
+		l                         = int64(len(data))
+		headLen                   = int64(2)
+	)
 	if l >= 2 {
-		opcode = MessageType(c.cache[0] & 0xF)
-		res1 = int8(c.cache[0]&0x40) != 0
-		res2 = int8(c.cache[0]&0x20) != 0
-		res3 = int8(c.cache[0]&0x10) != 0
-		fin = ((c.cache[0] & 0x80) != 0)
-		payloadLen := c.cache[1] & 0x7F
+		opcode = MessageType(data[0] & 0xF)
+		res1 = int8(data[0]&0x40) != 0
+		res2 = int8(data[0]&0x20) != 0
+		res3 = int8(data[0]&0x10) != 0
+		fin = ((data[0] & 0x80) != 0)
+		payloadLen := data[1] & 0x7F
 		bodyLen := int64(-1)
 
 		switch payloadLen {
 		case 126:
 			if l >= 4 {
-				bodyLen = int64(binary.BigEndian.Uint16(c.cache[2:4]))
+				bodyLen = int64(binary.BigEndian.Uint16(data[2:4]))
 				headLen = 4
 			}
 		case 127:
-			if len(c.cache) >= 10 {
-				bodyLen = int64(binary.BigEndian.Uint64(c.cache[2:10]))
+			if len(data) >= 10 {
+				bodyLen = int64(binary.BigEndian.Uint64(data[2:10]))
 				headLen = 10
 			}
 		default:
@@ -287,48 +293,51 @@ func (c *Conn) nextFrame() (opcode MessageType, body []byte, ok, fin, res1, res2
 
 		if (bodyLen > maxControlFramePayloadSize) &&
 			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
-			err = ErrControlMessageTooBig
-			return
+			return data, 0, nil, false, false, false, ErrControlMessageTooBig
 		}
 
 		if bodyLen >= 0 {
-			masked := (c.cache[1] & 0x80) != 0
+			masked := (data[1] & 0x80) != 0
 			if masked {
 				headLen += 4
 			}
 			total := headLen + bodyLen
 			if l >= total {
-				body = c.cache[headLen:total]
+				body = data[headLen:total]
 				if masked {
-					maskXOR(body, c.cache[headLen-4:headLen])
+					maskXOR(body, data[headLen-4:headLen])
 				}
 
 				ok = true
-				c.cache = c.cache[total:l]
+				data = data[total:l]
 			}
+		} else {
+			ok = true
+			data = data[headLen:l]
 		}
 	}
 
-	return opcode, body, ok, fin, res1, res2, res3, err
+	if ok {
+		err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments)
+	}
+
+	return data, opcode, body, ok, fin, res1, err
 }
 
 // Read .
 func (c *Conn) Parse(data []byte) error {
 	c.mux.Lock()
 	readLimit := c.Engine.ReadLimit
-	if readLimit > 0 && (len(c.cache)+len(data) > readLimit) {
+	if readLimit > 0 && (len(c.bytesCached)+len(data) > readLimit) {
 		c.mux.Unlock()
 		return nbhttp.ErrTooLong
 	}
 
-	var tmpCache []byte
 	var appended = false
 	var allocator = c.Engine.BodyAllocator
-	if len(c.cache) == 0 {
-		c.cache = data
-	} else {
-		c.cache = allocator.Append(c.cache, data...)
-		tmpCache = c.cache
+	if len(c.bytesCached) > 0 {
+		c.bytesCached = allocator.Append(c.bytesCached, data...)
+		data = c.bytesCached
 		appended = true
 	}
 	c.mux.Unlock()
@@ -337,26 +346,24 @@ func (c *Conn) Parse(data []byte) error {
 	var body []byte
 	var frame []byte
 	var opcode MessageType
-	var ok, fin, res1, res2, res3 bool
+	var ok, fin, compress bool
 	for !c.closed {
 		func() {
 			c.mux.Lock()
 			defer c.mux.Unlock()
-			opcode, body, ok, fin, res1, res2, res3, err = c.nextFrame()
+			data, opcode, body, ok, fin, compress, err = c.nextFrame(data)
 			if err != nil {
 				return
 			}
 			if !ok {
 				return
 			}
-			if err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments); err != nil {
-				return
-			}
+
 			switch opcode {
 			case FragmentMessage, TextMessage, BinaryMessage:
-				if c.opcode == 0 {
-					c.opcode = opcode
-					c.compress = res1
+				if c.msgType == 0 {
+					c.msgType = opcode
+					c.compress = compress
 				}
 				bl := len(body)
 				if c.dataFrameHandler != nil {
@@ -368,26 +375,28 @@ func (c *Conn) Parse(data []byte) error {
 						frame = c.Engine.BodyAllocator.Malloc(bl)
 						copy(frame, body)
 					}
-					if c.opcode == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
+					if c.msgType == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
 						c.Conn.Close()
 						err = ErrInvalidUtf8
 						return
 					}
 				}
-				if bl > 0 && c.messageHandler != nil {
-					if c.message == nil {
-						if c.isMessageTooLarge(len(body)) {
-							err = ErrMessageTooLarge
-							return
+				if c.messageHandler != nil {
+					if bl > 0 {
+						if c.message == nil {
+							if c.isMessageTooLarge(len(body)) {
+								err = ErrMessageTooLarge
+								return
+							}
+							c.message = c.Engine.BodyAllocator.Malloc(len(body))
+							copy(c.message, body)
+						} else {
+							if c.isMessageTooLarge(len(c.message) + len(body)) {
+								err = ErrMessageTooLarge
+								return
+							}
+							c.message = c.Engine.BodyAllocator.Append(c.message, body...)
 						}
-						c.message = c.Engine.BodyAllocator.Malloc(len(body))
-						copy(c.message, body)
-					} else {
-						if c.isMessageTooLarge(len(c.message) + len(body)) {
-							err = ErrMessageTooLarge
-							return
-						}
-						c.message = c.Engine.BodyAllocator.Append(c.message, body...)
 					}
 				}
 			default:
@@ -401,16 +410,20 @@ func (c *Conn) Parse(data []byte) error {
 				}
 			}
 
-			if len(c.cache) == 0 {
+			if len(data) == 0 {
 				return
 			}
 		}()
 
-		if ok && err == nil {
+		if err != nil {
+			return err
+		}
+
+		if ok {
 			switch opcode {
 			case FragmentMessage, TextMessage, BinaryMessage:
 				if c.dataFrameHandler != nil {
-					c.handleDataFrame(c.opcode, fin, frame)
+					c.handleDataFrame(c.msgType, fin, frame)
 				}
 				if fin {
 					if c.messageHandler != nil {
@@ -430,12 +443,12 @@ func (c *Conn) Parse(data []byte) error {
 								goto Exit
 							}
 						}
-						c.handleMessage(c.opcode, c.message)
+						c.handleMessage(c.msgType, c.message)
 					}
 					c.compress = false
 					c.expectingFragments = false
 					c.message = nil
-					c.opcode = 0
+					c.msgType = 0
 				} else {
 					c.expectingFragments = true
 				}
@@ -448,22 +461,26 @@ func (c *Conn) Parse(data []byte) error {
 Exit:
 	c.mux.Lock()
 	defer c.mux.Unlock()
-	if len(c.cache) > 0 {
+	// The data bytes were not all consumed, need to recache the current bytes left:
+	if len(data) > 0 {
+		// The data bytes were appended to the tail of the previous chaced data:
 		if appended {
-			if len(c.cache) < len(tmpCache) {
-				tmpCache = tmpCache[:len(c.cache)]
-				copy(tmpCache, c.cache)
+			// If data bytes were consumed, move data to the head of the cached bytes,
+			// else the data is same as the cached bytes, nothing to do.
+			if len(data) < len(c.bytesCached) {
+				c.bytesCached = c.bytesCached[:len(data)]
+				copy(c.bytesCached, data)
 			}
-		} else {
-			tmpCache = allocator.Malloc(len(c.cache))
-			copy(tmpCache, c.cache)
+		} else { // When using the origin data passed to this `Parse` func:
+			c.bytesCached = allocator.Malloc(len(c.bytesCached))
+			copy(c.bytesCached, data)
 		}
-		c.cache = tmpCache
-	} else {
-		if len(tmpCache) > 0 {
-			allocator.Free(tmpCache)
+	} else { // The data bytes were all consumed:
+		// If the data bytes were cached, release the bytes and clear the cache.
+		if len(c.bytesCached) > 0 {
+			allocator.Free(c.bytesCached)
+			c.bytesCached = nil
 		}
-		c.cache = nil
 	}
 
 	return err
@@ -652,20 +669,20 @@ func (c *Conn) CloseAndClean(err error) {
 		c.closeErr = err
 	}
 
-	c.mux.Unlock()
-
 	if c.Conn != nil {
 		c.Conn.Close()
 	}
 
-	if c.cache != nil {
-		c.Engine.BodyAllocator.Free(c.cache)
-		c.cache = nil
+	if c.bytesCached != nil {
+		c.Engine.BodyAllocator.Free(c.bytesCached)
+		c.bytesCached = nil
 	}
 	if c.message != nil {
 		c.Engine.BodyAllocator.Free(c.message)
 		c.message = nil
 	}
+
+	c.mux.Unlock()
 
 	if c.onClose != nil {
 		c.onClose(c, c.closeErr)
@@ -908,13 +925,13 @@ func (c *Conn) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFr
 		return ErrReserveBitSet
 	}
 	if opcode > BinaryMessage && opcode < CloseMessage {
-		return fmt.Errorf("%w: opcode=%d", ErrReservedOpcodeSet, opcode)
+		return fmt.Errorf("%w: opcode=%d", ErrReservedMessageType, opcode)
 	}
 	if !fin && (opcode != FragmentMessage && opcode != TextMessage && opcode != BinaryMessage) {
 		return fmt.Errorf("%w: opcode=%d", ErrControlMessageFragmented, opcode)
 	}
 	if expectingFragments && (opcode == TextMessage || opcode == BinaryMessage) {
-		return ErrFragmentsShouldNotHaveBinaryOrTextOpcode
+		return ErrFragmentsShouldNotHaveBinaryOrTextMessage
 	}
 	return nil
 }

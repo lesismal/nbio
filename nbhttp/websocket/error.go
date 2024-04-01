@@ -40,8 +40,8 @@ var (
 	// ErrReserveBitSet .
 	ErrReserveBitSet = errors.New("websocket: reserved bit set it frame")
 
-	// ErrReservedOpcodeSet .
-	ErrReservedOpcodeSet = errors.New("websocket: reserved opcode received")
+	// ErrReservedMessageType .
+	ErrReservedMessageType = errors.New("websocket: reserved message type received")
 
 	// ErrControlMessageFragmented .
 	ErrControlMessageFragmented = errors.New("websocket: control messages must not be fragmented")
@@ -49,8 +49,8 @@ var (
 	// ErrControlMessageTooBig .
 	ErrControlMessageTooBig = errors.New("websocket: control frame length > 125")
 
-	// ErrFragmentsShouldNotHaveBinaryOrTextOpcode .
-	ErrFragmentsShouldNotHaveBinaryOrTextOpcode = errors.New("websocket: fragments should not have opcode of text or binary")
+	// ErrFragmentsShouldNotHaveBinaryOrTextMessage .
+	ErrFragmentsShouldNotHaveBinaryOrTextMessage = errors.New("websocket: fragments should not have message type of text or binary")
 
 	// ErrInvalidCloseCode .
 	ErrInvalidCloseCode = errors.New("websocket: invalid close code")
