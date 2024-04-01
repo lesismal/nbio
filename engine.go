@@ -152,6 +152,24 @@ type Engine struct {
 	ioTaskPool *taskpool.IOTaskPool
 }
 
+// SetETAsyncRead .
+func (e *Engine) SetETAsyncRead() {
+	if e.NPoller <= 0 {
+		e.NPoller = 1
+	}
+	e.EpollMod = EPOLLET
+	e.AsyncReadInPoller = true
+}
+
+// SetLTSyncRead .
+func (e *Engine) SetLTSyncRead() {
+	if e.NPoller <= 0 {
+		e.NPoller = runtime.NumCPU()
+	}
+	e.EpollMod = EPOLLLT
+	e.AsyncReadInPoller = false
+}
+
 // Stop closes listeners/pollers/conns/timer.
 func (g *Engine) Stop() {
 	for _, l := range g.listeners {

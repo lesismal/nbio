@@ -426,6 +426,26 @@ func (e *Engine) stopListeners() {
 	}
 }
 
+// SetETAsyncRead .
+func (e *Engine) SetETAsyncRead() {
+	if e.NPoller <= 0 {
+		e.NPoller = 1
+	}
+	e.EpollMod = nbio.EPOLLET
+	e.AsyncReadInPoller = true
+	e.Engine.SetETAsyncRead()
+}
+
+// SetLTSyncRead .
+func (e *Engine) SetLTSyncRead() {
+	if e.NPoller <= 0 {
+		e.NPoller = runtime.NumCPU()
+	}
+	e.EpollMod = nbio.EPOLLLT
+	e.AsyncReadInPoller = false
+	e.Engine.SetLTSyncRead()
+}
+
 // Start .
 func (e *Engine) Start() error {
 	modNames := map[int]string{
@@ -901,7 +921,7 @@ func NewEngine(conf Config) *Engine {
 	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU() / 4
-		if conf.AsyncReadInPoller {
+		if conf.AsyncReadInPoller && conf.EpollMod == nbio.EPOLLET {
 			conf.NPoller = 1
 		}
 		if conf.NPoller == 0 {
