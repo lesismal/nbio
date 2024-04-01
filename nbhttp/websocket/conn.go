@@ -291,6 +291,10 @@ func (c *Conn) nextFrame(data []byte) ([]byte, MessageType, []byte, bool, bool, 
 			bodyLen = int64(payloadLen)
 		}
 
+		if c.isMessageTooLarge(int(bodyLen)) {
+			return data, 0, nil, false, false, false, ErrMessageTooLarge
+		}
+
 		if (bodyLen > maxControlFramePayloadSize) &&
 			((opcode == PingMessage) || (opcode == PongMessage) || (opcode == CloseMessage)) {
 			return data, 0, nil, false, false, false, ErrControlMessageTooBig
@@ -368,10 +372,6 @@ func (c *Conn) Parse(data []byte) error {
 				bl := len(body)
 				if c.dataFrameHandler != nil {
 					if bl > 0 {
-						if c.isMessageTooLarge(bl) {
-							err = ErrMessageTooLarge
-							return
-						}
 						frame = c.Engine.BodyAllocator.Malloc(bl)
 						copy(frame, body)
 					}
@@ -384,17 +384,9 @@ func (c *Conn) Parse(data []byte) error {
 				if c.messageHandler != nil {
 					if bl > 0 {
 						if c.message == nil {
-							if c.isMessageTooLarge(len(body)) {
-								err = ErrMessageTooLarge
-								return
-							}
 							c.message = c.Engine.BodyAllocator.Malloc(len(body))
 							copy(c.message, body)
 						} else {
-							if c.isMessageTooLarge(len(c.message) + len(body)) {
-								err = ErrMessageTooLarge
-								return
-							}
 							c.message = c.Engine.BodyAllocator.Append(c.message, body...)
 						}
 					}
@@ -408,10 +400,6 @@ func (c *Conn) Parse(data []byte) error {
 					frame = c.Engine.BodyAllocator.Malloc(len(body))
 					copy(frame, body)
 				}
-			}
-
-			if len(data) == 0 {
-				return
 			}
 		}()
 
@@ -440,7 +428,7 @@ func (c *Conn) Parse(data []byte) error {
 							c.message = b
 							rc.Close()
 							if err != nil {
-								goto Exit
+								return err
 							}
 						}
 						c.handleMessage(c.msgType, c.message)
@@ -455,10 +443,12 @@ func (c *Conn) Parse(data []byte) error {
 			default:
 				c.handleProtocolMessage(opcode, frame)
 			}
+		} else {
+			goto Exit
 		}
 
 		if len(data) == 0 {
-			return nil
+			goto Exit
 		}
 	}
 
