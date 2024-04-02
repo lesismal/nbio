@@ -392,11 +392,14 @@ func (c *Conn) Parse(data []byte) error {
 						}
 					}
 				}
-			default:
+			case PingMessage, PongMessage, CloseMessage:
 				if len(body) > 0 {
 					protocolMessage = c.Engine.BodyAllocator.Malloc(len(body))
 					copy(protocolMessage, body)
 				}
+			default:
+				err = ErrInvalidFragmentMessage
+				return
 			}
 		}()
 
@@ -437,8 +440,10 @@ func (c *Conn) Parse(data []byte) error {
 				} else {
 					c.expectingFragments = true
 				}
-			default:
+			case PingMessage, PongMessage, CloseMessage:
 				c.handleProtocolMessage(opcode, protocolMessage)
+			default:
+				return ErrInvalidFragmentMessage
 			}
 		} else {
 			goto Exit
