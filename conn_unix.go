@@ -143,7 +143,7 @@ func (c *Conn) Hash() int {
 	return c.fd
 }
 
-// AsyncRead is used for reading data async.
+// AsyncReadInPoller is used for reading data async.
 func (c *Conn) AsyncRead() {
 	g := c.p.g
 

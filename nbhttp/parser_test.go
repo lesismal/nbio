@@ -109,18 +109,18 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 			parser.Conn.Close()
 		}
 	}()
-	err := parser.Read(data)
+	err := parser.Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for i := 0; i < len(data)-1; i++ {
-		err = parser.Read(append([]byte{}, data[i:i+1]...))
+		err = parser.Parse(append([]byte{}, data[i:i+1]...))
 		if err != nil {
 			t.Fatal(err)
 		}
 	}
-	err = parser.Read(append([]byte{}, data[len(data)-1:]...))
+	err = parser.Parse(append([]byte{}, data[len(data)-1:]...))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 			readBuf := append([]byte{}, tmp[:nRead]...)
 			reads = append(reads, readBuf)
 			tmp = tmp[nRead:]
-			err = parser.Read(readBuf)
+			err = parser.Parse(readBuf)
 			if err != nil {
 				t.Fatalf("nRead: %v, numOne: %v, reads: %v, error: %v", len(data)-len(tmp), len(data), reads, err)
 			}
@@ -273,7 +273,7 @@ func BenchmarkServerProcessor(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < 5; j++ {
-			err := parser.Read(benchData)
+			err := parser.Parse(benchData)
 			if err != nil {
 				b.Fatal(err)
 			}
