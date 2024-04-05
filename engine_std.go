@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/timer"
 )
 
@@ -140,6 +141,9 @@ func NewEngine(conf Config) *Engine {
 	}
 	if conf.ListenUDP == nil {
 		conf.ListenUDP = net.ListenUDP
+	}
+	if conf.BodyAllocator == nil {
+		conf.BodyAllocator = mempool.DefaultMemPool
 	}
 
 	g := &Engine{

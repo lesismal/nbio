@@ -16,8 +16,6 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -36,7 +34,7 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 
 	appendBuffer := func() {
 		t := poolToWrite.New().(*toWrite)
-		b := mempool.Malloc(len(buf))
+		b := c.p.g.BodyAllocator.Malloc(len(buf))
 		copy(b, buf)
 		t.buf = b
 		c.writeList = append(c.writeList, t)
@@ -53,11 +51,11 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 	} else {
 		l := len(buf)
 		tailLen := len(tail.buf)
-		if tailLen+l > 65536 {
+		if tailLen+l > maxWriteCacheOrFlushSize {
 			appendBuffer()
 		} else {
 			if cap(tail.buf) < tailLen+l {
-				b := mempool.Malloc(tailLen + l)[:tailLen]
+				b := c.p.g.BodyAllocator.Malloc(tailLen + l)[:tailLen]
 				copy(b, tail.buf)
 				tail.buf = b
 			}
@@ -74,9 +72,9 @@ func (c *Conn) newToWriteFile(fd int, offset, remain int64) {
 	c.writeList = append(c.writeList, t)
 }
 
-func releaseToWrite(t *toWrite) {
+func (c *Conn) releaseToWrite(t *toWrite) {
 	if t.buf != nil {
-		mempool.Free(t.buf)
+		c.p.g.BodyAllocator.Free(t.buf)
 	}
 	if t.fd > 0 {
 		syscall.Close(t.fd)
@@ -84,6 +82,8 @@ func releaseToWrite(t *toWrite) {
 	*t = emptyToWrite
 	poolToWrite.Put(t)
 }
+
+const maxWriteCacheOrFlushSize = 1024 * 64
 
 type toWrite struct {
 	fd     int    // file descriptor, used for sendfile
@@ -691,7 +691,7 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 		return size, nil
 	}
 
-	nwrite, err := writev(c.fd, in)
+	nwrite, err := writev(c, in)
 	if nwrite > 0 {
 		n := nwrite
 		onWrittenSize := c.p.g.onWrittenSize
@@ -767,7 +767,7 @@ func (c *Conn) flush() error {
 					head.offset += int64(n)
 					buf = buf[n:]
 					if len(buf) == 0 {
-						releaseToWrite(head)
+						c.releaseToWrite(head)
 						c.writeList = nil
 					}
 				} else {
@@ -777,7 +777,7 @@ func (c *Conn) flush() error {
 			return err
 		}
 
-		writevSize := 65536
+		writevSize := maxWriteCacheOrFlushSize
 		iovc = iovc[0:0]
 		for i := 0; i < len(c.writeList) && i < 1024; i++ {
 			head = c.writeList[i]
@@ -792,7 +792,7 @@ func (c *Conn) flush() error {
 		}
 
 		for len(iovc) > 0 && err == nil {
-			n, err = writev(c.fd, iovc)
+			n, err = writev(c, iovc)
 			if n > 0 {
 				c.left -= n
 				for n > 0 {
@@ -809,7 +809,7 @@ func (c *Conn) flush() error {
 						if onWrittenSize != nil {
 							onWrittenSize(c, head.buf[head.offset:], headLeft)
 						}
-						releaseToWrite(head)
+						c.releaseToWrite(head)
 						c.writeList = c.writeList[1:]
 						if len(c.writeList) == 0 {
 							c.writeList = nil
@@ -837,7 +837,7 @@ func (c *Conn) flush() error {
 				v.remain -= int64(n)
 				v.offset += int64(n)
 				if v.remain <= 0 {
-					releaseToWrite(c.writeList[0])
+					c.releaseToWrite(c.writeList[0])
 					c.writeList = c.writeList[1:]
 				}
 			}
@@ -925,7 +925,7 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 
 	if c.writeList != nil {
 		for _, t := range c.writeList {
-			releaseToWrite(t)
+			c.releaseToWrite(t)
 		}
 		c.writeList = nil
 	}

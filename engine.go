@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/taskpool"
 	"github.com/lesismal/nbio/timer"
 )
@@ -94,6 +95,9 @@ type Config struct {
 	AsyncReadInPoller bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
 	IOExecute func(f func([]byte))
+
+	// BodyAllocator sets the buffer allocator for write cache.
+	BodyAllocator mempool.Allocator
 }
 
 // Gopher keeps old type to compatible with new name Engine.

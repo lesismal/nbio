@@ -12,7 +12,7 @@ import (
 	"unsafe"
 )
 
-func writev(fd int, bs [][]byte) (int, error) {
+func writev(c *Conn, bs [][]byte) (int, error) {
 	iovs := make([]syscall.Iovec, len(bs))[0:0]
 	for _, b := range bs {
 		if len(b) > 0 {
@@ -25,7 +25,7 @@ func writev(fd int, bs [][]byte) (int, error) {
 
 	if len(iovs) > 0 {
 		var _p0 = unsafe.Pointer(&iovs[0])
-		var n, _, err = syscall.Syscall(syscall.SYS_WRITEV, uintptr(fd), uintptr(_p0), uintptr(len(iovs)))
+		var n, _, err = syscall.Syscall(syscall.SYS_WRITEV, uintptr(c.fd), uintptr(_p0), uintptr(len(iovs)))
 		if err == 0 {
 			return int(n), nil
 		}
