@@ -1,86 +1,41 @@
 package taskpool
 
 import (
-	"runtime"
-	"unsafe"
-
-	"github.com/lesismal/nbio/logging"
+	"sync"
 )
 
-// IOTaskPool .
+// IOTaskPool  .
 type IOTaskPool struct {
-	bufSize    int
-	queueSize  int
-	concurrent int
-	chTask     chan func([]byte)
-	chClose    chan struct{}
-	caller     func(f func())
-}
-
-func (tp *IOTaskPool) run() {
-	buf := make([]byte, tp.bufSize)
-	for {
-		select {
-		case f := <-tp.chTask:
-			tp.caller(func() {
-				f(buf)
-			})
-		case <-tp.chClose:
-			return
-		}
-	}
+	task *TaskPool
+	pool sync.Pool
 }
 
 // Go .
 func (tp *IOTaskPool) Go(f func([]byte)) {
-	select {
-	case tp.chTask <- f:
-	case <-tp.chClose:
-	}
+	tp.task.Go(func() {
+		pbuf := tp.pool.Get().(*[]byte)
+		f(*pbuf)
+		tp.pool.Put(pbuf)
+	})
 }
 
 // Stop .
 func (tp *IOTaskPool) Stop() {
-	close(tp.chClose)
+	tp.task.Stop()
 }
 
-// NewIO .
+// NewIO creates and returns a IOTaskPool.
 func NewIO(concurrent, queueSize, bufSize int, v ...interface{}) *IOTaskPool {
-	if concurrent <= 0 {
-		concurrent = runtime.NumCPU() * 2
-	}
-	if queueSize <= 0 {
-		queueSize = 1024
-	}
-	if bufSize <= 0 {
-		bufSize = 1024 * 64
-	}
+	task := New(concurrent, queueSize, v...)
 
 	tp := &IOTaskPool{
-		bufSize:    bufSize,
-		queueSize:  queueSize,
-		concurrent: concurrent,
-		chTask:     make(chan func([]byte), queueSize),
-		chClose:    make(chan struct{}),
-	}
-	tp.caller = func(f func()) {
-		defer func() {
-			if err := recover(); err != nil {
-				const size = 64 << 10
-				buf := make([]byte, size)
-				buf = buf[:runtime.Stack(buf, false)]
-				logging.Error("iotaskpool call failed: %v\n%v\n", err, *(*string)(unsafe.Pointer(&buf)))
-			}
-		}()
-		f()
-	}
-	if len(v) > 0 {
-		if caller, ok := v[0].(func(f func())); ok {
-			tp.caller = caller
-		}
-	}
-	for i := 0; i < concurrent; i++ {
-		go tp.run()
+		task: task,
+		pool: sync.Pool{
+			New: func() interface{} {
+				buf := make([]byte, bufSize)
+				return &buf
+			},
+		},
 	}
 
 	return tp

@@ -10,7 +10,7 @@ import (
 	"github.com/lesismal/nbio/logging"
 )
 
-const testLoopNum = 1024
+const testLoopNum = 1024 * 8
 const sleepTime = time.Nanosecond * 0
 
 func BenchmarkGo(b *testing.B) {
@@ -52,6 +52,27 @@ func BenchmarkTaskPool(b *testing.B) {
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
 			p.Go(func() {
+				if sleepTime > 0 {
+					time.Sleep(sleepTime)
+				}
+				wg.Done()
+			})
+		}
+		wg.Wait()
+	}
+}
+
+func BenchmarkIOTaskPool(b *testing.B) {
+	p := NewIO(32, 1024, 1024)
+	defer p.Stop()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		wg := sync.WaitGroup{}
+		wg.Add(testLoopNum)
+		for j := 0; j < testLoopNum; j++ {
+			p.Go(func(buf []byte) {
 				if sleepTime > 0 {
 					time.Sleep(sleepTime)
 				}

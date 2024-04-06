@@ -45,10 +45,13 @@ func (tp *TaskPool) fork(f func()) bool {
 
 // Go .
 func (tp *TaskPool) Go(f func()) {
+	// If current goroutine num is less than maxConcurrent,
+	// creat a new goroutine to exec new task.
 	if tp.fork(f) {
 		return
 	}
 
+	// Else push the new task into chan/queue.
 	atomic.AddInt64(&tp.concurrent, -1)
 	select {
 	case tp.chQqueue <- f:
@@ -62,7 +65,7 @@ func (tp *TaskPool) Stop() {
 	close(tp.chClose)
 }
 
-// New .
+// New creates and returns a TaskPool.
 func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
 	tp := &TaskPool{
 		maxConcurrent: int64(maxConcurrent - 1),
