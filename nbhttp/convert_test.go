@@ -10,7 +10,7 @@ import (
 )
 
 func TestConn2String(t *testing.T) {
-	var nbc = &nbio.Conn{ReadBuffer: []byte{1, 2, 3, 4}}
+	var nbc = &nbio.Conn{}
 	snbc, err := conn2Array(nbc)
 	if err != nil {
 		t.Fatal(err)

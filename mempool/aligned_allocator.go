@@ -91,6 +91,7 @@ func (amp *AlignedAllocator) Append(buf []byte, more ...byte) []byte {
 	newBuf := amp.Malloc(len(buf) + len(more))
 	copy(newBuf, buf)
 	copy(newBuf[len(buf):], more)
+	amp.Free(buf)
 	return newBuf
 }
 

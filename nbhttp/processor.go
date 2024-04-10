@@ -14,8 +14,11 @@ import (
 )
 
 var (
-	emptyRequest        = http.Request{}
-	emptyResponse       = Response{}
+	// used to reset a http.Request to empty value.
+	emptyRequest = http.Request{}
+	// used to reset a Response to empty value.
+	emptyResponse = Response{}
+	// used to reset a http.Response to empty value.
 	emptyClientResponse = http.Response{}
 
 	requestPool = sync.Pool{
@@ -42,11 +45,10 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 		if req.Body != nil {
 			if br, ok := req.Body.(*BodyReader); ok {
 				if retainHTTPBody {
-					br.Reset()
+					// do not release the body
 				} else {
 					br.Close()
 				}
-				bodyReaderPool.Put(br)
 			} else if !retainHTTPBody {
 				req.Body.Close()
 			}
@@ -69,30 +71,21 @@ func releaseClientResponse(res *http.Response) {
 		if res.Body != nil {
 			br := res.Body.(*BodyReader)
 			br.Close()
-			bodyReaderPool.Put(br)
 		}
 		*res = emptyClientResponse
 		clientResponsePool.Put(res)
 	}
 }
 
-// func releaseStdResponse(res *http.Response) {
-// 	if res != nil {
-// 		*res = emptyStdResponse
-// 		stdResponsePool.Put(res)
-// 	}
-// }
-
 // Processor .
 type Processor interface {
-	// Conn() net.Conn
 	OnMethod(parser *Parser, method string)
 	OnURL(parser *Parser, uri string) error
 	OnProto(parser *Parser, proto string) error
 	OnStatus(parser *Parser, code int, status string)
 	OnHeader(parser *Parser, key, value string)
 	OnContentLength(parser *Parser, contentLength int)
-	OnBody(parser *Parser, data []byte)
+	OnBody(parser *Parser, data []byte) error
 	OnTrailerHeader(parser *Parser, key, value string)
 	OnComplete(parser *Parser)
 	Close(parser *Parser, err error)
@@ -104,15 +97,10 @@ var (
 	emptyClientProcessor = ClientProcessor{}
 )
 
-// ServerProcessor .
+// ServerProcessor is used for server side connection.
 type ServerProcessor struct {
 	request *http.Request
 }
-
-// Conn .
-// func (p *ServerProcessor) Conn() net.Conn {
-// 	return nil
-// }
 
 // OnMethod .
 func (p *ServerProcessor) OnMethod(parser *Parser, method string) {
@@ -180,12 +168,11 @@ func (p *ServerProcessor) OnContentLength(parser *Parser, contentLength int) {
 }
 
 // OnBody .
-func (p *ServerProcessor) OnBody(parser *Parser, data []byte) {
+func (p *ServerProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.request.Body == nil {
-		p.request.Body = NewBodyReader(data)
-	} else {
-		p.request.Body.(*BodyReader).Append(data)
+		p.request.Body = NewBodyReader(parser.Engine)
 	}
+	return p.request.Body.(*BodyReader).append(data)
 }
 
 // OnTrailerHeader .
@@ -277,7 +264,7 @@ func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 			if req.Close {
 				// the data may still in the send queue
 				conn.Close()
-			} else if parser.ReadCloser == nil {
+			} else if parser.ParserCloser == nil {
 				conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 			}
 		}
@@ -305,20 +292,12 @@ func NewServerProcessor() Processor {
 	return &ServerProcessor{}
 }
 
-// ClientProcessor .
+// ClientProcessor is used for client side connection.
 type ClientProcessor struct {
 	conn     *ClientConn
 	response *http.Response
 	handler  func(res *http.Response, err error)
 }
-
-// Conn .
-// func (p *ClientProcessor) Conn() net.Conn {
-// 	if p.conn != nil {
-// 		return p.conn.conn
-// 	}
-// 	return nil
-// }
 
 // OnMethod .
 func (p *ClientProcessor) OnMethod(parser *Parser, method string) {
@@ -336,10 +315,6 @@ func (p *ClientProcessor) OnProto(parser *Parser, proto string) error {
 		return fmt.Errorf("%s %q", "malformed HTTP version", proto)
 	}
 	if p.response == nil {
-		// p.response = &http.Response{
-		// 	Proto:  proto,
-		// 	Header: http.Header{},
-		// }
 		p.response = clientResponsePool.Get().(*http.Response)
 		p.response.Proto = proto
 		p.response.Header = http.Header{}
@@ -368,12 +343,11 @@ func (p *ClientProcessor) OnContentLength(parser *Parser, contentLength int) {
 }
 
 // OnBody .
-func (p *ClientProcessor) OnBody(parser *Parser, data []byte) {
+func (p *ClientProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.response.Body == nil {
-		p.response.Body = NewBodyReader(data)
-	} else {
-		p.response.Body.(*BodyReader).Append(data)
+		p.response.Body = NewBodyReader(parser.Engine)
 	}
+	return p.response.Body.(*BodyReader).append(data)
 }
 
 // OnTrailerHeader .
@@ -409,6 +383,7 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 	}
 }
 
+// Clean .
 func (p *ClientProcessor) Clean(parser *Parser) {
 	if p.response != nil {
 		releaseClientResponse(p.response)
@@ -432,11 +407,6 @@ func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err e
 
 // EmptyProcessor .
 type EmptyProcessor struct{}
-
-// Conn .
-// func (p *EmptyProcessor) Conn() net.Conn {
-// 	return nil
-// }
 
 // OnMethod .
 func (p *EmptyProcessor) OnMethod(parser *Parser, method string) {
@@ -469,8 +439,8 @@ func (p *EmptyProcessor) OnContentLength(parser *Parser, contentLength int) {
 }
 
 // OnBody .
-func (p *EmptyProcessor) OnBody(parser *Parser, data []byte) {
-
+func (p *EmptyProcessor) OnBody(parser *Parser, data []byte) error {
+	return nil
 }
 
 // OnTrailerHeader .

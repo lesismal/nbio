@@ -27,9 +27,9 @@ const (
 	MaxInt = int64(int(MaxUint >> 1))
 )
 
-type ReadCloser interface {
+type ParserCloser interface {
 	UnderlayerConn() net.Conn
-	Read(data []byte) error
+	Parse(data []byte) error
 	CloseAndClean(err error)
 }
 
@@ -37,18 +37,21 @@ type ReadCloser interface {
 type Parser struct {
 	mux sync.Mutex
 
-	cache []byte
+	// bytesCached for half packet.
+	bytesCached []byte
 
-	errClose error
+	// errClose error
 
 	onClose func(p *Parser, err error)
 
-	ReadCloser ReadCloser
+	ParserCloser ParserCloser
 
 	Engine *Engine
 
+	// Underlayer Conn.
 	Conn net.Conn
 
+	// used to call message handler when got a full Request/Response.
 	Execute func(f func()) bool
 
 	Processor Processor
@@ -82,12 +85,12 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
-// OnClose .
+// OnClose registers callback for closing.
 func (p *Parser) OnClose(h func(p *Parser, err error)) {
 	p.onClose = h
 }
 
-// Close .
+// CloseAndClean closes the underlayer connection and cleans up related.
 func (p *Parser) CloseAndClean(err error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
@@ -98,16 +101,16 @@ func (p *Parser) CloseAndClean(err error) {
 
 	p.state = stateClose
 
-	p.errClose = err
+	// p.errClose = err
 
 	// if p.ReadCloser != nil {
 	// 	p.ReadCloser.CloseWithError(p.errClose)
 	// }
 	if p.Processor != nil {
-		p.Processor.Close(p, p.errClose)
+		p.Processor.Close(p, err)
 	}
-	if len(p.cache) > 0 {
-		mempool.Free(p.cache)
+	if len(p.bytesCached) > 0 {
+		mempool.Free(p.bytesCached)
 	}
 	if p.onClose != nil {
 		p.onClose(p, err)
@@ -128,8 +131,10 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 	return int(chunkSize), nil
 }
 
-// Read .
-func (p *Parser) Read(data []byte) error {
+// Parse parses data bytes and calls HTTP handler when full request received.
+// If the connection is upgraded, it passes the data bytes to the ParserCloser
+// and doesn't parse them itself any more.
+func (p *Parser) Parse(data []byte) error {
 	p.mux.Lock()
 	defer p.mux.Unlock()
 
@@ -142,32 +147,32 @@ func (p *Parser) Read(data []byte) error {
 	}
 
 	var start = 0
-	var offset = len(p.cache)
+	var offset = len(p.bytesCached)
 	if offset > 0 {
 		if p.Engine.ReadLimit > 0 && offset+len(data) > p.Engine.ReadLimit {
 			return ErrTooLong
 		}
-		p.cache = mempool.Append(p.cache, data...)
-		data = p.cache
+		p.bytesCached = mempool.Append(p.bytesCached, data...)
+		data = p.bytesCached
 	}
 
 UPGRADER:
-	if p.ReadCloser != nil {
+	if p.ParserCloser != nil {
 		udata := data
 		if start > 0 {
 			udata = data[start:]
 		}
-		err := p.ReadCloser.Read(udata)
-		if p.cache != nil {
-			mempool.Free(p.cache)
-			p.cache = nil
+		err := p.ParserCloser.Parse(udata)
+		if p.bytesCached != nil {
+			mempool.Free(p.bytesCached)
+			p.bytesCached = nil
 		}
 		return err
 	}
 
 	var c byte
 	for i := offset; i < len(data); i++ {
-		if p.ReadCloser != nil {
+		if p.ParserCloser != nil {
 			p.Processor.Clean(p)
 			goto UPGRADER
 		}
@@ -460,7 +465,10 @@ UPGRADER:
 			cl := p.contentLength
 			left := len(data) - start
 			if left >= cl {
-				p.Processor.OnBody(p, data[start:start+cl])
+				err := p.Processor.OnBody(p, data[start:start+cl])
+				if err != nil {
+					return err
+				}
 				p.handleMessage()
 				start += cl
 				i = start - 1
@@ -527,7 +535,10 @@ UPGRADER:
 			cl := p.chunkSize
 			left := len(data) - start
 			if left >= cl {
-				p.Processor.OnBody(p, data[start:start+cl])
+				err := p.Processor.OnBody(p, data[start:start+cl])
+				if err != nil {
+					return err
+				}
 				start += cl
 				i = start - 1
 				p.nextState(stateBodyChunkDataCR)
@@ -652,18 +663,18 @@ UPGRADER:
 Exit:
 	left := len(data) - start
 	if left > 0 {
-		if p.cache == nil {
-			p.cache = mempool.Malloc(left)
-			copy(p.cache, data[start:])
+		if p.bytesCached == nil {
+			p.bytesCached = mempool.Malloc(left)
+			copy(p.bytesCached, data[start:])
 		} else if start > 0 {
-			oldCache := p.cache
-			p.cache = mempool.Malloc(left)
-			copy(p.cache, data[start:])
-			mempool.Free(oldCache)
+			oldbytesCached := p.bytesCached
+			p.bytesCached = mempool.Malloc(left)
+			copy(p.bytesCached, data[start:])
+			mempool.Free(oldbytesCached)
 		}
-	} else if len(p.cache) > 0 {
-		mempool.Free(p.cache)
-		p.cache = nil
+	} else if len(p.bytesCached) > 0 {
+		mempool.Free(p.bytesCached)
+		p.bytesCached = nil
 	}
 
 	return nil
@@ -779,7 +790,7 @@ func (p *Parser) handleMessage() {
 	}
 }
 
-// NewParser .
+// NewParser creates an HTTP parser.
 func NewParser(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()

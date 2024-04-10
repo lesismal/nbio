@@ -89,7 +89,7 @@ func (p *poller) deleteConn(c *Conn) {
 		if c == p.g.connsUnix[fd] {
 			p.g.connsUnix[fd] = nil
 		}
-		p.deleteEvent(fd)
+		// p.deleteEvent(fd)
 	}
 
 	if c.typ != ConnTypeUDPServer {
@@ -104,33 +104,33 @@ func (p *poller) trigger() {
 func (p *poller) addRead(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	// p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
 
 func (p *poller) resetRead(fd int) {
-	// p.mux.Lock()
-	// p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
-	// p.mux.Unlock()
-	// p.trigger()
-}
-
-func (p *poller) modWrite(fd int) {
-	// p.mux.Lock()
-	// p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
-	// p.mux.Unlock()
-	// p.trigger()
-}
-
-func (p *poller) deleteEvent(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList,
-		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_READ},
-		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
+
+func (p *poller) modWrite(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+}
+
+// func (p *poller) deleteEvent(fd int) {
+// 	p.mux.Lock()
+// 	p.eventList = append(p.eventList,
+// 		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_READ},
+// 		syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
+// 	p.mux.Unlock()
+// 	p.trigger()
+// }
 
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if ev.Flags&syscall.EV_DELETE > 0 {
@@ -172,9 +172,6 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 		if ev.Filter&syscall.EVFILT_WRITE == syscall.EVFILT_WRITE {
 			c.flush()
 		}
-	} else {
-		syscall.Close(fd)
-		// p.deleteEvent(fd)
 	}
 }
 

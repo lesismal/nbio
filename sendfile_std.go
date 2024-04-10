@@ -10,8 +10,6 @@ package nbio
 import (
 	"io"
 	"os"
-
-	"github.com/lesismal/nbio/mempool"
 )
 
 // Sendfile .
@@ -22,7 +20,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {
 
 	if remain <= 0 {
 		stat, e := f.Stat()
-		if err != nil {
+		if e != nil {
 			return 0, e
 		}
 		remain = stat.Size()
@@ -33,11 +31,11 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {
 		if bufLen > int(remain) {
 			bufLen = int(remain)
 		}
-		buf := mempool.Malloc(bufLen)
+		buf := c.p.g.BodyAllocator.Malloc(bufLen)
 		nr, er := f.Read(buf)
 		if nr > 0 {
 			nw, ew := c.Write(buf[0:nr])
-			mempool.Free(buf)
+			c.p.g.BodyAllocator.Free(buf)
 			if nw < 0 {
 				nw = 0
 			}

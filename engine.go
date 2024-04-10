@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/taskpool"
 	"github.com/lesismal/nbio/timer"
 )
@@ -64,29 +65,39 @@ type Config struct {
 	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd
 	MaxConnReadTimesPerEventLoop int
 
-	// LockListener represents listener's goroutine to lock thread or not, it's set to false by default.
+	// LockListener represents whether to lock thread for listener's goroutine, false by default.
 	LockListener bool
 
-	// LockPoller represents poller's goroutine to lock thread or not, it's set to false by default.
+	// LockPoller represents whether to lock thread for poller's goroutine, false by default.
 	LockPoller bool
 
 	// EpollMod sets the epoll mod, EPOLLLT by default.
 	EpollMod uint32
 
-	// EPOLLONESHOT .
+	// EPOLLONESHOT sets EPOLLONESHOT, 0 by default.
 	EPOLLONESHOT uint32
 
 	// UDPReadTimeout sets the timeout for udp sessions.
 	UDPReadTimeout time.Duration
 
 	// Listen is used to create listener for Engine.
+	// Users can set this func to customize listener, such as reuseport.
 	Listen func(network, addr string) (net.Listener, error)
 
 	// ListenUDP is used to create udp listener for Engine.
 	ListenUDP func(network string, laddr *net.UDPAddr) (*net.UDPConn, error)
 
-	AsyncRead bool
+	// AsyncReadInPoller represents how the reading events and reading are handled
+	// by epoll goroutine:
+	// true : epoll goroutine handles the reading events only, another goroutine
+	//        pool will handles the reading.
+	// false: epoll goroutine handles both the reading events and the reading.
+	AsyncReadInPoller bool
+	// IOExecute is used to handle the aysnc reading, users can customize it.
 	IOExecute func(f func([]byte))
+
+	// BodyAllocator sets the buffer allocator for write cache.
+	BodyAllocator mempool.Allocator
 }
 
 // Gopher keeps old type to compatible with new name Engine.
@@ -109,25 +120,58 @@ type Engine struct {
 
 	wgConn sync.WaitGroup
 
-	connsStd  map[*Conn]struct{}
+	// store std connections, for Windows only.
+	connsStd map[*Conn]struct{}
+
+	// store *nix connections.
 	connsUnix []*Conn
 
+	// listeners.
 	listeners []*poller
 	pollers   []*poller
 
-	onOpen            func(c *Conn)
-	onClose           func(c *Conn, err error)
-	onRead            func(c *Conn)
-	onData            func(c *Conn, data []byte)
-	onWrittenSize     func(c *Conn, b []byte, n int)
+	// callback for new connection connected.
+	onOpen func(c *Conn)
+	// callback for connection closed.
+	onClose func(c *Conn, err error)
+	// callback for reading event.
+	onRead func(c *Conn)
+	// callback for coming data.
+	onData func(c *Conn, data []byte)
+	// callback for writing data size caculation.
+	onWrittenSize func(c *Conn, b []byte, n int)
+	// callback for allocationg the reading buffer.
 	onReadBufferAlloc func(c *Conn) []byte
-	onReadBufferFree  func(c *Conn, buffer []byte)
-	beforeRead        func(c *Conn)
-	afterRead         func(c *Conn)
-	beforeWrite       func(c *Conn)
-	onStop            func()
+	// callback for freeing the reading buffer.
+	onReadBufferFree func(c *Conn, buffer []byte)
+
+	// depreacated.
+	// beforeRead  func(c *Conn)
+	// afterRead   func(c *Conn)
+	// beforeWrite func(c *Conn)
+
+	// callback for Engine stop.
+	onStop func()
 
 	ioTaskPool *taskpool.IOTaskPool
+}
+
+// SetETAsyncRead .
+func (e *Engine) SetETAsyncRead() {
+	if e.NPoller <= 0 {
+		e.NPoller = 1
+	}
+	e.EpollMod = EPOLLET
+	e.AsyncReadInPoller = true
+}
+
+// SetLTSyncRead .
+func (e *Engine) SetLTSyncRead() {
+	if e.NPoller <= 0 {
+		e.NPoller = runtime.NumCPU()
+	}
+	e.EpollMod = EPOLLLT
+	e.AsyncReadInPoller = false
 }
 
 // Stop closes listeners/pollers/conns/timer.
@@ -270,6 +314,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	g.onReadBufferFree = h
 }
 
+// Depracated .
 // OnWriteBufferRelease registers callback for write buffer memory release.
 // func (g *Engine) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 // 	if h == nil {
@@ -280,30 +325,32 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 
 // BeforeRead registers callback before syscall.Read
 // the handler would be called on windows.
-func (g *Engine) BeforeRead(h func(c *Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.beforeRead = h
-}
+// func (g *Engine) BeforeRead(h func(c *Conn)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.beforeRead = h
+// }
 
+// Depracated .
 // AfterRead registers callback after syscall.Read
 // the handler would be called on *nix.
-func (g *Engine) AfterRead(h func(c *Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.afterRead = h
-}
+// func (g *Engine) AfterRead(h func(c *Conn)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.afterRead = h
+// }
 
+// Depracated .
 // BeforeWrite registers callback befor syscall.Write and syscall.Writev
 // the handler would be called on windows.
-func (g *Engine) BeforeWrite(h func(c *Conn)) {
-	if h == nil {
-		panic("invalid nil handler")
-	}
-	g.beforeWrite = h
-}
+// func (g *Engine) BeforeWrite(h func(c *Conn)) {
+// 	if h == nil {
+// 		panic("invalid nil handler")
+// 	}
+// 	g.beforeWrite = h
+// }
 
 // OnStop registers callback before Engine is stopped.
 func (g *Engine) OnStop(h func()) {
@@ -333,9 +380,9 @@ func (g *Engine) initHandlers() {
 	g.OnReadBufferAlloc(g.PollerBuffer)
 	g.OnReadBufferFree(func(c *Conn, buffer []byte) {})
 	// g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
-	g.BeforeRead(func(c *Conn) {})
-	g.AfterRead(func(c *Conn) {})
-	g.BeforeWrite(func(c *Conn) {})
+	// g.BeforeRead(func(c *Conn) {})
+	// g.AfterRead(func(c *Conn) {})
+	// g.BeforeWrite(func(c *Conn) {})
 	g.OnStop(func() {})
 
 	if g.Execute == nil {

@@ -13,15 +13,20 @@ import (
 	"strings"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/taskpool"
 	"github.com/lesismal/nbio/timer"
 )
 
-// Start init and start pollers.
+// Start inits and starts pollers.
 func (g *Engine) Start() error {
 	g.connsUnix = make([]*Conn, MaxOpenFiles)
 
+	// Create pollers and listeners.
+	g.pollers = make([]*poller, g.NPoller)
+	g.listeners = make([]*poller, len(g.Addrs))[0:0]
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
+
 	switch g.Network {
 	case "unix", "tcp", "tcp4", "tcp6":
 		for i := range g.Addrs {
@@ -56,6 +61,7 @@ func (g *Engine) Start() error {
 		}
 	}
 
+	// Create IO pollers.
 	for i := 0; i < g.NPoller; i++ {
 		p, err := newPoller(g, false, i)
 		if err != nil {
@@ -71,17 +77,20 @@ func (g *Engine) Start() error {
 		g.pollers[i] = p
 	}
 
+	// Start IO pollers.
 	for i := 0; i < g.NPoller; i++ {
 		g.pollers[i].ReadBuffer = make([]byte, g.ReadBufferSize)
 		g.Add(1)
 		go g.pollers[i].start()
 	}
 
+	// Start TCP/Unix listener pollers.
 	for _, l := range g.listeners {
 		g.Add(1)
 		go l.start()
 	}
 
+	// Start UDP listener pollers.
 	for _, ln := range udpListeners {
 		_, err := g.AddConn(ln)
 		if err != nil {
@@ -104,7 +113,7 @@ func (g *Engine) Start() error {
 	g.Timer.Start()
 	g.isOneshot = (g.EpollMod == EPOLLET && g.EPOLLONESHOT == EPOLLONESHOT)
 
-	if g.AsyncRead {
+	if g.AsyncReadInPoller {
 		if g.IOExecute == nil {
 			g.ioTaskPool = taskpool.NewIO(0, 0, 0)
 			g.IOExecute = g.ioTaskPool.Go
@@ -112,21 +121,34 @@ func (g *Engine) Start() error {
 	}
 
 	if len(g.Addrs) == 0 {
-		logging.Info("NBIO Engine[%v] start with [%v eventloop]", g.Name, g.NPoller)
+		logging.Info("NBIO Engine[%v] start with [%v eventloop, MaxOpenFiles: %v]",
+			g.Name,
+			g.NPoller,
+			MaxOpenFiles,
+		)
 	} else {
-		logging.Info("NBIO Engine[%v] start with [%v eventloop], listen on: [\"%v@%v\"]", g.Name, g.NPoller, g.Network, strings.Join(g.Addrs, `", "`))
+		logging.Info("NBIO Engine[%v] start with [%v eventloop], listen on: [\"%v@%v\"], MaxOpenFiles: %v",
+			g.Name,
+			g.NPoller,
+			g.Network,
+			strings.Join(g.Addrs, `", "`),
+			MaxOpenFiles,
+		)
 	}
 
 	return nil
 }
 
-// NewEngine is a factory impl.
+// NewEngine creates an Engine and init default configurations.
 func NewEngine(conf Config) *Engine {
 	if conf.Name == "" {
 		conf.Name = "NB"
 	}
 	if conf.NPoller <= 0 {
 		conf.NPoller = runtime.NumCPU() / 4
+		if conf.AsyncReadInPoller && conf.EpollMod == EPOLLET {
+			conf.NPoller = 1
+		}
 		if conf.NPoller == 0 {
 			conf.NPoller = 1
 		}
@@ -143,12 +165,13 @@ func NewEngine(conf Config) *Engine {
 	if conf.ListenUDP == nil {
 		conf.ListenUDP = net.ListenUDP
 	}
+	if conf.BodyAllocator == nil {
+		conf.BodyAllocator = mempool.DefaultMemPool
+	}
 
 	g := &Engine{
-		Config:    conf,
-		Timer:     timer.New(conf.Name),
-		listeners: make([]*poller, len(conf.Addrs))[0:0],
-		pollers:   make([]*poller, conf.NPoller),
+		Config: conf,
+		Timer:  timer.New(conf.Name),
 	}
 
 	g.initHandlers()

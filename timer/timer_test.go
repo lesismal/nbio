@@ -9,7 +9,7 @@ import (
 )
 
 func TestTimer(t *testing.T) {
-	tg := NewGroup("nbio", 4)
+	tg := New("nbio")
 	tg.Start()
 	defer tg.Stop()
 
@@ -22,7 +22,7 @@ func TestTimer(t *testing.T) {
 	testTimerExecManyRandtime(tg)
 }
 
-func testAsync(tg *TimerGroup) {
+func testAsync(tg *Timer) {
 	loops := 3
 	wg := sync.WaitGroup{}
 	for i := 0; i < loops; i++ {
@@ -34,7 +34,7 @@ func testAsync(tg *TimerGroup) {
 	wg.Wait()
 }
 
-func testTimerNormal(tg *TimerGroup, timeout time.Duration) {
+func testTimerNormal(tg *Timer, timeout time.Duration) {
 	t1 := time.Now()
 	ch1 := make(chan int)
 	tg.AfterFunc(timeout*5, func() {
@@ -71,13 +71,13 @@ func testTimerNormal(tg *TimerGroup, timeout time.Duration) {
 	}
 }
 
-func testTimerExecPanic(tg *TimerGroup, timeout time.Duration) {
+func testTimerExecPanic(tg *Timer, timeout time.Duration) {
 	tg.AfterFunc(timeout, func() {
 		panic("test")
 	})
 }
 
-func testTimerNormalExecMany(tg *TimerGroup, timeout time.Duration) {
+func testTimerNormalExecMany(tg *Timer, timeout time.Duration) {
 	ch4 := make(chan int, 5)
 	for i := 0; i < 5; i++ {
 		n := i + 1
@@ -100,7 +100,7 @@ func testTimerNormalExecMany(tg *TimerGroup, timeout time.Duration) {
 	}
 }
 
-func testTimerExecManyRandtime(tg *TimerGroup) {
+func testTimerExecManyRandtime(tg *Timer) {
 	its := make([]*time.Timer, 100)[0:0]
 	ch5 := make(chan int, 100)
 	for i := 0; i < 100; i++ {
