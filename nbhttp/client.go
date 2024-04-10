@@ -54,7 +54,7 @@ func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
 		timer := time.NewTimer(c.Timeout)
 		defer timer.Stop()
 
-		// 1. fast get an existed free connection
+		// 1. Get an existing free connection.
 		select {
 		case hc, ok := <-hcs.chConnss:
 			if !ok {
@@ -66,7 +66,8 @@ func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
 		default:
 		}
 
-		// 2. try to create a new connection if the num of existed connections is smaller than maxConnNum
+		// 2. Try to create a new connection if the num of existing
+		//    connections is smaller than maxConnNum
 		if atomic.AddInt32(&hcs.connNum, 1) <= hcs.maxConnNum {
 			hc := &ClientConn{
 				Engine:          c.Engine,
@@ -85,7 +86,7 @@ func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
 		}
 		atomic.AddInt32(&hcs.connNum, -1)
 
-		// 3. wait for an old connection
+		// 3. Wait for an existed working connection to be free.
 		select {
 		case hc, ok := <-hcs.chConnss:
 			if !ok {
@@ -104,7 +105,7 @@ func (hcs *hostConns) releaseConn(hc *ClientConn) {
 	hcs.chConnss <- hc
 }
 
-// Client .
+// Client implements the similar functions with std http.Client.
 type Client struct {
 	mux    sync.Mutex
 	closed bool
@@ -130,12 +131,12 @@ type Client struct {
 	CheckRedirect func(req *http.Request, via []*http.Request) error
 }
 
-// Close .
+// Close closes all underlayer connections with EOF.
 func (c *Client) Close() {
 	c.CloseWithError(io.EOF)
 }
 
-// CloseWithError .
+// CloseWithError closes all underlayer connections with error.
 func (c *Client) CloseWithError(err error) {
 	c.mux.Lock()
 	if !c.closed {
@@ -167,7 +168,12 @@ func (c *Client) getConn(host string) (*hostConns, *ClientConn, error) {
 	return hcs.getConn()
 }
 
-// Do .
+// Do sends an HTTP request and returns an HTTP response.
+// Notice:
+//  1. It's blocking when Dial to the server;
+//  2. It's non-blocking for waiting for the response;
+//  3. It calls the handler when the response is received
+//     or other errors occur, such as timeout.
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	c.Engine.ExecuteClient(func() {
 		host := req.URL.Host

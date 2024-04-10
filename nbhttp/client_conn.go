@@ -50,7 +50,7 @@ type ClientConn struct {
 	CheckRedirect func(req *http.Request, via []*http.Request) error
 }
 
-// Reset .
+// Reset resets itself as new created.
 func (c *ClientConn) Reset() {
 	c.mux.Lock()
 	if c.closed {
@@ -61,27 +61,17 @@ func (c *ClientConn) Reset() {
 	c.mux.Unlock()
 }
 
-// OnClose .
+// OnClose registers a callback for closing.
 func (c *ClientConn) OnClose(h func()) {
-	if h == nil {
-		return
-	}
-
-	pre := c.onClose
-	c.onClose = func() {
-		if pre != nil {
-			pre()
-		}
-		h()
-	}
+	c.onClose = h
 }
 
-// Close .
+// Close closes underlayer connection with EOF.
 func (c *ClientConn) Close() {
 	c.CloseWithError(io.EOF)
 }
 
-// CloseWithError .
+// CloseWithError closes underlayer connection with error.
 func (c *ClientConn) CloseWithError(err error) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -153,7 +143,12 @@ func (c *ClientConn) onResponse(res *http.Response, err error) {
 	}
 }
 
-// Do .
+// Do sends an HTTP request and returns an HTTP response.
+// Notice:
+//  1. It's blocking when Dial to the server;
+//  2. It's non-blocking for waiting for the response;
+//  3. It calls the handler when the response is received
+//     or other errors occur, such as timeout.
 func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	c.mux.Lock()
 	defer func() {

@@ -77,16 +77,8 @@ func releaseClientResponse(res *http.Response) {
 	}
 }
 
-// func releaseStdResponse(res *http.Response) {
-// 	if res != nil {
-// 		*res = emptyStdResponse
-// 		stdResponsePool.Put(res)
-// 	}
-// }
-
 // Processor .
 type Processor interface {
-	// Conn() net.Conn
 	OnMethod(parser *Parser, method string)
 	OnURL(parser *Parser, uri string) error
 	OnProto(parser *Parser, proto string) error
@@ -105,15 +97,10 @@ var (
 	emptyClientProcessor = ClientProcessor{}
 )
 
-// ServerProcessor .
+// ServerProcessor is used for server side connection.
 type ServerProcessor struct {
 	request *http.Request
 }
-
-// Conn .
-// func (p *ServerProcessor) Conn() net.Conn {
-// 	return nil
-// }
 
 // OnMethod .
 func (p *ServerProcessor) OnMethod(parser *Parser, method string) {
@@ -305,20 +292,12 @@ func NewServerProcessor() Processor {
 	return &ServerProcessor{}
 }
 
-// ClientProcessor .
+// ClientProcessor is used for client side connection.
 type ClientProcessor struct {
 	conn     *ClientConn
 	response *http.Response
 	handler  func(res *http.Response, err error)
 }
-
-// Conn .
-// func (p *ClientProcessor) Conn() net.Conn {
-// 	if p.conn != nil {
-// 		return p.conn.conn
-// 	}
-// 	return nil
-// }
 
 // OnMethod .
 func (p *ClientProcessor) OnMethod(parser *Parser, method string) {
@@ -336,10 +315,6 @@ func (p *ClientProcessor) OnProto(parser *Parser, proto string) error {
 		return fmt.Errorf("%s %q", "malformed HTTP version", proto)
 	}
 	if p.response == nil {
-		// p.response = &http.Response{
-		// 	Proto:  proto,
-		// 	Header: http.Header{},
-		// }
 		p.response = clientResponsePool.Get().(*http.Response)
 		p.response.Proto = proto
 		p.response.Header = http.Header{}
@@ -408,6 +383,7 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 	}
 }
 
+// Clean .
 func (p *ClientProcessor) Clean(parser *Parser) {
 	if p.response != nil {
 		releaseClientResponse(p.response)
@@ -431,11 +407,6 @@ func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err e
 
 // EmptyProcessor .
 type EmptyProcessor struct{}
-
-// Conn .
-// func (p *EmptyProcessor) Conn() net.Conn {
-// 	return nil
-// }
 
 // OnMethod .
 func (p *EmptyProcessor) OnMethod(parser *Parser, method string) {

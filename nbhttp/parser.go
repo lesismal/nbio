@@ -37,8 +37,8 @@ type ParserCloser interface {
 type Parser struct {
 	mux sync.Mutex
 
-	// cache for half packet.
-	cache []byte
+	// bytesCached for half packet.
+	bytesCached []byte
 
 	// errClose error
 
@@ -85,12 +85,12 @@ func (p *Parser) nextState(state int8) {
 	}
 }
 
-// OnClose .
+// OnClose registers callback for closing.
 func (p *Parser) OnClose(h func(p *Parser, err error)) {
 	p.onClose = h
 }
 
-// Close .
+// CloseAndClean closes the underlayer connection and cleans up related.
 func (p *Parser) CloseAndClean(err error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
@@ -109,8 +109,8 @@ func (p *Parser) CloseAndClean(err error) {
 	if p.Processor != nil {
 		p.Processor.Close(p, err)
 	}
-	if len(p.cache) > 0 {
-		mempool.Free(p.cache)
+	if len(p.bytesCached) > 0 {
+		mempool.Free(p.bytesCached)
 	}
 	if p.onClose != nil {
 		p.onClose(p, err)
@@ -131,7 +131,9 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 	return int(chunkSize), nil
 }
 
-// Read .
+// Parse parses data bytes and calls HTTP handler when full request received.
+// If the connection is upgraded, it passes the data bytes to the ParserCloser
+// and doesn't parse them itself any more.
 func (p *Parser) Parse(data []byte) error {
 	p.mux.Lock()
 	defer p.mux.Unlock()
@@ -145,13 +147,13 @@ func (p *Parser) Parse(data []byte) error {
 	}
 
 	var start = 0
-	var offset = len(p.cache)
+	var offset = len(p.bytesCached)
 	if offset > 0 {
 		if p.Engine.ReadLimit > 0 && offset+len(data) > p.Engine.ReadLimit {
 			return ErrTooLong
 		}
-		p.cache = mempool.Append(p.cache, data...)
-		data = p.cache
+		p.bytesCached = mempool.Append(p.bytesCached, data...)
+		data = p.bytesCached
 	}
 
 UPGRADER:
@@ -161,9 +163,9 @@ UPGRADER:
 			udata = data[start:]
 		}
 		err := p.ParserCloser.Parse(udata)
-		if p.cache != nil {
-			mempool.Free(p.cache)
-			p.cache = nil
+		if p.bytesCached != nil {
+			mempool.Free(p.bytesCached)
+			p.bytesCached = nil
 		}
 		return err
 	}
@@ -661,18 +663,18 @@ UPGRADER:
 Exit:
 	left := len(data) - start
 	if left > 0 {
-		if p.cache == nil {
-			p.cache = mempool.Malloc(left)
-			copy(p.cache, data[start:])
+		if p.bytesCached == nil {
+			p.bytesCached = mempool.Malloc(left)
+			copy(p.bytesCached, data[start:])
 		} else if start > 0 {
-			oldCache := p.cache
-			p.cache = mempool.Malloc(left)
-			copy(p.cache, data[start:])
-			mempool.Free(oldCache)
+			oldbytesCached := p.bytesCached
+			p.bytesCached = mempool.Malloc(left)
+			copy(p.bytesCached, data[start:])
+			mempool.Free(oldbytesCached)
 		}
-	} else if len(p.cache) > 0 {
-		mempool.Free(p.cache)
-		p.cache = nil
+	} else if len(p.bytesCached) > 0 {
+		mempool.Free(p.bytesCached)
+		p.bytesCached = nil
 	}
 
 	return nil

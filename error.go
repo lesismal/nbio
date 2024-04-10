@@ -9,7 +9,10 @@ import (
 )
 
 var (
-	errReadTimeout  = errors.New("read timeout")
-	errWriteTimeout = errors.New("write timeout")
-	errOverflow     = errors.New("write overflow")
+	ErrReadTimeout  = errors.New("read timeout")
+	errReadTimeout  = ErrReadTimeout
+	ErrWriteTimeout = errors.New("write timeout")
+	errWriteTimeout = ErrWriteTimeout
+	ErrOverflow     = errors.New("write overflow")
+	errOverflow     = ErrOverflow
 )

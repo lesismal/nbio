@@ -23,10 +23,10 @@ import (
 type Response struct {
 	Parser *Parser
 
-	request *http.Request // request for this response
+	request *http.Request // request for this response.
 
 	status     string
-	statusCode int // status code passed to WriteHeader
+	statusCode int // status code passed to WriteHeader.
 
 	header      http.Header
 	trailer     map[string]string
