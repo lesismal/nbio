@@ -70,6 +70,8 @@ func (p *poller) addConn(c *Conn) {
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
+	} else {
+		p.g.onUDPListen(c)
 	}
 	p.g.connsUnix[fd] = c
 	p.addRead(fd)
@@ -140,6 +142,9 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter&syscall.EVFILT_READ == syscall.EVFILT_READ {
+			if c.onConnected != nil {
+				c.onConnected(c, nil)
+			}
 			if p.g.onRead == nil {
 				for {
 					buffer := p.g.borrow(c)

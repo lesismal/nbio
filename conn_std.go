@@ -13,6 +13,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/lesismal/nbio/timer"
@@ -45,6 +46,8 @@ type Conn struct {
 	cache *bytes.Buffer
 
 	dataHandler func(c *Conn, data []byte)
+
+	onConnected func(c *Conn, err error)
 }
 
 // Hash returns a hashcode.
@@ -545,4 +548,13 @@ func (u *udpConn) getConn(p *poller, rAddr *net.UDPAddr) (*Conn, bool) {
 	}
 
 	return c, ok
+}
+
+func (c *Conn) SyscallConn() (syscall.RawConn, error) {
+	if rc, ok := c.conn.(interface {
+		SyscallConn() (syscall.RawConn, error)
+	}); ok {
+		return rc.SyscallConn()
+	}
+	return nil, errors.ErrUnsupported
 }
