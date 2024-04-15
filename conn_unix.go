@@ -1076,9 +1076,9 @@ func (c *rawConn) Control(f func(fd uintptr)) error {
 }
 
 func (c *rawConn) Read(f func(fd uintptr) (done bool)) error {
-	return errors.ErrUnsupported
+	return ErrUnsupported
 }
 
 func (c *rawConn) Write(f func(fd uintptr) (done bool)) error {
-	return errors.ErrUnsupported
+	return ErrUnsupported
 }

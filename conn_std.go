@@ -556,5 +556,5 @@ func (c *Conn) SyscallConn() (syscall.RawConn, error) {
 	}); ok {
 		return rc.SyscallConn()
 	}
-	return nil, errors.ErrUnsupported
+	return nil, ErrUnsupported
 }
