@@ -393,6 +393,7 @@ func (g *Engine) initHandlers() {
 	// g.BeforeRead(func(c *Conn) {})
 	// g.AfterRead(func(c *Conn) {})
 	// g.BeforeWrite(func(c *Conn) {})
+	g.OnUDPListen(func(*Conn) {})
 	g.OnStop(func() {})
 
 	if g.Execute == nil {
