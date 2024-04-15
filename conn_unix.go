@@ -136,6 +136,8 @@ type Conn struct {
 	readEvents int32
 
 	dataHandler func(c *Conn, data []byte)
+
+	onConnected func(c *Conn, err error)
 }
 
 // Hash returns a hash code of this connection.
@@ -1058,4 +1060,25 @@ func getUDPNetAddr(sa syscall.Sockaddr) *net.UDPAddr {
 		}
 	}
 	return ret
+}
+
+func (c *Conn) SyscallConn() (syscall.RawConn, error) {
+	return &rawConn{fd: c.fd}, nil
+}
+
+type rawConn struct {
+	fd int
+}
+
+func (c *rawConn) Control(f func(fd uintptr)) error {
+	f(uintptr(c.fd))
+	return nil
+}
+
+func (c *rawConn) Read(f func(fd uintptr) (done bool)) error {
+	return ErrUnsupported
+}
+
+func (c *rawConn) Write(f func(fd uintptr) (done bool)) error {
+	return ErrUnsupported
 }

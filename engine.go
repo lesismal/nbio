@@ -130,6 +130,8 @@ type Engine struct {
 	listeners []*poller
 	pollers   []*poller
 
+	// onUDPListen for udp listener created.
+	onUDPListen func(c *Conn)
 	// callback for new connection connected.
 	onOpen func(c *Conn)
 	// callback for connection closed.
@@ -252,9 +254,17 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 }
 
 // OnOpen registers callback for new connection.
+func (g *Engine) OnUDPListen(h func(c *Conn)) {
+	if h == nil {
+		panic("invalid handler: nil")
+	}
+	g.onUDPListen = h
+}
+
+// OnOpen registers callback for new connection.
 func (g *Engine) OnOpen(h func(c *Conn)) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onOpen = func(c *Conn) {
 		g.wgConn.Add(1)
@@ -265,7 +275,7 @@ func (g *Engine) OnOpen(h func(c *Conn)) {
 // OnClose registers callback for disconnected.
 func (g *Engine) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onClose = func(c *Conn, err error) {
 		g.Async(func() {
@@ -283,7 +293,7 @@ func (g *Engine) OnRead(h func(c *Conn)) {
 // OnData registers callback for data.
 func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onData = h
 }
@@ -293,7 +303,7 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 // else it's operating by Sendfile.
 func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onWrittenSize = h
 }
@@ -301,7 +311,7 @@ func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
 // OnReadBufferAlloc registers callback for memory allocating.
 func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onReadBufferAlloc = h
 }
@@ -309,7 +319,7 @@ func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 // OnReadBufferFree registers callback for memory release.
 func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onReadBufferFree = h
 }
@@ -318,7 +328,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 // OnWriteBufferRelease registers callback for write buffer memory release.
 // func (g *Engine) OnWriteBufferRelease(h func(c *Conn, b []byte)) {
 // 	if h == nil {
-// 		panic("invalid nil handler")
+// 		panic("invalid handler: nil")
 // 	}
 // 	g.onWriteBufferFree = h
 // }
@@ -327,7 +337,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 // the handler would be called on windows.
 // func (g *Engine) BeforeRead(h func(c *Conn)) {
 // 	if h == nil {
-// 		panic("invalid nil handler")
+// 		panic("invalid handler: nil")
 // 	}
 // 	g.beforeRead = h
 // }
@@ -337,7 +347,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 // the handler would be called on *nix.
 // func (g *Engine) AfterRead(h func(c *Conn)) {
 // 	if h == nil {
-// 		panic("invalid nil handler")
+// 		panic("invalid handler: nil")
 // 	}
 // 	g.afterRead = h
 // }
@@ -347,7 +357,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 // the handler would be called on windows.
 // func (g *Engine) BeforeWrite(h func(c *Conn)) {
 // 	if h == nil {
-// 		panic("invalid nil handler")
+// 		panic("invalid handler: nil")
 // 	}
 // 	g.beforeWrite = h
 // }
@@ -355,7 +365,7 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 // OnStop registers callback before Engine is stopped.
 func (g *Engine) OnStop(h func()) {
 	if h == nil {
-		panic("invalid nil handler")
+		panic("invalid handler: nil")
 	}
 	g.onStop = h
 }
@@ -383,6 +393,7 @@ func (g *Engine) initHandlers() {
 	// g.BeforeRead(func(c *Conn) {})
 	// g.AfterRead(func(c *Conn) {})
 	// g.BeforeWrite(func(c *Conn) {})
+	g.OnUDPListen(func(*Conn) {})
 	g.OnStop(func() {})
 
 	if g.Execute == nil {

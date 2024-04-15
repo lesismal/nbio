@@ -75,6 +75,8 @@ func (p *poller) addConn(c *Conn) error {
 	// should not call onOpen for udp server conn
 	if c.typ != ConnTypeUDPServer {
 		p.g.onOpen(c)
+	} else {
+		p.g.onUDPListen(c)
 	}
 	// should not read udp client from reading udp server conn
 	if c.typ != ConnTypeUDPClientFromRead {

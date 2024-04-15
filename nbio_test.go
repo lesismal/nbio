@@ -50,16 +50,16 @@ func init() {
 
 		if len(data) == 8 && string(data) == "sendfile" {
 			wsess.isFile = true
-			fd, err := os.Open(testfile)
+			file, err := os.Open(testfile)
 			if err != nil {
 				log.Panicf("open file failed: %v", err)
 			}
 
-			if _, err = c.Sendfile(fd, 0); err != nil {
+			if _, err = c.Sendfile(file, 0); err != nil {
 				panic(err)
 			}
 
-			if err := fd.Close(); err != nil {
+			if err := file.Close(); err != nil {
 				log.Panicf("close file failed: %v", err)
 			}
 		} else {
