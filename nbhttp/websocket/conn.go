@@ -314,15 +314,9 @@ func (c *Conn) nextFrame(data []byte) ([]byte, MessageType, []byte, bool, bool, 
 
 				ok = true
 				data = data[total:l]
+				err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments)
 			}
-		} else {
-			ok = true
-			data = data[headLen:l]
 		}
-	}
-
-	if ok {
-		err = c.validFrame(opcode, fin, res1, res2, res3, c.expectingFragments)
 	}
 
 	return data, opcode, body, ok, fin, res1, err

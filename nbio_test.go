@@ -16,7 +16,7 @@ import (
 var addr = "127.0.0.1:8888"
 var testfile = "test_tmp.file"
 var gopher *Engine
-var testFileSize = 1024 * 200
+var testFileSize = 1024 * 1024 * 32
 
 func init() {
 	if err := os.WriteFile(testfile, make([]byte, testFileSize), 0600); err != nil {
@@ -181,9 +181,12 @@ func TestSendfile(t *testing.T) {
 			log.Panicf("write 'sendfile' failed: %v", err)
 		}
 
-		_, err := io.ReadFull(conn, buf)
+		n, err := io.ReadFull(conn, buf)
 		if err != nil {
 			log.Panicf("read file failed: %v", err)
+		}
+		if n != testFileSize {
+			log.Panicf("read wrong file size: %v != %v", n, testFileSize)
 		}
 	}
 }

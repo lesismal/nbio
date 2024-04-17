@@ -141,7 +141,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	fd := int(ev.Ident)
 	c := p.getConn(fd)
 	if c != nil {
-		if ev.Filter&syscall.EVFILT_READ == syscall.EVFILT_READ {
+		if ev.Filter == syscall.EVFILT_READ {
 			if c.onConnected != nil {
 				c.onConnected(c, nil)
 			}
@@ -172,9 +172,13 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			} else {
 				p.g.onRead(c)
 			}
+
+			if ev.Flags&syscall.EV_EOF != 0 {
+				c.flush()
+			}
 		}
 
-		if ev.Filter&syscall.EVFILT_WRITE == syscall.EVFILT_WRITE {
+		if ev.Filter == syscall.EVFILT_WRITE {
 			c.flush()
 		}
 	}
