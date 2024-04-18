@@ -452,14 +452,18 @@ func TestDialAsync(t *testing.T) {
 	onConnected := func(c *Conn, err error) {
 		log.Println("DialAsync OnConnected:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
 		if err == nil {
-			c.Write([]byte("hello"))
+			n, err := c.Write([]byte("hello"))
+			if err != nil {
+				done <- err
+			}
+			log.Println("DialAsync OnConnected Write n:", n)
 		} else {
 			done <- err
 		}
 	}
 
 	time.Sleep(time.Second / 10)
-	err = engine.DialAsyncTimeout("tcp", addr, time.Second, onConnected)
+	err = engine.DialAsyncTimeout("tcp", addr, time.Second*10, onConnected)
 	if err != nil {
 		t.Fatalf("DialAsyncTimeout failed: %v", err)
 	}

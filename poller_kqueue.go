@@ -71,14 +71,24 @@ func (p *poller) addConn(c *Conn) {
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
-		if c.onConnected == nil {
-			p.g.onOpen(c)
-		}
+		p.g.onOpen(c)
 	} else {
 		p.g.onUDPListen(c)
 	}
 	p.g.connsUnix[fd] = c
 	p.addRead(fd)
+}
+
+func (p *poller) addDialer(c *Conn) {
+	fd := c.fd
+	if fd >= len(p.g.connsUnix) {
+		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
+		return
+	}
+	c.p = p
+	p.g.connsUnix[fd] = c
+	c.isWAdded = true
+	p.addReadWrite(fd)
 }
 
 func (p *poller) getConn(fd int) *Conn {
@@ -124,6 +134,14 @@ func (p *poller) resetRead(fd int) {
 
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+}
+
+func (p *poller) addReadWrite(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
@@ -175,12 +193,24 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			}
 
 			if ev.Flags&syscall.EV_EOF != 0 {
-				c.flush()
+				if c.onConnected == nil {
+					c.flush()
+				} else {
+					c.onConnected(c, nil)
+					c.onConnected = nil
+					c.resetRead()
+				}
 			}
 		}
 
 		if ev.Filter == syscall.EVFILT_WRITE {
-			c.flush()
+			if c.onConnected == nil {
+				c.flush()
+			} else {
+				c.resetRead()
+				c.onConnected(c, nil)
+				c.onConnected = nil
+			}
 		}
 	}
 }

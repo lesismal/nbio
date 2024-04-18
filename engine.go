@@ -253,6 +253,12 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	return c, nil
 }
 
+func (g *Engine) addDialer(c *Conn) (*Conn, error) {
+	p := g.pollers[c.Hash()%len(g.pollers)]
+	p.addDialer(c)
+	return c, nil
+}
+
 // OnOpen registers callback for new connection.
 func (g *Engine) OnUDPListen(h func(c *Conn)) {
 	if h == nil {

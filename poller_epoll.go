@@ -83,14 +83,35 @@ func (p *poller) addConn(c *Conn) {
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
-		if c.onConnected == nil {
-			p.g.onOpen(c)
-		}
+		p.g.onOpen(c)
 	} else {
 		p.g.onUDPListen(c)
 	}
 	p.g.connsUnix[fd] = c
 	err := p.addRead(fd)
+	if err != nil {
+		p.g.connsUnix[fd] = nil
+		c.closeWithError(err)
+		logging.Error("[%v] add read event failed: %v", c.fd, err)
+	}
+}
+
+// add the connection to poller and handle its io events.
+func (p *poller) addDialer(c *Conn) {
+	fd := c.fd
+	if fd >= len(p.g.connsUnix) {
+		c.closeWithError(
+			fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+				fd,
+				len(p.g.connsUnix),
+			),
+		)
+		return
+	}
+	c.p = p
+	p.g.connsUnix[fd] = c
+	c.isWAdded = true
+	err := p.addReadWrite(fd)
 	if err != nil {
 		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
@@ -223,15 +244,16 @@ func (p *poller) readWriteLoop() {
 				c := p.getConn(fd)
 				if c != nil {
 					if ev.Events&epollEventsWrite != 0 {
-						c.flush()
+						if c.onConnected == nil {
+							c.flush()
+						} else {
+							c.onConnected(c, nil)
+							c.onConnected = nil
+							c.resetRead()
+						}
 					}
 
 					if ev.Events&epollEventsRead != 0 {
-						if c.onConnected != nil {
-							c.onConnected(c, nil)
-							c.onConnected = nil
-						}
-
 						if g.onRead == nil {
 							if asyncReadEnabled {
 								c.AsyncRead()
@@ -355,6 +377,43 @@ func (p *poller) modWrite(fd int) error {
 	default:
 		return syscall.EpollCtl(p.epfd,
 			syscall.EPOLL_CTL_MOD,
+			fd,
+			&syscall.EpollEvent{
+				Fd: int32(fd),
+				Events: syscall.EPOLLERR |
+					syscall.EPOLLHUP |
+					syscall.EPOLLRDHUP |
+					syscall.EPOLLPRI |
+					syscall.EPOLLIN |
+					syscall.EPOLLOUT,
+			},
+		)
+	}
+}
+
+func (p *poller) addReadWrite(fd int) error {
+	switch p.g.EpollMod {
+	case EPOLLET:
+		return syscall.EpollCtl(
+			p.epfd,
+			syscall.EPOLL_CTL_ADD,
+			fd,
+			&syscall.EpollEvent{
+				Fd: int32(fd),
+				Events: syscall.EPOLLERR |
+					syscall.EPOLLHUP |
+					syscall.EPOLLRDHUP |
+					syscall.EPOLLPRI |
+					syscall.EPOLLIN |
+					syscall.EPOLLOUT |
+					EPOLLET |
+					p.g.EPOLLONESHOT,
+			},
+		)
+	default:
+		return syscall.EpollCtl(
+			p.epfd,
+			syscall.EPOLL_CTL_ADD,
 			fd,
 			&syscall.EpollEvent{
 				Fd: int32(fd),

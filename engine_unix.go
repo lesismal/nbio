@@ -149,6 +149,13 @@ func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, er
 
 // DialAsync connects asynchrony to the address on the named network with timeout.
 func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
+	h := func(c *Conn, err error) {
+		if err == nil {
+			engine.wgConn.Add(1)
+		}
+		c.SetWriteDeadline(time.Time{})
+		onConnected(c, err)
+	}
 	domain, typ, dialaddr, raddr, connType, err := parseDomainAndType(network, addr)
 	if err != nil {
 		return err
@@ -178,8 +185,8 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 		rAddr: raddr,
 		typ:   connType,
 	}
-	if inprogress && ASYNC_DIAL_WAITING {
-		c.onConnected = onConnected
+	if inprogress {
+		c.onConnected = h
 	}
 	switch vt := sa.(type) {
 	case *syscall.SockaddrInet4:
@@ -228,15 +235,15 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 		}
 	}
 
-	_, err = engine.AddConn(c)
+	_, err = engine.addDialer(c)
 	if err != nil {
 		return err
 	}
 
-	if !inprogress || !ASYNC_DIAL_WAITING {
-		onConnected(c, nil)
+	if !inprogress {
+		h(c, nil)
 	} else if timeout > 0 {
-		c.setDeadline(&c.rTimer, ErrDialTimeout, time.Now().Add(timeout))
+		c.setDeadline(&c.wTimer, ErrDialTimeout, time.Now().Add(timeout))
 	}
 
 	return nil
