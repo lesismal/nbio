@@ -36,6 +36,8 @@ const (
 	IPPROTO_TCP   = 0
 	TCP_KEEPINTVL = 0
 	TCP_KEEPIDLE  = 0
+
+	ASYNC_DIAL_WAITING = false
 )
 
 type poller struct {
@@ -69,7 +71,9 @@ func (p *poller) addConn(c *Conn) {
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
-		p.g.onOpen(c)
+		if c.onConnected == nil {
+			p.g.onOpen(c)
+		}
 	} else {
 		p.g.onUDPListen(c)
 	}
@@ -142,9 +146,6 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter == syscall.EVFILT_READ {
-			if c.onConnected != nil {
-				c.onConnected(c, nil)
-			}
 			if p.g.onRead == nil {
 				for {
 					buffer := p.g.borrow(c)

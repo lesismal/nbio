@@ -8,9 +8,12 @@
 package nbio
 
 import (
+	"errors"
 	"net"
 	"runtime"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
@@ -134,6 +137,106 @@ func (g *Engine) Start() error {
 			strings.Join(g.Addrs, `", "`),
 			MaxOpenFiles,
 		)
+	}
+
+	return nil
+}
+
+// DialAsync connects asynchrony to the address on the named network.
+func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, error)) error {
+	return engine.DialAsyncTimeout(network, addr, 0, onConnected)
+}
+
+// DialAsync connects asynchrony to the address on the named network with timeout.
+func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
+	domain, typ, dialaddr, raddr, connType, err := parseDomainAndType(network, addr)
+	if err != nil {
+		return err
+	}
+	fd, err := syscall.Socket(domain, typ, 0)
+	if err != nil {
+		return err
+	}
+	err = syscall.SetNonblock(fd, true)
+	if err != nil {
+		syscall.Close(fd)
+		return err
+	}
+	err = syscall.Connect(fd, dialaddr)
+	inprogress := false
+	if err != nil {
+		if errors.Is(err, syscall.EINPROGRESS) {
+			inprogress = true
+		} else {
+			syscall.Close(fd)
+			return err
+		}
+	}
+	sa, _ := syscall.Getsockname(fd)
+	c := &Conn{
+		fd:    fd,
+		rAddr: raddr,
+		typ:   connType,
+	}
+	if inprogress && ASYNC_DIAL_WAITING {
+		c.onConnected = onConnected
+	}
+	switch vt := sa.(type) {
+	case *syscall.SockaddrInet4:
+		switch connType {
+		case ConnTypeTCP:
+			c.lAddr = &net.TCPAddr{
+				IP:   []byte{vt.Addr[0], vt.Addr[1], vt.Addr[2], vt.Addr[3]},
+				Port: vt.Port,
+			}
+		case ConnTypeUDPClientFromDial:
+			c.lAddr = &net.TCPAddr{
+				IP:   []byte{vt.Addr[0], vt.Addr[1], vt.Addr[2], vt.Addr[3]},
+				Port: vt.Port,
+			}
+			c.connUDP = &udpConn{
+				parent: c,
+			}
+		}
+	case *syscall.SockaddrInet6:
+		iface, err := net.InterfaceByIndex(int(vt.ZoneId))
+		if err != nil {
+			syscall.Close(fd)
+			return err
+		}
+		switch connType {
+		case ConnTypeTCP:
+			c.lAddr = &net.TCPAddr{
+				IP:   make([]byte, len(vt.Addr)),
+				Port: vt.Port,
+				Zone: iface.Name,
+			}
+		case ConnTypeUDPClientFromDial:
+			c.lAddr = &net.UDPAddr{
+				IP:   make([]byte, len(vt.Addr)),
+				Port: vt.Port,
+				Zone: iface.Name,
+			}
+			c.connUDP = &udpConn{
+				parent: c,
+			}
+		}
+	case *syscall.SockaddrUnix:
+		c.lAddr = &net.UnixAddr{
+			Net:  network,
+			Name: vt.Name,
+		}
+	}
+
+	_, err = engine.AddConn(c)
+	if err != nil {
+		return err
+	}
+
+	if !inprogress || !ASYNC_DIAL_WAITING {
+		onConnected(c, nil)
+	} else if timeout > 0 {
+		c.setDeadline(&c.rTimer, ErrDialTimeout, time.Now().Add(timeout))
 	}
 
 	return nil

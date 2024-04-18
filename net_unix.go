@@ -10,6 +10,7 @@ package nbio
 import (
 	"errors"
 	"net"
+	"strings"
 	"syscall"
 )
 
@@ -99,4 +100,67 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 	}
 
 	return c, nil
+}
+
+func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.Addr, ConnType, error) {
+	isIPv4 := len(strings.Split(addr, ":")) == 2
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		dstAddr, err := net.ResolveTCPAddr(network, addr)
+		if err != nil {
+			return 0, 0, nil, nil, 0, err
+		}
+
+		if isIPv4 {
+			return syscall.AF_INET, syscall.SOCK_STREAM, &syscall.SockaddrInet4{
+				Addr: [4]byte{dstAddr.IP[0], dstAddr.IP[1], dstAddr.IP[2], dstAddr.IP[3]},
+				Port: dstAddr.Port,
+			}, dstAddr, ConnTypeTCP, nil
+		}
+		iface, err := net.InterfaceByName(dstAddr.Zone)
+		if err != nil {
+			return 0, 0, nil, nil, 0, err
+		}
+		addr6 := &syscall.SockaddrInet6{
+			Port:   dstAddr.Port,
+			ZoneId: uint32(iface.Index),
+		}
+		copy(addr6.Addr[:], dstAddr.IP)
+		return syscall.AF_INET6, syscall.SOCK_STREAM, addr6, dstAddr, ConnTypeTCP, nil
+	case "udp", "udp4", "udp6":
+		dstAddr, err := net.ResolveUDPAddr(network, addr)
+		if err != nil {
+			return 0, 0, nil, nil, 0, err
+		}
+		if isIPv4 {
+			return syscall.AF_INET, syscall.SOCK_STREAM, &syscall.SockaddrInet4{
+				Addr: [4]byte{dstAddr.IP[0], dstAddr.IP[1], dstAddr.IP[2], dstAddr.IP[3]},
+				Port: dstAddr.Port,
+			}, dstAddr, ConnTypeUDPClientFromDial, nil
+		}
+		iface, err := net.InterfaceByName(dstAddr.Zone)
+		if err != nil {
+			return 0, 0, nil, nil, 0, err
+		}
+		addr6 := &syscall.SockaddrInet6{
+			Port:   dstAddr.Port,
+			ZoneId: uint32(iface.Index),
+		}
+		copy(addr6.Addr[:], dstAddr.IP)
+		return syscall.AF_INET6, syscall.SOCK_DGRAM, addr6, dstAddr, ConnTypeUDPClientFromDial, nil
+	case "unix", "unixgram", "unixpacket":
+		sotype := syscall.SOCK_STREAM
+		switch network {
+		case "unix":
+			sotype = syscall.SOCK_STREAM
+		case "unixgram":
+			sotype = syscall.SOCK_DGRAM
+		case "unixpacket":
+			sotype = syscall.SOCK_SEQPACKET
+		default:
+		}
+		return syscall.AF_UNIX, sotype, &syscall.SockaddrUnix{Name: addr}, nil, ConnTypeUnix, nil
+	default:
+	}
+	return 0, 0, nil, nil, 0, net.UnknownNetworkError(network)
 }

@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-var addr = "127.0.0.1:8888"
+var addr = "127.0.0.1:9999"
 var testfile = "test_tmp.file"
-var gopher *Engine
+var engine *Engine
 var testFileSize = 1024 * 1024 * 32
 
 func init() {
@@ -97,7 +97,7 @@ func init() {
 		log.Panicf("Start failed: %v\n", err)
 	}
 
-	gopher = g
+	engine = g
 }
 
 func TestEcho(t *testing.T) {
@@ -434,6 +434,41 @@ func TestUDP(t *testing.T) {
 	time.Sleep(timeout * 2)
 }
 
+func TestDialAsync(t *testing.T) {
+	done := make(chan error, 1)
+	engine := NewEngine(Config{})
+	engine.OnData(func(c *Conn, data []byte) {
+		defer func() {
+			close(done)
+		}()
+		log.Println("DialAsync OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+	})
+	err := engine.Start()
+	if err != nil {
+		t.Fatalf("engine start failed: %v", err)
+	}
+	defer engine.Stop()
+
+	onConnected := func(c *Conn, err error) {
+		log.Println("DialAsync OnConnected:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		if err == nil {
+			c.Write([]byte("hello"))
+		} else {
+			done <- err
+		}
+	}
+
+	time.Sleep(time.Second / 10)
+	err = engine.DialAsyncTimeout("tcp", addr, time.Second, onConnected)
+	if err != nil {
+		t.Fatalf("DialAsyncTimeout failed: %v", err)
+	}
+	err = <-done
+	if err != nil {
+		t.Fatalf("DialAsyncTimeout failed: %v", err)
+	}
+}
+
 func TestUnix(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
@@ -501,6 +536,6 @@ func TestUnix(t *testing.T) {
 }
 
 func TestStop(t *testing.T) {
-	gopher.Stop()
+	engine.Stop()
 	os.Remove(testfile)
 }
