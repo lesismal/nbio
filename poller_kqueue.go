@@ -36,8 +36,6 @@ const (
 	IPPROTO_TCP   = 0
 	TCP_KEEPINTVL = 0
 	TCP_KEEPIDLE  = 0
-
-	ASYNC_DIAL_WAITING = false
 )
 
 type poller struct {
@@ -63,11 +61,14 @@ type poller struct {
 	eventList []syscall.Kevent_t
 }
 
-func (p *poller) addConn(c *Conn) {
+func (p *poller) addConn(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
-		return
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix))
+		c.closeWithError(err)
+		return err
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
@@ -77,18 +78,24 @@ func (p *poller) addConn(c *Conn) {
 	}
 	p.g.connsUnix[fd] = c
 	p.addRead(fd)
+	return nil
 }
 
-func (p *poller) addDialer(c *Conn) {
+func (p *poller) addDialer(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
-		return
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix),
+		)
+		c.closeWithError(err)
+		return err
 	}
 	c.p = p
 	p.g.connsUnix[fd] = c
 	c.isWAdded = true
 	p.addReadWrite(fd)
+	return nil
 }
 
 func (p *poller) getConn(fd int) *Conn {

@@ -249,13 +249,19 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	}
 
 	p := g.pollers[c.Hash()%len(g.pollers)]
-	p.addConn(c)
+	err = p.addConn(c)
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 
 func (g *Engine) addDialer(c *Conn) (*Conn, error) {
 	p := g.pollers[c.Hash()%len(g.pollers)]
-	p.addDialer(c)
+	err := p.addDialer(c)
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 

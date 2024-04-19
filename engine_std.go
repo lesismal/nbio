@@ -11,6 +11,7 @@ import (
 	"net"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
@@ -164,4 +165,30 @@ func NewEngine(conf Config) *Engine {
 	})
 
 	return g
+}
+
+// DialAsync connects asynchrony to the address on the named network.
+func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, error)) error {
+	return engine.DialAsyncTimeout(network, addr, 0, onConnected)
+}
+
+// DialAsync connects asynchrony to the address on the named network with timeout.
+func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
+	go func() {
+		var err error
+		var conn net.Conn
+		if timeout > 0 {
+			conn, err = net.DialTimeout(network, addr, timeout)
+		} else {
+			conn, err = net.Dial(network, addr)
+		}
+		if err != nil {
+			onConnected(nil, err)
+			return
+		}
+		nbc, err := NBConn(conn)
+		nbc, err = engine.addDialer(nbc)
+		onConnected(nbc, err)
+	}()
+	return nil
 }

@@ -42,8 +42,6 @@ const (
 	IPPROTO_TCP   = syscall.IPPROTO_TCP
 	TCP_KEEPINTVL = syscall.TCP_KEEPINTVL
 	TCP_KEEPIDLE  = syscall.TCP_KEEPIDLE
-
-	ASYNC_DIAL_WAITING = true
 )
 
 type poller struct {
@@ -70,16 +68,15 @@ type poller struct {
 }
 
 // add the connection to poller and handle its io events.
-func (p *poller) addConn(c *Conn) {
+func (p *poller) addConn(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(
-			fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
-				fd,
-				len(p.g.connsUnix),
-			),
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix),
 		)
-		return
+		c.closeWithError(err)
+		return err
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
@@ -94,19 +91,19 @@ func (p *poller) addConn(c *Conn) {
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
+	return err
 }
 
 // add the connection to poller and handle its io events.
-func (p *poller) addDialer(c *Conn) {
+func (p *poller) addDialer(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(
-			fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
-				fd,
-				len(p.g.connsUnix),
-			),
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix),
 		)
-		return
+		c.closeWithError(err)
+		return err
 	}
 	c.p = p
 	p.g.connsUnix[fd] = c
@@ -117,6 +114,7 @@ func (p *poller) addDialer(c *Conn) {
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
+	return err
 }
 
 func (p *poller) getConn(fd int) *Conn {
