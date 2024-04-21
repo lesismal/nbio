@@ -241,7 +241,9 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 	}
 
 	if !inprogress {
-		h(c, nil)
+		engine.Async(func() {
+			h(c, nil)
+		})
 	} else if timeout > 0 {
 		c.setDeadline(&c.wTimer, ErrDialTimeout, time.Now().Add(timeout))
 	}

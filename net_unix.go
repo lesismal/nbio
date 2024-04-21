@@ -133,7 +133,7 @@ func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.A
 			return 0, 0, nil, nil, 0, err
 		}
 		if isIPv4 {
-			return syscall.AF_INET, syscall.SOCK_STREAM, &syscall.SockaddrInet4{
+			return syscall.AF_INET, syscall.SOCK_DGRAM, &syscall.SockaddrInet4{
 				Addr: [4]byte{dstAddr.IP[0], dstAddr.IP[1], dstAddr.IP[2], dstAddr.IP[3]},
 				Port: dstAddr.Port,
 			}, dstAddr, ConnTypeUDPClientFromDial, nil
@@ -159,7 +159,11 @@ func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.A
 			sotype = syscall.SOCK_SEQPACKET
 		default:
 		}
-		return syscall.AF_UNIX, sotype, &syscall.SockaddrUnix{Name: addr}, nil, ConnTypeUnix, nil
+		dstAddr := &net.UnixAddr{
+			Net:  network,
+			Name: addr,
+		}
+		return syscall.AF_UNIX, sotype, &syscall.SockaddrUnix{Name: addr}, dstAddr, ConnTypeUnix, nil
 	default:
 	}
 	return 0, 0, nil, nil, 0, net.UnknownNetworkError(network)

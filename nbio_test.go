@@ -434,14 +434,29 @@ func TestUDP(t *testing.T) {
 	time.Sleep(timeout * 2)
 }
 
-func TestDialAsync(t *testing.T) {
+func TestDialAsyncTCP(t *testing.T) {
 	done := make(chan error, 1)
-	engine := NewEngine(Config{})
+	network := "tcp"
+	tcpAddr := "localhost:10001"
+	engine := NewEngine(Config{
+		Network: network,
+		Addrs:   []string{tcpAddr},
+		NPoller: 1,
+	})
+	engine.OnOpen(func(c *Conn) {
+		log.Println("TestDialAsyncTCP OnOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
 	engine.OnData(func(c *Conn, data []byte) {
-		defer func() {
+		if c.typ == ConnTypeUDPClientFromRead {
+			c.Write(data)
+			log.Println("TestDialAsyncTCP Server OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		} else {
+			log.Println("TestDialAsyncTCP Client OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
 			close(done)
-		}()
-		log.Println("DialAsync OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		}
+	})
+	engine.OnClose(func(c *Conn, err error) {
+		log.Println("TestDialAsyncTCP OnClose:", c.LocalAddr().String(), c.RemoteAddr().String())
 	})
 	err := engine.Start()
 	if err != nil {
@@ -450,26 +465,136 @@ func TestDialAsync(t *testing.T) {
 	defer engine.Stop()
 
 	onConnected := func(c *Conn, err error) {
-		log.Println("DialAsync OnConnected:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		log.Println("TestDialAsyncTCP OnConnected:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
 		if err == nil {
 			n, err := c.Write([]byte("hello"))
 			if err != nil {
 				done <- err
 			}
-			log.Println("DialAsync OnConnected Write n:", n)
+			log.Println("TestDialAsyncTCP OnConnected Write n:", n)
 		} else {
 			done <- err
 		}
 	}
 
 	time.Sleep(time.Second / 10)
-	err = engine.DialAsyncTimeout("tcp", addr, time.Second*10, onConnected)
+	err = engine.DialAsyncTimeout(network, tcpAddr, time.Second*10, onConnected)
 	if err != nil {
-		t.Fatalf("DialAsyncTimeout failed: %v", err)
+		t.Fatalf("TestDialAsyncTCP DialAsyncTimeout failed: %v", err)
 	}
 	err = <-done
 	if err != nil {
-		t.Fatalf("DialAsyncTimeout failed: %v", err)
+		t.Fatalf("TestDialAsyncTCP DialAsyncTimeout failed: %v", err)
+	}
+}
+
+func TestDialAsyncUDP(t *testing.T) {
+	done := make(chan error, 1)
+	network := "udp"
+	udpAddr := "localhost:10001"
+	engine := NewEngine(Config{
+		Network: network,
+		Addrs:   []string{udpAddr},
+		NPoller: 1,
+	})
+	engine.OnOpen(func(c *Conn) {
+		log.Println("DialAsyncUDP OnOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
+	engine.OnData(func(c *Conn, data []byte) {
+		if c.typ == ConnTypeUDPClientFromRead {
+			c.Write(data)
+			log.Println("DialAsyncUDP Server OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		} else {
+			log.Println("DialAsyncUDP Client OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+			close(done)
+		}
+	})
+	engine.OnClose(func(c *Conn, err error) {
+		log.Println("DialAsyncUDP OnClose:", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
+	err := engine.Start()
+	if err != nil {
+		t.Fatalf("engine start failed: %v", err)
+	}
+	defer engine.Stop()
+
+	onConnected := func(c *Conn, err error) {
+		log.Println("TestDialAsyncUDP OnConnected:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		if err == nil {
+			n, err := c.Write([]byte("hello"))
+			if err != nil {
+				done <- err
+			}
+			log.Println("TestDialAsyncUDP OnConnected Write n:", n)
+		} else {
+			done <- err
+		}
+	}
+
+	time.Sleep(time.Second / 10)
+	err = engine.DialAsyncTimeout(network, udpAddr, time.Second*10, onConnected)
+	if err != nil {
+		t.Fatalf("TestDialAsyncUDP DialAsyncTimeout failed: %v", err)
+	}
+	err = <-done
+	if err != nil {
+		t.Fatalf("TestDialAsyncUDP DialAsyncTimeout failed: %v", err)
+	}
+}
+
+func TestDialAsyncUnix(t *testing.T) {
+	done := make(chan error, 1)
+	network := "unix"
+	unixAddr := "unix.server"
+	engine := NewEngine(Config{
+		Network: network,
+		Addrs:   []string{unixAddr},
+		NPoller: 1,
+	})
+	engine.OnOpen(func(c *Conn) {
+		log.Println("TestDialAsyncUnix OnOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
+	cnt := 0
+	engine.OnData(func(c *Conn, data []byte) {
+		cnt++
+		if cnt == 1 {
+			c.Write(data)
+			log.Println("TestDialAsyncUnix Server OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+		} else {
+			log.Println("TestDialAsyncUnix Client OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
+			close(done)
+		}
+	})
+	engine.OnClose(func(c *Conn, err error) {
+		log.Println("TestDialAsyncUnix OnClose:", c.LocalAddr().String(), c.RemoteAddr().String())
+	})
+	err := engine.Start()
+	if err != nil {
+		t.Fatalf("engine start failed: %v", err)
+	}
+	defer engine.Stop()
+
+	onConnected := func(c *Conn, err error) {
+		log.Println("TestTestDialAsyncUnix OnConnected:", c.LocalAddr().String(), c.RemoteAddr().String(), err)
+		if err == nil {
+			n, err := c.Write([]byte("hello"))
+			if err != nil {
+				done <- err
+			}
+			log.Println("TestTestDialAsyncUnix OnConnected Write n:", n)
+		} else {
+			done <- err
+		}
+	}
+
+	time.Sleep(time.Second / 10)
+	err = engine.DialAsyncTimeout(network, unixAddr, time.Second*10, onConnected)
+	if err != nil {
+		t.Fatalf("TestTestDialAsyncUnix DialAsyncTimeout failed: %v", err)
+	}
+	err = <-done
+	if err != nil {
+		t.Fatalf("TestTestDialAsyncUnix DialAsyncTimeout failed: %v", err)
 	}
 }
 
