@@ -530,6 +530,13 @@ func (c *Conn) WriteClose(code int, reason string) error {
 
 // WriteMessage .
 func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	if c.closed {
+		return net.ErrClosed
+	}
+
 	switch messageType {
 	case TextMessage:
 	case BinaryMessage:
@@ -690,6 +697,13 @@ func (c *Conn) CloseAndClean(err error) {
 
 // WriteFrame .
 func (c *Conn) WriteFrame(messageType MessageType, sendOpcode, fin bool, data []byte) error {
+	c.mux.Lock()
+	defer c.mux.Unlock()
+
+	if c.closed {
+		return net.ErrClosed
+	}
+
 	return c.writeFrame(messageType, sendOpcode, fin, data, false)
 }
 
@@ -751,16 +765,8 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		buf[0] |= byte(0x80)
 	}
 
-	c.mux.Lock()
-	if c.closed {
-		c.mux.Unlock()
-		c.Engine.BodyAllocator.Free(buf)
-		return net.ErrClosed
-	}
-
 	if c.sendQueue != nil {
 		if c.sendQueueSize > 0 && len(c.sendQueue) >= int(c.sendQueueSize) {
-			c.mux.Unlock()
 			c.Engine.BodyAllocator.Free(buf)
 			return ErrMessageSendQuqueIsFull
 		}
@@ -769,7 +775,6 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		if isHead {
 			c.sendQueue[0] = nil
 		}
-		c.mux.Unlock()
 
 		if isHead {
 			go func() {
@@ -807,7 +812,6 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		}
 		return nil
 	}
-	c.mux.Unlock()
 
 	_, err := c.Conn.Write(buf)
 	c.Engine.BodyAllocator.Free(buf)
