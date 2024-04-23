@@ -437,16 +437,6 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return nil
 }
 
-// Session returns user session.
-func (c *Conn) Session() interface{} {
-	return c.session
-}
-
-// SetSession sets user session.
-func (c *Conn) SetSession(session interface{}) {
-	c.session = session
-}
-
 func newConn(conn net.Conn) *Conn {
 	c := &Conn{}
 	addr := conn.LocalAddr().String()

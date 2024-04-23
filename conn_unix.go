@@ -57,6 +57,7 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 			if cap(tail.buf) < tailLen+l {
 				b := c.p.g.BodyAllocator.Malloc(tailLen + l)[:tailLen]
 				copy(b, tail.buf)
+				c.p.g.BodyAllocator.Free(tail.buf)
 				tail.buf = b
 			}
 			tail.buf = append(tail.buf, buf...)
@@ -615,16 +616,6 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 			Linger: linger, // 0
 		},
 	)
-}
-
-// Session returns user session.
-func (c *Conn) Session() interface{} {
-	return c.session
-}
-
-// SetSession sets user session.
-func (c *Conn) SetSession(session interface{}) {
-	c.session = session
 }
 
 // sets writing event.

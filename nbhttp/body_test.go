@@ -5,18 +5,26 @@ import (
 	"crypto/rand"
 	"io"
 	"testing"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 func TestBodyReader(t *testing.T) {
-	engine := NewEngine(Config{})
-	b1 := make([]byte, 0, 1997)
+	engine := NewEngine(Config{
+		BodyAllocator: mempool.NewAligned(),
+	})
+	var (
+		b0 []byte
+		b1 = make([]byte, 2049)
+		b2 = make([]byte, 1132)
+		b3 = make([]byte, 11111)
+	)
 	rand.Read(b1)
-	b2 := make([]byte, 4096)
 	rand.Read(b2)
-	b3 := make([]byte, 11111)
 	rand.Read(b3)
 
-	allBytes := append(b1, b2...)
+	allBytes := append(b0, b1...)
+	allBytes = append(allBytes, b2...)
 	allBytes = append(allBytes, b3...)
 
 	newBR := func() *BodyReader {
