@@ -13,14 +13,18 @@ func TestBodyReader(t *testing.T) {
 	engine := NewEngine(Config{
 		BodyAllocator: mempool.NewAligned(),
 	})
-	b1 := make([]byte, 2049)
+	var (
+		b0 []byte
+		b1 = make([]byte, 2049)
+		b2 = make([]byte, 1132)
+		b3 = make([]byte, 11111)
+	)
 	rand.Read(b1)
-	b2 := make([]byte, 1132)
 	rand.Read(b2)
-	b3 := make([]byte, 11111)
 	rand.Read(b3)
 
-	allBytes := append(b1, b2...)
+	allBytes := append(b0, b1...)
+	allBytes = append(allBytes, b2...)
 	allBytes = append(allBytes, b3...)
 
 	newBR := func() *BodyReader {
