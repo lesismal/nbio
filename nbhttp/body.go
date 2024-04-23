@@ -38,6 +38,7 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 		nc := copy(p[ncopy:], b[br.index:])
 		if nc+br.index >= len(b) {
 			br.engine.BodyAllocator.Free(b)
+			br.buffers[0] = nil
 			br.buffers = br.buffers[1:]
 			br.index = 0
 		} else {
@@ -118,7 +119,11 @@ func (br *BodyReader) append(data []byte) error {
 		l := len(b)
 		bLeft := cap(b) - len(b)
 		if bLeft > 0 {
-			b = b[:cap(b)]
+			if bLeft > len(data) {
+				b = b[:l+len(data)]
+			} else {
+				b = b[:cap(b)]
+			}
 			nc := copy(b[l:], data)
 			data = data[nc:]
 			br.buffers[i] = b

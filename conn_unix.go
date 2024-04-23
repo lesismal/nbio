@@ -57,6 +57,7 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 			if cap(tail.buf) < tailLen+l {
 				b := c.p.g.BodyAllocator.Malloc(tailLen + l)[:tailLen]
 				copy(b, tail.buf)
+				c.p.g.BodyAllocator.Free(tail.buf)
 				tail.buf = b
 			}
 			tail.buf = append(tail.buf, buf...)
