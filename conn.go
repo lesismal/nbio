@@ -55,6 +55,16 @@ func (c *Conn) IsUnix() bool {
 	return c.typ == ConnTypeUnix
 }
 
+// Session returns user session.
+func (c *Conn) Session() interface{} {
+	return c.session
+}
+
+// SetSession sets user session.
+func (c *Conn) SetSession(session interface{}) {
+	c.session = session
+}
+
 // OnData registers Conn's data handler.
 // Notice:
 //  1. The data readed by the poller is not handled by this Conn's data

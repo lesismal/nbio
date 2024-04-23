@@ -265,6 +265,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	var engine = u.Engine
 	var parser *nbhttp.Parser
 	var transferConn = u.BlockingModTrasferConnToPoller
+
 	if len(args) > 0 {
 		var b bool
 		b, ok = args[0].(bool)
@@ -276,6 +277,14 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		nbResonse, ok = w.(*nbhttp.Response)
 		if ok {
 			parser = nbResonse.Parser
+		}
+	}
+
+	clearNBCWSSession := func() {
+		if nbc != nil {
+			if _, ok = nbc.Session().(*Conn); ok {
+				nbc.SetSession(nil)
+			}
 		}
 	}
 
@@ -291,14 +300,15 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	switch vt := underLayerConn.(type) {
 	case *nbio.Conn:
 		// Scenario 1: *nbio.Conn, handled by nbhttp.Engine.
-		parser, ok = vt.Session().(*nbhttp.Parser)
+		nbc = vt
+		parser, ok = nbc.Session().(*nbhttp.Parser)
 		if !ok {
 			return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 		}
 		wsc = NewServerConn(u, conn, subprotocol, compress, false)
 		wsc.Engine = parser.Engine
 		wsc.Execute = parser.Execute
-		vt.SetSession(wsc)
+		nbc.SetSession(wsc)
 		if nbhttpConn != nil {
 			nbhttpConn.Parser = nil
 		}
@@ -367,6 +377,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				vt.ResetConn(nbc, nonblock)
 				err = engine.AddTransferredConn(nbc)
 				if err != nil {
+					clearNBCWSSession()
 					return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 				}
 			} else {
@@ -437,6 +448,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 			})
 			err = engine.AddTransferredConn(nbc)
 			if err != nil {
+				clearNBCWSSession()
 				return nil, u.returnError(w, r, http.StatusInternalServerError, err)
 			}
 		} else {
@@ -468,6 +480,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 
 	err = u.commResponse(wsc.Conn, responseHeader, challengeKey, subprotocol, compress)
 	if err != nil {
+		clearNBCWSSession()
 		return nil, err
 	}
 

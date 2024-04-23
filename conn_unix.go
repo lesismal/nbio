@@ -618,16 +618,6 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	)
 }
 
-// Session returns user session.
-func (c *Conn) Session() interface{} {
-	return c.session
-}
-
-// SetSession sets user session.
-func (c *Conn) SetSession(session interface{}) {
-	c.session = session
-}
-
 // sets writing event.
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
