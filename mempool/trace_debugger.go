@@ -13,6 +13,13 @@ type TraceDebugger struct {
 	allocator Allocator
 }
 
+func NewTraceDebuger(allocator Allocator) *TraceDebugger {
+	return &TraceDebugger{
+		allocator: allocator,
+		pAlloced:  map[uintptr]struct{}{},
+	}
+}
+
 // Malloc .
 func (td *TraceDebugger) Malloc(size int) []byte {
 	buf := td.allocator.Malloc(size)
