@@ -65,19 +65,23 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (td *TraceDebugger) Free(buf []byte) {
+	// if cap(buf) == 0 {
+	// 	td.printStack("invalid buf with cap 0")
+	// 	return
+	// }
 	td.deleteBufferPointer(buf)
 	td.allocator.Free(buf)
 }
 
 func (td *TraceDebugger) setBufferPointer(buf []byte) {
-	if len(buf) == 0 {
-		td.printStack("invalid buf with length 0:")
+	if cap(buf) == 0 {
+		td.printStack("invalid buf with cap 0")
 		return
 	}
 
 	td.mux.Lock()
 	defer td.mux.Unlock()
-	p := *((*uintptr)(unsafe.Pointer(&(buf[0]))))
+	p := td.pointer(buf)
 	if _, ok := td.pAlloced[p]; ok {
 		td.printStack("re-alloc the same buf before free:")
 		return
@@ -86,8 +90,8 @@ func (td *TraceDebugger) setBufferPointer(buf []byte) {
 }
 
 func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
-	if len(buf) == 0 {
-		td.printStack("invalid buf with length 0:")
+	if cap(buf) == 0 {
+		td.printStack("invalid buf with cap 0")
 		return
 	}
 
@@ -102,7 +106,7 @@ func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
 }
 
 func (td *TraceDebugger) pointer(buf []byte) uintptr {
-	p := *((*uintptr)(unsafe.Pointer(&(buf[0]))))
+	p := *((*uintptr)(unsafe.Pointer(&(buf[:1][0]))))
 	return p
 }
 
