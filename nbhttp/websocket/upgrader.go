@@ -41,6 +41,10 @@ var (
 	// DefaultBlockingModSendQueueMaxSize .
 	DefaultBlockingModSendQueueMaxSize uint16 = 0
 
+	// DefaultMessageLengthLimit .
+	DefaultMessageLengthLimit = 1024 * 1024 * 4
+
+	// DefaultBlockingModAsyncCloseDelay .
 	DefaultBlockingModAsyncCloseDelay = time.Second / 10
 
 	// DefaultEngine will be set to a Upgrader.Engine to handle details such as buffers.
@@ -138,6 +142,7 @@ func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
 			KeepaliveTime:              nbhttp.DefaultKeepaliveTime,
+			MessageLengthLimit:         DefaultMessageLengthLimit,
 			BlockingModAsyncCloseDelay: DefaultBlockingModAsyncCloseDelay,
 		},
 		compressionLevel:               defaultCompressionLevel,

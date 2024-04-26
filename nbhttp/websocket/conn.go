@@ -295,7 +295,7 @@ func (c *Conn) nextFrame(data []byte) ([]byte, MessageType, []byte, bool, bool, 
 			bodyLen = int64(payloadLen)
 		}
 
-		if c.isMessageTooLarge(int(bodyLen)) {
+		if c.isMessageTooLarge(len(c.message) + int(bodyLen)) {
 			return data, 0, nil, false, false, false, ErrMessageTooLarge
 		}
 
@@ -913,8 +913,8 @@ func (c *Conn) HandleRead(bufSize int) {
 
 // return false if length is ok.
 func (c *Conn) isMessageTooLarge(len int) bool {
-	if c.MessageLengthLimit == 0 {
-		// 0 means unlimitted size
+	// <=0 means unlimitted size
+	if c.MessageLengthLimit <= 0 {
 		return false
 	}
 	return len > c.MessageLengthLimit
@@ -955,9 +955,17 @@ func (c *Conn) readAll(r io.Reader, size int) ([]byte, error) {
 		}
 		if len(buf) == cap(buf) {
 			l := len(buf)
+			// can not extend more bytes.
+			if c.isMessageTooLarge(l + 1) {
+				return nil, ErrMessageTooLarge
+			}
 			al := l
 			if al > maxAppendSize {
 				al = maxAppendSize
+			}
+			// extend to the limit size at most.
+			if (c.MessageLengthLimit > 0) && (l+al > c.MessageLengthLimit) {
+				al = c.MessageLengthLimit - l
 			}
 			buf = c.Engine.BodyAllocator.Append(buf, make([]byte, al)...)[:l]
 		}
