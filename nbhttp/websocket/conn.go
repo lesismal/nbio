@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -407,6 +408,9 @@ func (c *Conn) Parse(data []byte) error {
 		}()
 
 		if err != nil {
+			if errors.Is(err, ErrMessageTooLarge) || errors.Is(err, ErrControlMessageTooBig) {
+				c.WriteClose(1009, err.Error())
+			}
 			return err
 		}
 
