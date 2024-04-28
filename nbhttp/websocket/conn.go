@@ -941,6 +941,9 @@ func (c *Conn) validFrame(opcode MessageType, fin, res1, res2, res3, expectingFr
 
 func (c *Conn) readAll(r io.Reader, size int) ([]byte, error) {
 	const maxAppendSize = 1024 * 1024 * 4
+	if c.MessageLengthLimit > 0 && size > c.MessageLengthLimit {
+		size = c.MessageLengthLimit
+	}
 	buf := c.Engine.BodyAllocator.Malloc(size)[0:0]
 	for {
 		n, err := r.Read(buf[len(buf):cap(buf)])
