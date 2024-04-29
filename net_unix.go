@@ -103,30 +103,48 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 }
 
 func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.Addr, ConnType, error) {
-	isIPv4 := len(strings.Split(addr, ":")) == 2
+	var (
+		isIPv4 = len(strings.Split(addr, ":")) == 2
+	)
 
 	socketResult := func(sockType int, connType ConnType) (int, int, syscall.Sockaddr, net.Addr, ConnType, error) {
-		dstAddr, err := net.ResolveTCPAddr(network, addr)
-		if err != nil {
-			return 0, 0, nil, nil, 0, err
+		var (
+			ip      net.IP
+			port    int
+			zone    string
+			retAddr net.Addr
+		)
+		if connType == ConnTypeTCP {
+			dstAddr, err := net.ResolveTCPAddr(network, addr)
+			if err != nil {
+				return 0, 0, nil, nil, 0, err
+			}
+			ip, port, zone, retAddr = dstAddr.IP, dstAddr.Port, dstAddr.Zone, dstAddr
+		} else {
+			dstAddr, err := net.ResolveUDPAddr(network, addr)
+			if err != nil {
+				return 0, 0, nil, nil, 0, err
+			}
+			ip, port, zone, retAddr = dstAddr.IP, dstAddr.Port, dstAddr.Zone, dstAddr
 		}
 
 		if isIPv4 {
 			return syscall.AF_INET, sockType, &syscall.SockaddrInet4{
-				Addr: [4]byte{dstAddr.IP[0], dstAddr.IP[1], dstAddr.IP[2], dstAddr.IP[3]},
-				Port: dstAddr.Port,
-			}, dstAddr, connType, nil
+				Addr: [4]byte{ip[0], ip[1], ip[2], ip[3]},
+				Port: port,
+			}, retAddr, connType, nil
 		}
-		iface, err := net.InterfaceByName(dstAddr.Zone)
+
+		iface, err := net.InterfaceByName(zone)
 		if err != nil {
 			return 0, 0, nil, nil, 0, err
 		}
 		addr6 := &syscall.SockaddrInet6{
-			Port:   dstAddr.Port,
+			Port:   port,
 			ZoneId: uint32(iface.Index),
 		}
-		copy(addr6.Addr[:], dstAddr.IP)
-		return syscall.AF_INET6, sockType, addr6, dstAddr, connType, nil
+		copy(addr6.Addr[:], ip)
+		return syscall.AF_INET6, sockType, addr6, retAddr, connType, nil
 	}
 
 	switch network {
