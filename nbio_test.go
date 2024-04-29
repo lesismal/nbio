@@ -83,7 +83,7 @@ func init() {
 		wsess := session.(*writtenSizeSession)
 		if wsess.isFile {
 			if wsess.sumSend != testFileSize {
-				panic("invalid send size for sendfile")
+				panic(fmt.Errorf("invalid send size for sendfile: %v, %v", wsess.sumSend, testFileSize))
 			}
 		} else {
 			if wsess.sumSend != wsess.sumRecv {
@@ -447,6 +447,9 @@ func TestDialAsyncUDP(t *testing.T) {
 }
 
 func TestDialAsyncUnix(t *testing.T) {
+	if runtime.GOOS != "Windows" {
+		return
+	}
 	network := "unix"
 	addr := "unix.server"
 	testDialAsync(t, network, addr)

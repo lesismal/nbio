@@ -39,9 +39,6 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {
 			if nw < 0 {
 				nw = 0
 			}
-			if c.p.g.onWrittenSize != nil && nw > 0 {
-				c.p.g.onWrittenSize(c, nil, nw)
-			}
 			remain -= int64(nw)
 			written += int64(nw)
 			if ew != nil {
@@ -60,5 +57,10 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (written int64, err error) {
 			break
 		}
 	}
+
+	if c.p.g.onWrittenSize != nil && written > 0 {
+		c.p.g.onWrittenSize(c, nil, int(written))
+	}
+
 	return written, err
 }
