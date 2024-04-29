@@ -354,48 +354,18 @@ func (p *poller) setRead(op int, fd int) error {
 }
 
 func (p *poller) modWrite(fd int) error {
-	switch p.g.EpollMod {
-	case EPOLLET:
-		return syscall.EpollCtl(
-			p.epfd,
-			syscall.EPOLL_CTL_MOD,
-			fd,
-			&syscall.EpollEvent{
-				Fd: int32(fd),
-				Events: syscall.EPOLLERR |
-					syscall.EPOLLHUP |
-					syscall.EPOLLRDHUP |
-					syscall.EPOLLPRI |
-					syscall.EPOLLIN |
-					syscall.EPOLLOUT |
-					EPOLLET |
-					p.g.EPOLLONESHOT,
-			},
-		)
-	default:
-		return syscall.EpollCtl(p.epfd,
-			syscall.EPOLL_CTL_MOD,
-			fd,
-			&syscall.EpollEvent{
-				Fd: int32(fd),
-				Events: syscall.EPOLLERR |
-					syscall.EPOLLHUP |
-					syscall.EPOLLRDHUP |
-					syscall.EPOLLPRI |
-					syscall.EPOLLIN |
-					syscall.EPOLLOUT,
-			},
-		)
-	}
+	return p.setReadWrite(syscall.EPOLL_CTL_MOD, fd)
 }
 
 func (p *poller) addReadWrite(fd int) error {
+	return p.setReadWrite(syscall.EPOLL_CTL_ADD, fd)
+}
+
+func (p *poller) setReadWrite(op int, fd int) error {
 	switch p.g.EpollMod {
 	case EPOLLET:
 		return syscall.EpollCtl(
-			p.epfd,
-			syscall.EPOLL_CTL_ADD,
-			fd,
+			p.epfd, op, fd,
 			&syscall.EpollEvent{
 				Fd: int32(fd),
 				Events: syscall.EPOLLERR |
@@ -410,9 +380,7 @@ func (p *poller) addReadWrite(fd int) error {
 		)
 	default:
 		return syscall.EpollCtl(
-			p.epfd,
-			syscall.EPOLL_CTL_ADD,
-			fd,
+			p.epfd, op, fd,
 			&syscall.EpollEvent{
 				Fd: int32(fd),
 				Events: syscall.EPOLLERR |

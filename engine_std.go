@@ -188,6 +188,10 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 		}
 		nbc, err := NBConn(conn)
 		nbc, err = engine.addDialer(nbc)
+		if err == nil {
+			engine.wgConn.Add(1)
+			nbc.SetWriteDeadline(time.Time{})
+		}
 		onConnected(nbc, err)
 	}()
 	return nil

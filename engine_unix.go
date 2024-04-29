@@ -152,8 +152,8 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 	h := func(c *Conn, err error) {
 		if err == nil {
 			engine.wgConn.Add(1)
+			c.SetWriteDeadline(time.Time{})
 		}
-		c.SetWriteDeadline(time.Time{})
 		onConnected(c, err)
 	}
 	domain, typ, dialaddr, raddr, connType, err := parseDomainAndType(network, addr)
