@@ -31,7 +31,7 @@ func (g *Engine) Start() error {
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
 
 	switch g.Network {
-	case "unix", "tcp", "tcp4", "tcp6":
+	case NETWORK_UNIX, NETWORK_TCP, NETWORK_TCP4, NETWORK_TCP6:
 		for i := range g.Addrs {
 			ln, err := newPoller(g, true, i)
 			if err != nil {
@@ -43,7 +43,7 @@ func (g *Engine) Start() error {
 			g.Addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
-	case "udp", "udp4", "udp6":
+	case NETWORK_UDP, NETWORK_UDP4, NETWORK_UDP6:
 		for i, addrStr := range g.Addrs {
 			addr, err := net.ResolveUDPAddr(g.Network, addrStr)
 			if err != nil {
@@ -151,8 +151,9 @@ func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, er
 func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
 	h := func(c *Conn, err error) {
 		if err == nil {
-			engine.wgConn.Add(1)
 			c.SetWriteDeadline(time.Time{})
+		} else {
+			engine.wgConn.Done()
 		}
 		onConnected(c, err)
 	}
@@ -206,7 +207,8 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 			}
 		}
 	case *syscall.SockaddrInet6:
-		iface, err := net.InterfaceByIndex(int(vt.ZoneId))
+		var iface *net.Interface
+		iface, err = net.InterfaceByIndex(int(vt.ZoneId))
 		if err != nil {
 			syscall.Close(fd)
 			return err
@@ -235,6 +237,7 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 		}
 	}
 
+	engine.wgConn.Add(1)
 	_, err = engine.addDialer(c)
 	if err != nil {
 		return err

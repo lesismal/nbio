@@ -23,7 +23,7 @@ func (g *Engine) Start() error {
 	// Create listener pollers.
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
 	switch g.Network {
-	case "tcp", "tcp4", "tcp6":
+	case NETWORK_TCP, NETWORK_TCP4, NETWORK_TCP6:
 		for i := range g.Addrs {
 			ln, err := newPoller(g, true, i)
 			if err != nil {
@@ -35,7 +35,7 @@ func (g *Engine) Start() error {
 			g.Addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
-	case "udp", "udp4", "udp6":
+	case NETWORK_UDP, NETWORK_UDP4, NETWORK_UDP6:
 		for i, addrStr := range g.Addrs {
 			addr, err := net.ResolveUDPAddr(g.Network, addrStr)
 			if err != nil {
@@ -187,10 +187,12 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 			return
 		}
 		nbc, err := NBConn(conn)
+		engine.wgConn.Add(1)
 		nbc, err = engine.addDialer(nbc)
 		if err == nil {
-			engine.wgConn.Add(1)
 			nbc.SetWriteDeadline(time.Time{})
+		} else {
+			engine.wgConn.Done()
 		}
 		onConnected(nbc, err)
 	}()

@@ -454,16 +454,16 @@ func TestDialAsyncUnix(t *testing.T) {
 
 func testDialAsync(t *testing.T, network, addr string) {
 	done := make(chan error, 1)
-	engine := NewEngine(Config{
+	engineAsync := NewEngine(Config{
 		Network: network,
 		Addrs:   []string{addr},
 		NPoller: 1,
 	})
-	engine.OnOpen(func(c *Conn) {
+	engineAsync.OnOpen(func(c *Conn) {
 		log.Printf("TestDialAsync[%v, %v] OnOpen: %v, %v", network, addr, c.LocalAddr().String(), c.RemoteAddr().String())
 	})
 	cnt := 0
-	engine.OnData(func(c *Conn, data []byte) {
+	engineAsync.OnData(func(c *Conn, data []byte) {
 		cnt++
 		if cnt == 1 {
 			c.Write(data)
@@ -473,19 +473,20 @@ func testDialAsync(t *testing.T, network, addr string) {
 			close(done)
 		}
 	})
-	engine.OnClose(func(c *Conn, err error) {
+	engineAsync.OnClose(func(c *Conn, err error) {
 		log.Printf("TestDialAsync[%v, %v] OnClose: %v, %v", network, addr, c.LocalAddr().String(), c.RemoteAddr().String())
 	})
-	err := engine.Start()
+	err := engineAsync.Start()
 	if err != nil {
-		t.Fatalf("engine start failed: %v", err)
+		t.Fatalf("engineAsync  start failed: %v", err)
 	}
-	defer engine.Stop()
+	defer engineAsync.Stop()
 
 	onConnected := func(c *Conn, err error) {
 		log.Printf("TestTestDialAsync[%v, %v] OnConnected: %v, %v, %v", network, addr, c.LocalAddr().String(), c.RemoteAddr().String(), err)
 		if err == nil {
-			n, err := c.Write([]byte("hello"))
+			var n int
+			n, err = c.Write([]byte("hello"))
 			if err != nil {
 				done <- err
 			}
@@ -496,7 +497,7 @@ func testDialAsync(t *testing.T, network, addr string) {
 	}
 
 	time.Sleep(time.Second / 10)
-	err = engine.DialAsyncTimeout(network, addr, time.Second*10, onConnected)
+	err = engineAsync.DialAsyncTimeout(network, addr, time.Second*10, onConnected)
 	if err != nil {
 		t.Fatalf("TestTestDialAsync[%v, %v] DialAsyncTimeout failed: %v", network, addr, err)
 	}

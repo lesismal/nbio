@@ -104,18 +104,18 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 
 func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.Addr, ConnType, error) {
 	isIPv4 := len(strings.Split(addr, ":")) == 2
-	switch network {
-	case "tcp", "tcp4", "tcp6":
+
+	socketResult := func(sockType int, connType ConnType) (int, int, syscall.Sockaddr, net.Addr, ConnType, error) {
 		dstAddr, err := net.ResolveTCPAddr(network, addr)
 		if err != nil {
 			return 0, 0, nil, nil, 0, err
 		}
 
 		if isIPv4 {
-			return syscall.AF_INET, syscall.SOCK_STREAM, &syscall.SockaddrInet4{
+			return syscall.AF_INET, sockType, &syscall.SockaddrInet4{
 				Addr: [4]byte{dstAddr.IP[0], dstAddr.IP[1], dstAddr.IP[2], dstAddr.IP[3]},
 				Port: dstAddr.Port,
-			}, dstAddr, ConnTypeTCP, nil
+			}, dstAddr, connType, nil
 		}
 		iface, err := net.InterfaceByName(dstAddr.Zone)
 		if err != nil {
@@ -126,36 +126,22 @@ func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.A
 			ZoneId: uint32(iface.Index),
 		}
 		copy(addr6.Addr[:], dstAddr.IP)
-		return syscall.AF_INET6, syscall.SOCK_STREAM, addr6, dstAddr, ConnTypeTCP, nil
-	case "udp", "udp4", "udp6":
-		dstAddr, err := net.ResolveUDPAddr(network, addr)
-		if err != nil {
-			return 0, 0, nil, nil, 0, err
-		}
-		if isIPv4 {
-			return syscall.AF_INET, syscall.SOCK_DGRAM, &syscall.SockaddrInet4{
-				Addr: [4]byte{dstAddr.IP[0], dstAddr.IP[1], dstAddr.IP[2], dstAddr.IP[3]},
-				Port: dstAddr.Port,
-			}, dstAddr, ConnTypeUDPClientFromDial, nil
-		}
-		iface, err := net.InterfaceByName(dstAddr.Zone)
-		if err != nil {
-			return 0, 0, nil, nil, 0, err
-		}
-		addr6 := &syscall.SockaddrInet6{
-			Port:   dstAddr.Port,
-			ZoneId: uint32(iface.Index),
-		}
-		copy(addr6.Addr[:], dstAddr.IP)
-		return syscall.AF_INET6, syscall.SOCK_DGRAM, addr6, dstAddr, ConnTypeUDPClientFromDial, nil
-	case "unix", "unixgram", "unixpacket":
+		return syscall.AF_INET6, sockType, addr6, dstAddr, connType, nil
+	}
+
+	switch network {
+	case NETWORK_TCP, NETWORK_TCP4, NETWORK_TCP6:
+		return socketResult(syscall.SOCK_STREAM, ConnTypeTCP)
+	case NETWORK_UDP, NETWORK_UDP4, NETWORK_UDP6:
+		return socketResult(syscall.SOCK_DGRAM, ConnTypeUDPClientFromDial)
+	case NETWORK_UNIX, NETWORK_UNIXGRAM, NETWORK_UNIXPACKET:
 		sotype := syscall.SOCK_STREAM
 		switch network {
-		case "unix":
+		case NETWORK_UNIX:
 			sotype = syscall.SOCK_STREAM
-		case "unixgram":
+		case NETWORK_UNIXGRAM:
 			sotype = syscall.SOCK_DGRAM
-		case "unixpacket":
+		case NETWORK_UNIXPACKET:
 			sotype = syscall.SOCK_SEQPACKET
 		default:
 		}
