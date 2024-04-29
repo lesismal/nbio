@@ -436,18 +436,18 @@ func TestUDP(t *testing.T) {
 
 func TestDialAsyncTCP(t *testing.T) {
 	network := "tcp"
-	addr := "localhost:10001"
+	addr := "127.0.0.1:10001"
 	testDialAsync(t, network, addr)
 }
 
 func TestDialAsyncUDP(t *testing.T) {
 	network := "udp"
-	addr := "localhost:10001"
+	addr := "127.0.0.1:10001"
 	testDialAsync(t, network, addr)
 }
 
 func TestDialAsyncUnix(t *testing.T) {
-	if runtime.GOOS != "Windows" {
+	if runtime.GOOS == "windows" {
 		return
 	}
 	network := "unix"
@@ -458,6 +458,7 @@ func TestDialAsyncUnix(t *testing.T) {
 func testDialAsync(t *testing.T, network, addr string) {
 	done := make(chan error, 1)
 	engineAsync := NewEngine(Config{
+		Name:    "udp-testing",
 		Network: network,
 		Addrs:   []string{addr},
 		NPoller: 1,
