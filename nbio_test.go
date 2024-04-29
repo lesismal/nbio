@@ -18,6 +18,8 @@ var testfile = "test_tmp.file"
 var engine *Engine
 var testFileSize = 1024 * 1024 * 32
 
+const osWindows = "windows"
+
 func init() {
 	if err := os.WriteFile(testfile, make([]byte, testFileSize), 0600); err != nil {
 		log.Panicf("write file failed: %v", err)
@@ -158,7 +160,7 @@ func TestEcho(t *testing.T) {
 	}
 
 	for i := 0; i < clientNum; i++ {
-		if runtime.GOOS != "windows" {
+		if runtime.GOOS != osWindows {
 			one(i)
 		} else {
 			go one(i)
@@ -447,7 +449,7 @@ func TestDialAsyncUDP(t *testing.T) {
 }
 
 func TestDialAsyncUnix(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return
 	}
 	network := "unix"
@@ -512,7 +514,7 @@ func testDialAsync(t *testing.T, network, addr string) {
 }
 
 func TestUnix(t *testing.T) {
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == osWindows {
 		return
 	}
 
