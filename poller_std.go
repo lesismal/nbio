@@ -86,6 +86,15 @@ func (p *poller) addConn(c *Conn) error {
 	return nil
 }
 
+func (p *poller) addDialer(c *Conn) error {
+	c.p = p
+	p.g.mux.Lock()
+	p.g.connsStd[c] = struct{}{}
+	p.g.mux.Unlock()
+	go p.readConn(c)
+	return nil
+}
+
 func (p *poller) deleteConn(c *Conn) {
 	p.g.mux.Lock()
 	delete(p.g.connsStd, c)

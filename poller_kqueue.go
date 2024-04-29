@@ -61,11 +61,14 @@ type poller struct {
 	eventList []syscall.Kevent_t
 }
 
-func (p *poller) addConn(c *Conn) {
+func (p *poller) addConn(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]", fd, len(p.g.connsUnix)))
-		return
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix))
+		c.closeWithError(err)
+		return err
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
@@ -75,6 +78,24 @@ func (p *poller) addConn(c *Conn) {
 	}
 	p.g.connsUnix[fd] = c
 	p.addRead(fd)
+	return nil
+}
+
+func (p *poller) addDialer(c *Conn) error {
+	fd := c.fd
+	if fd >= len(p.g.connsUnix) {
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix),
+		)
+		c.closeWithError(err)
+		return err
+	}
+	c.p = p
+	p.g.connsUnix[fd] = c
+	c.isWAdded = true
+	p.addReadWrite(fd)
+	return nil
 }
 
 func (p *poller) getConn(fd int) *Conn {
@@ -125,6 +146,14 @@ func (p *poller) modWrite(fd int) {
 	p.trigger()
 }
 
+func (p *poller) addReadWrite(fd int) {
+	p.mux.Lock()
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	p.mux.Unlock()
+	p.trigger()
+}
+
 // func (p *poller) deleteEvent(fd int) {
 // 	p.mux.Lock()
 // 	p.eventList = append(p.eventList,
@@ -142,9 +171,6 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter == syscall.EVFILT_READ {
-			if c.onConnected != nil {
-				c.onConnected(c, nil)
-			}
 			if p.g.onRead == nil {
 				for {
 					buffer := p.g.borrow(c)
@@ -174,12 +200,24 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			}
 
 			if ev.Flags&syscall.EV_EOF != 0 {
-				c.flush()
+				if c.onConnected == nil {
+					c.flush()
+				} else {
+					c.onConnected(c, nil)
+					c.onConnected = nil
+					c.resetRead()
+				}
 			}
 		}
 
 		if ev.Filter == syscall.EVFILT_WRITE {
-			c.flush()
+			if c.onConnected == nil {
+				c.flush()
+			} else {
+				c.resetRead()
+				c.onConnected(c, nil)
+				c.onConnected = nil
+			}
 		}
 	}
 }

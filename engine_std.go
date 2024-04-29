@@ -11,6 +11,7 @@ import (
 	"net"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
@@ -22,7 +23,7 @@ func (g *Engine) Start() error {
 	// Create listener pollers.
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
 	switch g.Network {
-	case "tcp", "tcp4", "tcp6":
+	case NETWORK_TCP, NETWORK_TCP4, NETWORK_TCP6:
 		for i := range g.Addrs {
 			ln, err := newPoller(g, true, i)
 			if err != nil {
@@ -34,7 +35,7 @@ func (g *Engine) Start() error {
 			g.Addrs[i] = ln.listener.Addr().String()
 			g.listeners = append(g.listeners, ln)
 		}
-	case "udp", "udp4", "udp6":
+	case NETWORK_UDP, NETWORK_UDP4, NETWORK_UDP6:
 		for i, addrStr := range g.Addrs {
 			addr, err := net.ResolveUDPAddr(g.Network, addrStr)
 			if err != nil {
@@ -164,4 +165,40 @@ func NewEngine(conf Config) *Engine {
 	})
 
 	return g
+}
+
+// DialAsync connects asynchrony to the address on the named network.
+func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, error)) error {
+	return engine.DialAsyncTimeout(network, addr, 0, onConnected)
+}
+
+// DialAsync connects asynchrony to the address on the named network with timeout.
+func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
+	go func() {
+		var err error
+		var conn net.Conn
+		if timeout > 0 {
+			conn, err = net.DialTimeout(network, addr, timeout)
+		} else {
+			conn, err = net.Dial(network, addr)
+		}
+		if err != nil {
+			onConnected(nil, err)
+			return
+		}
+		nbc, err := NBConn(conn)
+		if err != nil {
+			onConnected(nil, err)
+			return
+		}
+		engine.wgConn.Add(1)
+		nbc, err = engine.addDialer(nbc)
+		if err == nil {
+			nbc.SetWriteDeadline(time.Time{})
+		} else {
+			engine.wgConn.Done()
+		}
+		onConnected(nbc, err)
+	}()
+	return nil
 }

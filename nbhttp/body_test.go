@@ -9,6 +9,23 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
+func TestBodyReaderPool(t *testing.T) {
+	br := bodyReaderPool.Get().(*BodyReader)
+	br.buffers = append(br.buffers, make([]byte, 10))
+	*br = emptyBodyReader
+	bodyReaderPool.Put(br)
+
+	for i := 0; i < 1000; i++ {
+		br2 := bodyReaderPool.Get().(*BodyReader)
+		if br2.buffers != nil {
+			t.Fatal("len>0")
+		}
+		br2.buffers = append(br.buffers, make([]byte, 10))
+		*br2 = emptyBodyReader
+		bodyReaderPool.Put(br)
+	}
+}
+
 func TestBodyReader(t *testing.T) {
 	engine := NewEngine(Config{
 		BodyAllocator: mempool.NewAligned(),

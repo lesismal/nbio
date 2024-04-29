@@ -137,7 +137,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		}
 	}
 
-	if d.EnableCompression {
+	if options.enableCompression {
 		req.Header[secWebsocketExtHeaderField] = []string{"permessage-deflate; server_no_context_takeover; client_no_context_takeover"}
 	}
 
@@ -251,7 +251,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		wsConn = NewClientConn(options, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled, false)
 		wsConn.Engine = parser.Engine
 		wsConn.Execute = parser.Execute
-		parser.ParserCloser = wsConn
+		nbc.SetSession(wsConn)
 
 		if wsConn.openHandler != nil {
 			wsConn.openHandler(wsConn)

@@ -18,5 +18,7 @@ var (
 	ErrOverflow = errors.New("write overflow")
 	errOverflow = ErrOverflow
 
+	ErrDialTimeout = errors.New("dial timeout")
+
 	ErrUnsupported = errors.New("unsupported operation")
 )

@@ -32,9 +32,10 @@ var (
 func (c *Conn) newToWriteBuf(buf []byte) {
 	c.left += len(buf)
 
+	allocator := c.p.g.BodyAllocator
 	appendBuffer := func() {
 		t := poolToWrite.New().(*toWrite)
-		b := c.p.g.BodyAllocator.Malloc(len(buf))
+		b := allocator.Malloc(len(buf))
 		copy(b, buf)
 		t.buf = b
 		c.writeList = append(c.writeList, t)
@@ -55,12 +56,12 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 			appendBuffer()
 		} else {
 			if cap(tail.buf) < tailLen+l {
-				b := c.p.g.BodyAllocator.Malloc(tailLen + l)[:tailLen]
+				b := allocator.Malloc(tailLen + l)[:tailLen]
 				copy(b, tail.buf)
-				c.p.g.BodyAllocator.Free(tail.buf)
+				allocator.Free(tail.buf)
 				tail.buf = b
 			}
-			tail.buf = append(tail.buf, buf...)
+			tail.buf = allocator.Append(tail.buf, buf...)
 		}
 	}
 }

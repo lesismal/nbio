@@ -32,6 +32,18 @@ const (
 	DefaultUDPReadTimeout = 120 * time.Second
 )
 
+const (
+	NETWORK_TCP        = "tcp"
+	NETWORK_TCP4       = "tcp4"
+	NETWORK_TCP6       = "tcp6"
+	NETWORK_UDP        = "udp"
+	NETWORK_UDP4       = "udp4"
+	NETWORK_UDP6       = "udp6"
+	NETWORK_UNIX       = "unix"
+	NETWORK_UNIXGRAM   = "unixgram"
+	NETWORK_UNIXPACKET = "unixpacket"
+)
+
 var (
 	// MaxOpenFiles .
 	MaxOpenFiles = 1024 * 1024 * 2
@@ -249,7 +261,19 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	}
 
 	p := g.pollers[c.Hash()%len(g.pollers)]
-	p.addConn(c)
+	err = p.addConn(c)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (g *Engine) addDialer(c *Conn) (*Conn, error) {
+	p := g.pollers[c.Hash()%len(g.pollers)]
+	err := p.addDialer(c)
+	if err != nil {
+		return nil, err
+	}
 	return c, nil
 }
 

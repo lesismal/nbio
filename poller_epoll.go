@@ -68,16 +68,15 @@ type poller struct {
 }
 
 // add the connection to poller and handle its io events.
-func (p *poller) addConn(c *Conn) {
+func (p *poller) addConn(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
-		c.closeWithError(
-			fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
-				fd,
-				len(p.g.connsUnix),
-			),
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix),
 		)
-		return
+		c.closeWithError(err)
+		return err
 	}
 	c.p = p
 	if c.typ != ConnTypeUDPServer {
@@ -92,6 +91,30 @@ func (p *poller) addConn(c *Conn) {
 		c.closeWithError(err)
 		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
+	return err
+}
+
+// add the connection to poller and handle its io events.
+func (p *poller) addDialer(c *Conn) error {
+	fd := c.fd
+	if fd >= len(p.g.connsUnix) {
+		err := fmt.Errorf("too many open files, fd[%d] >= MaxOpenFiles[%d]",
+			fd,
+			len(p.g.connsUnix),
+		)
+		c.closeWithError(err)
+		return err
+	}
+	c.p = p
+	p.g.connsUnix[fd] = c
+	c.isWAdded = true
+	err := p.addReadWrite(fd)
+	if err != nil {
+		p.g.connsUnix[fd] = nil
+		c.closeWithError(err)
+		logging.Error("[%v] add read event failed: %v", c.fd, err)
+	}
+	return err
 }
 
 func (p *poller) getConn(fd int) *Conn {
@@ -219,13 +242,16 @@ func (p *poller) readWriteLoop() {
 				c := p.getConn(fd)
 				if c != nil {
 					if ev.Events&epollEventsWrite != 0 {
-						c.flush()
+						if c.onConnected == nil {
+							c.flush()
+						} else {
+							c.onConnected(c, nil)
+							c.onConnected = nil
+							c.resetRead()
+						}
 					}
 
 					if ev.Events&epollEventsRead != 0 {
-						if c.onConnected != nil {
-							c.onConnected(c, nil)
-						}
 						if g.onRead == nil {
 							if asyncReadEnabled {
 								c.AsyncRead()
@@ -328,12 +354,18 @@ func (p *poller) setRead(op int, fd int) error {
 }
 
 func (p *poller) modWrite(fd int) error {
+	return p.setReadWrite(syscall.EPOLL_CTL_MOD, fd)
+}
+
+func (p *poller) addReadWrite(fd int) error {
+	return p.setReadWrite(syscall.EPOLL_CTL_ADD, fd)
+}
+
+func (p *poller) setReadWrite(op int, fd int) error {
 	switch p.g.EpollMod {
 	case EPOLLET:
 		return syscall.EpollCtl(
-			p.epfd,
-			syscall.EPOLL_CTL_MOD,
-			fd,
+			p.epfd, op, fd,
 			&syscall.EpollEvent{
 				Fd: int32(fd),
 				Events: syscall.EPOLLERR |
@@ -347,9 +379,8 @@ func (p *poller) modWrite(fd int) error {
 			},
 		)
 	default:
-		return syscall.EpollCtl(p.epfd,
-			syscall.EPOLL_CTL_MOD,
-			fd,
+		return syscall.EpollCtl(
+			p.epfd, op, fd,
 			&syscall.EpollEvent{
 				Fd: int32(fd),
 				Events: syscall.EPOLLERR |
