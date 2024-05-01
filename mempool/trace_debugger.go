@@ -7,6 +7,13 @@ import (
 	"unsafe"
 )
 
+var (
+	stackMux    = sync.Mutex{}
+	stackBuf    = make([]byte, 1024*64)
+	stackMap    = map[string]uintptr{}
+	nilStackPtr uintptr
+)
+
 type TraceDebugger struct {
 	mux       sync.Mutex
 	pAlloced  map[uintptr]uintptr
@@ -22,9 +29,10 @@ func NewTraceDebuger(allocator Allocator) *TraceDebugger {
 
 // Malloc .
 func (td *TraceDebugger) Malloc(size int) []byte {
-	buf := td.allocator.Malloc(size)
 	td.mux.Lock()
 	defer td.mux.Unlock()
+
+	buf := td.allocator.Malloc(size)
 	ptr := bytesPointer(buf)
 	if stackPtr, ok := td.pAlloced[ptr]; ok {
 		td.printStack("malloc got a buf which has been malloced by otherwhere", stackPtr)
@@ -35,6 +43,9 @@ func (td *TraceDebugger) Malloc(size int) []byte {
 
 // Realloc .
 func (td *TraceDebugger) Realloc(buf []byte, size int) []byte {
+	td.mux.Lock()
+	defer td.mux.Unlock()
+
 	pold := bytesPointer(buf)
 	if _, ok := td.pAlloced[pold]; !ok {
 		td.printStack("realloc to a buf which has not been malloced", nilStackPtr)
@@ -53,6 +64,9 @@ func (td *TraceDebugger) Realloc(buf []byte, size int) []byte {
 
 // Append .
 func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
+	td.mux.Lock()
+	defer td.mux.Unlock()
+
 	pold := bytesPointer(buf)
 	if _, ok := td.pAlloced[pold]; !ok {
 		td.printStack("Append to a buf which has not been malloced", nilStackPtr)
@@ -71,6 +85,9 @@ func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
 
 // AppendString .
 func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
+	td.mux.Lock()
+	defer td.mux.Unlock()
+
 	pold := bytesPointer(buf)
 	if _, ok := td.pAlloced[pold]; !ok {
 		td.printStack("AppendString to a buf which has not been malloced", nilStackPtr)
@@ -89,6 +106,9 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (td *TraceDebugger) Free(buf []byte) {
+	td.mux.Lock()
+	defer td.mux.Unlock()
+
 	if cap(buf) == 0 {
 		td.printStack("Free invalid buf with cap 0", nilStackPtr)
 		return
@@ -108,13 +128,6 @@ func (td *TraceDebugger) setBufferPointer(ptr uintptr) {
 func (td *TraceDebugger) deleteBufferPointer(ptr uintptr) {
 	delete(td.pAlloced, ptr)
 }
-
-var (
-	stackMux    = sync.Mutex{}
-	stackBuf    = make([]byte, 1024*64)
-	stackMap    = map[string]uintptr{}
-	nilStackPtr uintptr
-)
 
 func (td *TraceDebugger) getStackPtr() uintptr {
 	stackMux.Lock()
