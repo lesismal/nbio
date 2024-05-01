@@ -2,21 +2,21 @@ package mempool
 
 import (
 	"fmt"
-	"runtime/debug"
+	"runtime"
 	"sync"
 	"unsafe"
 )
 
 type TraceDebugger struct {
 	mux       sync.Mutex
-	pAlloced  map[uintptr]struct{}
+	pAlloced  map[uintptr]string
 	allocator Allocator
 }
 
 func NewTraceDebuger(allocator Allocator) *TraceDebugger {
 	return &TraceDebugger{
 		allocator: allocator,
-		pAlloced:  map[uintptr]struct{}{},
+		pAlloced:  map[uintptr]string{},
 	}
 }
 
@@ -82,11 +82,11 @@ func (td *TraceDebugger) setBufferPointer(buf []byte) {
 	td.mux.Lock()
 	defer td.mux.Unlock()
 	p := td.pointer(buf)
-	if _, ok := td.pAlloced[p]; ok {
-		td.printStack("re-alloc the same buf before free:")
+	if s, ok := td.pAlloced[p]; ok {
+		td.printStack("re-alloc the same buf before free:", s)
 		return
 	}
-	td.pAlloced[p] = struct{}{}
+	td.pAlloced[p] = td.getStack()
 }
 
 func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
@@ -98,8 +98,8 @@ func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
 	td.mux.Lock()
 	defer td.mux.Unlock()
 	p := td.pointer(buf)
-	if _, ok := td.pAlloced[p]; !ok {
-		td.printStack("free un-allocated buf:")
+	if s, ok := td.pAlloced[p]; !ok {
+		td.printStack("free un-allocated buf:", s)
 		return
 	}
 	delete(td.pAlloced, p)
@@ -110,9 +110,33 @@ func (td *TraceDebugger) pointer(buf []byte) uintptr {
 	return p
 }
 
-func (td *TraceDebugger) printStack(info string) {
+func (td *TraceDebugger) getStack() string {
+	var (
+		i      int
+		errstr string
+	)
+	for {
+		pc, file, line, ok := runtime.Caller(i)
+		if !ok || i > 20 {
+			break
+		}
+		errstr += fmt.Sprintf("\tstack: %d %v [file: %s] [func: %s] [line: %d]\n", i-1, ok, file, runtime.FuncForPC(pc).Name(), line)
+		i++
+	}
+	return errstr
+}
+
+func (td *TraceDebugger) printStack(info, preStack string) {
 	fmt.Println("-----------------------------")
-	fmt.Println("[mempool trace] " + info + "\n")
-	debug.PrintStack()
-	fmt.Println("-----------------------------")
+	currStack := td.getStack()
+	fmt.Printf(`-----------------------------
+	[mempool trace] %v
+	previous stack: 
+	%v
+	
+	-----------------------------
+
+	current stack :
+	%v
+	-----------------------------`, info, preStack, currStack)
 }
