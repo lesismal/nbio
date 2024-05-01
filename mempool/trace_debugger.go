@@ -2,6 +2,7 @@ package mempool
 
 import (
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -66,7 +67,7 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 // Free .
 func (td *TraceDebugger) Free(buf []byte) {
 	if cap(buf) == 0 {
-		// td.printStack("invalid buf with cap 0")
+		// td.printStackAndExit("invalid buf with cap 0")
 		return
 	}
 	td.deleteBufferPointer(buf)
@@ -75,7 +76,7 @@ func (td *TraceDebugger) Free(buf []byte) {
 
 func (td *TraceDebugger) setBufferPointer(buf []byte) {
 	if cap(buf) == 0 {
-		// td.printStack("invalid buf with cap 0")
+		// td.printStackAndExit("invalid buf with cap 0")
 		return
 	}
 
@@ -83,7 +84,7 @@ func (td *TraceDebugger) setBufferPointer(buf []byte) {
 	defer td.mux.Unlock()
 	p := td.pointer(buf)
 	if s, ok := td.pAlloced[p]; ok {
-		td.printStack("re-alloc the same buf before free:", s)
+		td.printStackAndExit("re-alloc the same buf before free:", s)
 		return
 	}
 	td.pAlloced[p] = td.getStack()
@@ -91,7 +92,7 @@ func (td *TraceDebugger) setBufferPointer(buf []byte) {
 
 func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
 	if cap(buf) == 0 {
-		// td.printStack("invalid buf with cap 0")
+		// td.printStackAndExit("invalid buf with cap 0")
 		return
 	}
 
@@ -99,7 +100,7 @@ func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
 	defer td.mux.Unlock()
 	p := td.pointer(buf)
 	if s, ok := td.pAlloced[p]; !ok {
-		td.printStack("free un-allocated buf:", s)
+		td.printStackAndExit("free un-allocated buf:", s)
 		return
 	}
 	delete(td.pAlloced, p)
@@ -126,7 +127,7 @@ func (td *TraceDebugger) getStack() string {
 	return errstr
 }
 
-func (td *TraceDebugger) printStack(info, preStack string) {
+func (td *TraceDebugger) printStackAndExit(info, preStack string) {
 	fmt.Println("-----------------------------")
 	currStack := td.getStack()
 	fmt.Printf(`-----------------------------
@@ -139,4 +140,5 @@ func (td *TraceDebugger) printStack(info, preStack string) {
 	current stack :
 	%v
 	-----------------------------`, info, preStack, currStack)
+	os.Exit(-1)
 }
