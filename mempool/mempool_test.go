@@ -101,3 +101,11 @@ func TestTraceDebugerPool(t *testing.T) {
 	}
 	pool.Free(buf)
 }
+
+func TestStackFuncs(t *testing.T) {
+	stack1, stackPtr := getStackAndPtr()
+	stack2 := ptr2StackString(stackPtr)
+	if stack1 != stack2 {
+		t.Fatalf("stack not equal:\n\n%v\n\n%v", stack1, stack2)
+	}
+}

@@ -1,6 +1,7 @@
 package mempool
 
 import (
+	"bytes"
 	"fmt"
 	"runtime"
 	"sync"
@@ -9,21 +10,21 @@ import (
 
 var (
 	stackMux    = sync.Mutex{}
-	stackBuf    = make([]byte, 1024*8)
-	stackMap    = map[string]uintptr{}
-	nilStackPtr uintptr
+	stackBuf    = [1024 * 64]byte{}
+	stackMap    = map[string][2]uintptr{}
+	nilStackPtr = [2]uintptr{0, 0}
 )
 
 type TraceDebugger struct {
 	mux       sync.Mutex
-	pAlloced  map[uintptr]uintptr
+	pAlloced  map[uintptr][2]uintptr
 	allocator Allocator
 }
 
 func NewTraceDebuger(allocator Allocator) *TraceDebugger {
 	return &TraceDebugger{
 		allocator: allocator,
-		pAlloced:  map[uintptr]uintptr{},
+		pAlloced:  map[uintptr][2]uintptr{},
 	}
 }
 
@@ -35,7 +36,7 @@ func (td *TraceDebugger) Malloc(size int) []byte {
 	buf := td.allocator.Malloc(size)
 	ptr := bytesPointer(buf)
 	if stackPtr, ok := td.pAlloced[ptr]; ok {
-		td.printStack("malloc got a buf which has been malloced by otherwhere", stackPtr)
+		printStack("malloc got a buf which has been malloced by otherwhere", stackPtr)
 	}
 	td.setBufferPointer(ptr)
 	return buf
@@ -48,13 +49,13 @@ func (td *TraceDebugger) Realloc(buf []byte, size int) []byte {
 
 	pold := bytesPointer(buf)
 	if _, ok := td.pAlloced[pold]; !ok {
-		td.printStack("realloc to a buf which has not been malloced", nilStackPtr)
+		printStack("realloc to a buf which has not been malloced", nilStackPtr)
 	}
 	newBuf := td.allocator.Realloc(buf, size)
 	pnew := bytesPointer(newBuf)
 	if pnew != pold {
 		if preStack, ok := td.pAlloced[pnew]; ok {
-			td.printStack("realloc got another new buf which has been malloced by otherwhere", preStack)
+			printStack("realloc got another new buf which has been malloced by otherwhere", preStack)
 		}
 		td.deleteBufferPointer(pold)
 		td.setBufferPointer(pnew)
@@ -69,13 +70,13 @@ func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
 
 	pold := bytesPointer(buf)
 	if _, ok := td.pAlloced[pold]; !ok {
-		td.printStack("Append to a buf which has not been malloced", nilStackPtr)
+		printStack("Append to a buf which has not been malloced", nilStackPtr)
 	}
 	newBuf := td.allocator.Append(buf, more...)
 	pnew := bytesPointer(newBuf)
 	if pnew != pold {
 		if preStack, ok := td.pAlloced[pnew]; ok {
-			td.printStack("Append got another new buf which has been malloced by otherwhere", preStack)
+			printStack("Append got another new buf which has been malloced by otherwhere", preStack)
 		}
 		td.deleteBufferPointer(pold)
 		td.setBufferPointer(pnew)
@@ -90,13 +91,13 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 
 	pold := bytesPointer(buf)
 	if _, ok := td.pAlloced[pold]; !ok {
-		td.printStack("AppendString to a buf which has not been malloced", nilStackPtr)
+		printStack("AppendString to a buf which has not been malloced", nilStackPtr)
 	}
 	newBuf := td.allocator.AppendString(buf, more)
 	pnew := bytesPointer(newBuf)
 	if pnew != pold {
 		if preStack, ok := td.pAlloced[pnew]; ok {
-			td.printStack("AppendString got another new buf which has been malloced by otherwhere", preStack)
+			printStack("AppendString got another new buf which has been malloced by otherwhere", preStack)
 		}
 		td.deleteBufferPointer(pold)
 		td.setBufferPointer(pnew)
@@ -110,50 +111,88 @@ func (td *TraceDebugger) Free(buf []byte) {
 	defer td.mux.Unlock()
 
 	if cap(buf) == 0 {
-		td.printStack("Free invalid buf with cap 0", nilStackPtr)
+		printStack("Free invalid buf with cap 0", nilStackPtr)
 		return
 	}
 	ptr := bytesPointer(buf)
-	if _, ok := td.pAlloced[ptr]; !ok {
-		td.printStack("Free a buf which is not malloced by allocator", nilStackPtr)
+	_, ok := td.pAlloced[ptr]
+	if !ok {
+		printStack("Free a buf which is not malloced by allocator", nilStackPtr)
 	}
 	td.deleteBufferPointer(ptr)
 	td.allocator.Free(buf)
 }
 
 func (td *TraceDebugger) setBufferPointer(ptr uintptr) {
-	td.pAlloced[ptr] = td.getStackPtr()
+	_, stackPtr := getStackAndPtr()
+	td.pAlloced[ptr] = stackPtr
 }
 
 func (td *TraceDebugger) deleteBufferPointer(ptr uintptr) {
 	delete(td.pAlloced, ptr)
 }
 
-func (td *TraceDebugger) getStackPtr() uintptr {
+// func getStack() string {
+// 	stackMux.Lock()
+// 	defer stackMux.Unlock()
+// 	buf := stackBuf[:runtime.Stack(stackBuf, false)]
+// 	return string(buf)
+// }
+
+func getStackAndPtr() (string, [2]uintptr) {
 	stackMux.Lock()
 	defer stackMux.Unlock()
-	buf := stackBuf[:runtime.Stack(stackBuf, false)]
-	key := *(*string)(unsafe.Pointer(&buf))
-	if ptr, ok := stackMap[key]; ok {
-		return ptr
+
+	nwrite := 0
+	writer := bytes.NewBuffer(stackBuf[:0])
+	for i := 2; i < 20; i++ {
+		pc, file, line, ok := runtime.Caller(i)
+
+		if !ok || i > 50 {
+			break
+		}
+		n, err := fmt.Fprintf(writer, "\t%d [file: %s] [func: %s] [line: %d]\n", i-1, file, runtime.FuncForPC(pc).Name(), line)
+		if n > 0 {
+			nwrite += n
+		}
+		if err != nil {
+			break
+		}
 	}
-	key = string(buf)
-	ptr := stringPointer(key)
-	stackMap[key] = ptr
-	return ptr
+
+	buf := stackBuf[:nwrite]
+	stack := *(*string)(unsafe.Pointer(&buf))
+	if ptr, ok := stackMap[stack]; ok {
+		return ptr2StackString(ptr), ptr
+	}
+	stack = string(buf)
+	ptr := *(*[2]uintptr)(unsafe.Pointer(&stack))
+	ptrCopy := [2]uintptr{ptr[0], ptr[1]}
+	stackMap[stack] = ptrCopy
+	return stack, ptrCopy
 }
 
-func (td *TraceDebugger) ptr2StackString(ptr uintptr) string {
-	if ptr == nilStackPtr {
+func ptr2StackString(ptr [2]uintptr) string {
+	if ptr[0] == 0 && ptr[1] == 0 {
 		return "nil"
 	}
 	return *((*string)(unsafe.Pointer(&ptr)))
 }
 
-func (td *TraceDebugger) printStack(info string, preStackPtr uintptr) {
+// func bytesToStr(b []byte) string {
+// 	return *(*string)(unsafe.Pointer(&b))
+// }
+
+// func strToBytes(s string) []byte {
+// 	x := (*[2]uintptr)(unsafe.Pointer(&s))
+// 	h := [3]uintptr{x[0], x[1], x[1]}
+// 	return *(*[]byte)(unsafe.Pointer(&h))
+// }
+
+func printStack(info string, preStackPtr [2]uintptr) {
 	var (
-		currStack = td.getStackPtr()
-		preStack  = td.ptr2StackString(preStackPtr)
+		currStack, _ = getStackAndPtr()
+		preStack     = ptr2StackString(preStackPtr)
 	)
 	fmt.Printf(`
 -------------------------------------------
@@ -166,13 +205,16 @@ previous stack:
 
 current stack :
 %v
--------------------------------------------\n\n`, info, preStack, currStack)
+-------------------------------------------
+
+`, info, preStack, currStack)
 }
 
 func bytesPointer(buf []byte) uintptr {
 	return (uintptr)(unsafe.Pointer(&(buf[:1][0])))
 }
 
-func stringPointer(s string) uintptr {
-	return (uintptr)(unsafe.Pointer(&s))
-}
+// func stringPointer(s *string) uintptr {
+// 	ptr := (*uintptr)(unsafe.Pointer(s))
+// 	return (uintptr)(unsafe.Pointer(&ptr))
+// }
