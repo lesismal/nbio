@@ -157,9 +157,9 @@ current stack :
 }
 
 func bytesPointer(buf []byte) uintptr {
-	return *((*uintptr)(unsafe.Pointer(&(buf[:1][0]))))
+	return (uintptr)(unsafe.Pointer(&(buf[:1][0])))
 }
 
 func stringPointer(s string) uintptr {
-	return *((*uintptr)(unsafe.Pointer(&s)))
+	return (uintptr)(unsafe.Pointer(&s))
 }

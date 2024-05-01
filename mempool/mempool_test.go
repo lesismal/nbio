@@ -82,7 +82,7 @@ func TestTraceDebugerPool(t *testing.T) {
 		if len(buf) != i {
 			t.Fatalf("invalid len: %v != %v", len(buf), i)
 		}
-		pool.Free(buf[1:])
+		pool.Free(buf)
 	}
 	for i := 1024 * 1024; i < 1024*1024*1024; i += 1024 * 1024 {
 		buf := pool.Malloc(i)
