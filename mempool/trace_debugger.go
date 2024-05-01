@@ -9,7 +9,7 @@ import (
 
 var (
 	stackMux    = sync.Mutex{}
-	stackBuf    = make([]byte, 1024*64)
+	stackBuf    = make([]byte, 1024*8)
 	stackMap    = map[string]uintptr{}
 	nilStackPtr uintptr
 )
