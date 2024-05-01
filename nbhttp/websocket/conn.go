@@ -352,6 +352,15 @@ func (c *Conn) Parse(data []byte) error {
 	var protocolMessage []byte
 	var opcode MessageType
 	var ok, fin, compress bool
+
+	releaseBuf := func() {
+		if len(frame) > 0 {
+			allocator.Free(frame)
+		}
+		if len(message) > 0 {
+			allocator.Free(message)
+		}
+	}
 	for !c.closed {
 		func() {
 			c.mux.Lock()
@@ -408,6 +417,7 @@ func (c *Conn) Parse(data []byte) error {
 		}()
 
 		if err != nil {
+			releaseBuf()
 			if errors.Is(err, ErrMessageTooLarge) || errors.Is(err, ErrControlMessageTooBig) {
 				c.WriteClose(1009, err.Error())
 			}
@@ -435,6 +445,7 @@ func (c *Conn) Parse(data []byte) error {
 							message = b
 							rc.Close()
 							if err != nil {
+								releaseBuf()
 								return err
 							}
 						}
@@ -450,6 +461,7 @@ func (c *Conn) Parse(data []byte) error {
 			case PingMessage, PongMessage, CloseMessage:
 				c.handleProtocolMessage(opcode, protocolMessage)
 			default:
+				releaseBuf()
 				return ErrInvalidFragmentMessage
 			}
 		} else {
@@ -462,6 +474,8 @@ func (c *Conn) Parse(data []byte) error {
 	}
 
 Exit:
+	releaseBuf()
+
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	// The data bytes were not all consumed, need to recache the current bytes left:
