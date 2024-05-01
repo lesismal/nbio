@@ -100,6 +100,7 @@ func TestTraceDebugerPool(t *testing.T) {
 		}
 	}
 	pool.Free(buf)
+	// pool.Free(buf)
 }
 
 func TestStackFuncs(t *testing.T) {
@@ -107,5 +108,13 @@ func TestStackFuncs(t *testing.T) {
 	stack2 := ptr2StackString(stackPtr)
 	if stack1 != stack2 {
 		t.Fatalf("stack not equal:\n\n%v\n\n%v", stack1, stack2)
+	}
+
+	buf := []byte{1}
+	p1 := bytesPointer(buf)
+	buf[0] = 2
+	p2 := bytesPointer(buf)
+	if p1 != p2 {
+		t.Fatalf("buf pointer not equal: %v, %v", p1, p2)
 	}
 }

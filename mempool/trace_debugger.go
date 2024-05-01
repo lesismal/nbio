@@ -12,6 +12,7 @@ import (
 var (
 	stackMux    = sync.Mutex{}
 	stackBuf    = [1024 * 64]byte{}
+	stackWriter = bytes.NewBuffer(stackBuf[:0])
 	stackMap    = map[string][2]uintptr{}
 	nilStackPtr = [2]uintptr{0, 0}
 )
@@ -145,14 +146,14 @@ func getStackAndPtr() (string, [2]uintptr) {
 	defer stackMux.Unlock()
 
 	nwrite := 0
-	writer := bytes.NewBuffer(stackBuf[:0])
+	stackWriter.Reset()
 	for i := 2; i < 20; i++ {
 		pc, file, line, ok := runtime.Caller(i)
 
 		if !ok || i > 50 {
 			break
 		}
-		n, err := fmt.Fprintf(writer, "\t%d [file: %s] [func: %s] [line: %d]\n", i-1, file, runtime.FuncForPC(pc).Name(), line)
+		n, err := fmt.Fprintf(stackWriter, "\t%d [file: %s] [func: %s] [line: %d]\n", i-1, file, runtime.FuncForPC(pc).Name(), line)
 		if n > 0 {
 			nwrite += n
 		}
