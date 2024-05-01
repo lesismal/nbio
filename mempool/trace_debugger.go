@@ -196,7 +196,7 @@ func printStack(info string, preStackPtr [2]uintptr) {
 	)
 	fmt.Printf(`
 -------------------------------------------
-[mempool trace] %v>>>
+[mempool trace] %v ->
 
 previous stack: 
 %v
