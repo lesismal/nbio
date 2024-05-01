@@ -3,6 +3,7 @@ package mempool
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -208,6 +209,7 @@ current stack :
 -------------------------------------------
 
 `, info, preStack, currStack)
+	os.Exit(-1)
 }
 
 func bytesPointer(buf []byte) uintptr {
