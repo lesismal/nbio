@@ -65,17 +65,17 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 
 // Free .
 func (td *TraceDebugger) Free(buf []byte) {
-	// if cap(buf) == 0 {
-	// 	td.printStack("invalid buf with cap 0")
-	// 	return
-	// }
+	if cap(buf) == 0 {
+		// td.printStack("invalid buf with cap 0")
+		return
+	}
 	td.deleteBufferPointer(buf)
 	td.allocator.Free(buf)
 }
 
 func (td *TraceDebugger) setBufferPointer(buf []byte) {
 	if cap(buf) == 0 {
-		td.printStack("invalid buf with cap 0")
+		// td.printStack("invalid buf with cap 0")
 		return
 	}
 
@@ -91,7 +91,7 @@ func (td *TraceDebugger) setBufferPointer(buf []byte) {
 
 func (td *TraceDebugger) deleteBufferPointer(buf []byte) {
 	if cap(buf) == 0 {
-		td.printStack("invalid buf with cap 0")
+		// td.printStack("invalid buf with cap 0")
 		return
 	}
 
