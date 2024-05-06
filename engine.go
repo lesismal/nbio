@@ -55,8 +55,6 @@ type Config struct {
 	Name string
 
 	// Network is the listening protocol, used with Addrs together.
-	// tcp* supported only by now, there's no plan for other protocol such as udp,
-	// because it's too easy to write udp server/client.
 	Network string
 
 	// Addrs is the listening addr list for a nbio server.
@@ -102,7 +100,7 @@ type Config struct {
 	// AsyncReadInPoller represents how the reading events and reading are handled
 	// by epoll goroutine:
 	// true : epoll goroutine handles the reading events only, another goroutine
-	//        pool will handles the reading.
+	//        pool will handle the reading.
 	// false: epoll goroutine handles both the reading events and the reading.
 	AsyncReadInPoller bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
