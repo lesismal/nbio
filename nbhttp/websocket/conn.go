@@ -330,6 +330,12 @@ func (c *Conn) nextFrame(data []byte) ([]byte, MessageType, []byte, bool, bool, 
 // Read .
 func (c *Conn) Parse(data []byte) error {
 	c.mux.Lock()
+
+	if c.closed {
+		c.mux.Unlock()
+		return net.ErrClosed
+	}
+
 	readLimit := c.Engine.ReadLimit
 	if readLimit > 0 && (len(c.bytesCached)+len(data) > readLimit) {
 		c.mux.Unlock()
