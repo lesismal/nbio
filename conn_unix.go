@@ -257,13 +257,12 @@ func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	// new connection maybe hold the same fd.
 	// Use lock to prevent data confusion.
 	c.mux.Lock()
+	defer c.mux.Unlock()
 	if c.closed {
-		c.mux.Unlock()
 		return c, 0, net.ErrClosed
 	}
 
 	dstConn, n, err := c.doRead(b)
-	c.mux.Unlock()
 	// if err == nil {
 	// 	c.p.g.afterRead(c)
 	// }
