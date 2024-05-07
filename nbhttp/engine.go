@@ -119,8 +119,8 @@ type Config struct {
 	// ReadBufferSize represents buffer size for reading, it's set to 64k by default.
 	ReadBufferSize int
 
-	// MaxWriteBufferSize represents max write buffer size for Conn, it's set to 1m by default.
-	// if the connection's Send-Q is full and the data cached by nbio is
+	// MaxWriteBufferSize represents max write buffer size for Conn, 0 by default, represents no limit for writeBuffer
+	// if MaxWriteBufferSize is set greater than to 0, and the connection's Send-Q is full and the data cached by nbio is
 	// more than MaxWriteBufferSize, the connection would be closed by nbio.
 	MaxWriteBufferSize int
 
