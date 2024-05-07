@@ -217,7 +217,6 @@ func (g *Engine) Stop() {
 	}
 
 	g.wgConn.Wait()
-	time.Sleep(time.Second / 5)
 
 	g.onStop()
 
