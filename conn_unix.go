@@ -754,7 +754,7 @@ func (c *Conn) flush() error {
 			for len(buf) > 0 && err == nil {
 				n, err = syscall.Write(c.fd, buf)
 				if n > 0 {
-					if c.p.g.onWrittenSize != nil && n > 0 {
+					if c.p.g.onWrittenSize != nil {
 						c.p.g.onWrittenSize(c, buf[:n], n)
 					}
 					c.left -= n
