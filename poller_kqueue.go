@@ -126,7 +126,11 @@ func (p *poller) trigger() {
 
 func (p *poller) addRead(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
+	var flags uint16 = syscall.EV_ADD
+	if p.g.EpollMod == EPOLLET {
+		flags |= syscall.EV_CLEAR
+	}
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_READ})
 	// p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
@@ -141,15 +145,23 @@ func (p *poller) resetRead(fd int) {
 
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	var flags uint16 = syscall.EV_ADD
+	if p.g.EpollMod == EPOLLET {
+		flags |= syscall.EV_CLEAR
+	}
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
 
 func (p *poller) addReadWrite(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	var flags uint16 = syscall.EV_ADD
+	if p.g.EpollMod == EPOLLET {
+		flags |= syscall.EV_CLEAR
+	}
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_READ})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
