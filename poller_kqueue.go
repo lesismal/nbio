@@ -314,7 +314,7 @@ func (p *poller) readWriteLoop() {
 			switch int(events[i].Ident) {
 			case p.evtfd:
 			default:
-				logging.Debug("NBIO[%v][%v_%v] trigger event, filter: %d, mod: %d", p.g.Name, p.pollType, p.index, events[i].Filter, p.g.EpollMod)
+				logging.Debug("NBIO[%v][%v_%v] trigger event, filter: %v, mod: %v", p.g.Name, p.pollType, p.index, events[i].Filter, p.g.EpollMod)
 				p.readWrite(&events[i])
 			}
 		}
