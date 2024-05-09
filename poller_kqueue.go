@@ -167,12 +167,17 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if ev.Flags&syscall.EV_DELETE > 0 {
 		return
 	}
+
+	if p.g.onRead == nil && p.g.EpollMod == EPOLLET {
+		p.g.MaxConnReadTimesPerEventLoop = 1<<31 - 1
+	}
+
 	fd := int(ev.Ident)
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter == syscall.EVFILT_READ {
 			if p.g.onRead == nil {
-				for {
+				for i := 0; i < p.g.MaxConnReadTimesPerEventLoop; i++ {
 					buffer := p.g.borrow(c)
 					rc, n, err := c.ReadAndGetConn(buffer)
 					if n > 0 {
