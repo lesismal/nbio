@@ -241,6 +241,7 @@ func (p *poller) readWriteLoop() {
 			default: // for socket connections
 				c := p.getConn(fd)
 				if c != nil {
+					logging.Debug("NBIO[%v][%v_%v] trigger event, value: %v, mod: %v", p.g.Name, p.pollType, p.index, ev.Events, p.g.EpollMod)
 					if ev.Events&epollEventsWrite != 0 {
 						if c.onConnected == nil {
 							c.flush()
