@@ -425,8 +425,8 @@ func (c *Conn) Parse(data []byte) error {
 						if c.compress {
 							var b []byte
 							var rc io.ReadCloser
-							if c.Engine.WebsocketDecompressor != nil {
-								rc = c.Engine.WebsocketDecompressor(io.MultiReader(bytes.NewBuffer(message), strings.NewReader(flateReaderTail)))
+							if c.WebsocketDecompressor != nil {
+								rc = c.WebsocketDecompressor(c, io.MultiReader(bytes.NewBuffer(message), strings.NewReader(flateReaderTail)))
 							} else {
 								rc = decompressReader(io.MultiReader(bytes.NewBuffer(message), strings.NewReader(flateReaderTail)))
 							}
@@ -562,8 +562,8 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		w.Reset()
 
 		var cw io.WriteCloser
-		if c.Engine.WebsocketCompressor != nil {
-			cw = c.Engine.WebsocketCompressor(w, c.compressionLevel)
+		if c.WebsocketCompressor != nil {
+			cw = c.WebsocketCompressor(c, w, c.compressionLevel)
 		} else {
 			cw = compressWriter(w, c.compressionLevel)
 		}

@@ -58,6 +58,9 @@ type commonFields struct {
 	MessageLengthLimit         int
 	BlockingModAsyncCloseDelay time.Duration
 
+	WebsocketCompressor   func(c *Conn, w io.WriteCloser, level int) io.WriteCloser
+	WebsocketDecompressor func(c *Conn, r io.Reader) io.ReadCloser
+
 	pingMessageHandler  func(c *Conn, appData string)
 	pongMessageHandler  func(c *Conn, appData string)
 	closeMessageHandler func(c *Conn, code int, text string)

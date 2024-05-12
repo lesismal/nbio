@@ -196,9 +196,11 @@ type Config struct {
 	// ReadBufferPool .
 	ReadBufferPool mempool.Allocator
 
+	// Deprecated.
 	// WebsocketCompressor .
 	WebsocketCompressor func(w io.WriteCloser, level int) io.WriteCloser
 
+	// Deprecated.
 	// WebsocketDecompressor .
 	WebsocketDecompressor func(r io.Reader) io.ReadCloser
 
