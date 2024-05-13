@@ -173,13 +173,13 @@ func (c *Conn) handleMessage(opcode MessageType, body []byte) {
 func (c *Conn) handleProtocolMessage(opcode MessageType, body []byte) {
 	if c.isBlockingMod {
 		c.handleWsMessage(opcode, body)
-		if len(body) > 0 && c.Engine.ReleaseWebsocketPayload {
+		if len(body) > 0 && c.ReleasePayload {
 			c.Engine.BodyAllocator.Free(body)
 		}
 	} else {
 		if !c.Execute(func() {
 			c.handleWsMessage(opcode, body)
-			if len(body) > 0 && c.Engine.ReleaseWebsocketPayload {
+			if len(body) > 0 && c.ReleasePayload {
 				c.Engine.BodyAllocator.Free(body)
 			}
 		}) {
@@ -493,7 +493,7 @@ Exit:
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.Engine.ReleaseWebsocketPayload && len(data) > 0 {
+			if c.ReleasePayload && len(data) > 0 {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			if !c.closed {
@@ -507,7 +507,7 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			if c.Engine.ReleaseWebsocketPayload {
+			if c.ReleasePayload {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, fin, data)
