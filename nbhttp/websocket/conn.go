@@ -80,7 +80,6 @@ type Conn struct {
 	msgType                  MessageType
 	message                  []byte
 	bytesCached              []byte
-	parsing                  uint32
 
 	Engine  *nbhttp.Engine
 	Execute func(f func()) bool

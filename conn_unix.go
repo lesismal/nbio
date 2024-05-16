@@ -18,16 +18,16 @@ import (
 	"time"
 )
 
-var (
-	// used to reset toWrite struct to empty value.
-	emptyToWrite = toWrite{}
+// var (
+// used to reset toWrite struct to empty value.
+// emptyToWrite = toWrite{}
 
-	// poolToWrite = sync.Pool{
-	// 	New: func() interface{} {
-	// 		return &toWrite{}
-	// 	},
-	// }
-)
+//	poolToWrite = sync.Pool{
+//		New: func() interface{} {
+//			return &toWrite{}
+//		},
+//	}
+// )
 
 func (c *Conn) newToWriteBuf(buf []byte) {
 	c.left += len(buf)
