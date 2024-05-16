@@ -22,11 +22,11 @@ var (
 	// used to reset toWrite struct to empty value.
 	emptyToWrite = toWrite{}
 
-	poolToWrite = sync.Pool{
-		New: func() interface{} {
-			return &toWrite{}
-		},
-	}
+	// poolToWrite = sync.Pool{
+	// 	New: func() interface{} {
+	// 		return &toWrite{}
+	// 	},
+	// }
 )
 
 func (c *Conn) newToWriteBuf(buf []byte) {
@@ -34,7 +34,7 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 
 	allocator := c.p.g.BodyAllocator
 	appendBuffer := func() {
-		t := poolToWrite.New().(*toWrite)
+		t := &toWrite{} // poolToWrite.New().(*toWrite)
 		b := allocator.Malloc(len(buf))
 		copy(b, buf)
 		t.buf = b
@@ -67,7 +67,7 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 }
 
 func (c *Conn) newToWriteFile(fd int, offset, remain int64) {
-	t := poolToWrite.New().(*toWrite)
+	t := &toWrite{} // poolToWrite.New().(*toWrite)
 	t.fd = fd
 	t.offset = offset
 	t.remain = remain
@@ -81,8 +81,8 @@ func (c *Conn) releaseToWrite(t *toWrite) {
 	if t.fd > 0 {
 		syscall.Close(t.fd)
 	}
-	*t = emptyToWrite
-	poolToWrite.Put(t)
+	// *t = emptyToWrite
+	// poolToWrite.Put(t)
 }
 
 const maxWriteCacheOrFlushSize = 1024 * 64
@@ -740,85 +740,102 @@ func (c *Conn) flush() error {
 
 	onWrittenSize := c.p.g.onWrittenSize
 
-	iovc := make([][]byte, 4)[0:0]
-	writeBuffers := func() error {
-		var (
-			n    int
-			err  error
-			head *toWrite
-		)
+	// iovc := make([][]byte, 4)[0:0]
+	// writeBuffers := func() error {
+	// 	var (
+	// 		n    int
+	// 		err  error
+	// 		head *toWrite
+	// 	)
 
-		if len(c.writeList) == 1 {
-			head = c.writeList[0]
-			buf := head.buf[head.offset:]
-			for len(buf) > 0 && err == nil {
-				n, err = syscall.Write(c.fd, buf)
-				if n > 0 {
-					if c.p.g.onWrittenSize != nil {
-						c.p.g.onWrittenSize(c, buf[:n], n)
-					}
-					c.left -= n
-					head.offset += int64(n)
-					buf = buf[n:]
-					if len(buf) == 0 {
-						c.releaseToWrite(head)
-						c.writeList = nil
-					}
-				} else {
-					break
-				}
+	// 	if len(c.writeList) == 1 {
+	// 		head = c.writeList[0]
+	// 		buf := head.buf[head.offset:]
+	// 		for len(buf) > 0 && err == nil {
+	// 			n, err = syscall.Write(c.fd, buf)
+	// 			if n > 0 {
+	// 				if c.p.g.onWrittenSize != nil {
+	// 					c.p.g.onWrittenSize(c, buf[:n], n)
+	// 				}
+	// 				c.left -= n
+	// 				head.offset += int64(n)
+	// 				buf = buf[n:]
+	// 				if len(buf) == 0 {
+	// 					c.releaseToWrite(head)
+	// 					c.writeList = nil
+	// 				}
+	// 			} else {
+	// 				break
+	// 			}
+	// 		}
+	// 		return err
+	// 	}
+
+	// 	writevSize := maxWriteCacheOrFlushSize
+	// 	iovc = iovc[0:0]
+	// 	for i := 0; i < len(c.writeList) && i < 1024; i++ {
+	// 		head = c.writeList[i]
+	// 		if head.buf != nil {
+	// 			b := head.buf[head.offset:]
+	// 			writevSize -= len(b)
+	// 			if writevSize < 0 {
+	// 				break
+	// 			}
+	// 			iovc = append(iovc, b)
+	// 		}
+	// 	}
+
+	// 	for len(iovc) > 0 && err == nil {
+	// 		n, err = writev(c, iovc)
+	// 		if n > 0 {
+	// 			c.left -= n
+	// 			for n > 0 {
+	// 				head = c.writeList[0]
+	// 				headLeft := len(head.buf) - int(head.offset)
+	// 				if n < headLeft {
+	// 					if onWrittenSize != nil {
+	// 						onWrittenSize(c, head.buf[head.offset:head.offset+int64(n)], n)
+	// 					}
+	// 					head.offset += int64(n)
+	// 					iovc[0] = iovc[0][n:]
+	// 					break
+	// 				} else {
+	// 					if onWrittenSize != nil {
+	// 						onWrittenSize(c, head.buf[head.offset:], headLeft)
+	// 					}
+	// 					c.releaseToWrite(head)
+	// 					c.writeList = c.writeList[1:]
+	// 					if len(c.writeList) == 0 {
+	// 						c.writeList = nil
+	// 					}
+	// 					iovc = iovc[1:]
+	// 					n -= headLeft
+	// 				}
+	// 			}
+	// 		} else {
+	// 			break
+	// 		}
+	// 	}
+	// 	return err
+	// }
+	writeBuffer := func() error {
+		head := c.writeList[0]
+		buf := head.buf[head.offset:]
+		n, err := syscall.Write(c.fd, buf)
+		if n > 0 {
+			if c.p.g.onWrittenSize != nil {
+				c.p.g.onWrittenSize(c, buf[:n], n)
 			}
-			return err
-		}
-
-		writevSize := maxWriteCacheOrFlushSize
-		iovc = iovc[0:0]
-		for i := 0; i < len(c.writeList) && i < 1024; i++ {
-			head = c.writeList[i]
-			if head.buf != nil {
-				b := head.buf[head.offset:]
-				writevSize -= len(b)
-				if writevSize < 0 {
-					break
-				}
-				iovc = append(iovc, b)
-			}
-		}
-
-		for len(iovc) > 0 && err == nil {
-			n, err = writev(c, iovc)
-			if n > 0 {
-				c.left -= n
-				for n > 0 {
-					head = c.writeList[0]
-					headLeft := len(head.buf) - int(head.offset)
-					if n < headLeft {
-						if onWrittenSize != nil {
-							onWrittenSize(c, head.buf[head.offset:head.offset+int64(n)], n)
-						}
-						head.offset += int64(n)
-						iovc[0] = iovc[0][n:]
-						break
-					} else {
-						if onWrittenSize != nil {
-							onWrittenSize(c, head.buf[head.offset:], headLeft)
-						}
-						c.releaseToWrite(head)
-						c.writeList = c.writeList[1:]
-						if len(c.writeList) == 0 {
-							c.writeList = nil
-						}
-						iovc = iovc[1:]
-						n -= headLeft
-					}
-				}
-			} else {
-				break
+			c.left -= n
+			head.offset += int64(n)
+			if len(buf) == n {
+				c.releaseToWrite(head)
+				c.writeList[0] = nil
+				c.writeList = c.writeList[1:]
 			}
 		}
 		return err
 	}
-
 	writeFile := func() error {
 		v := c.writeList[0]
 		for v.remain > 0 {
@@ -845,7 +862,7 @@ func (c *Conn) flush() error {
 	for len(c.writeList) > 0 {
 		var err error
 		if c.writeList[0].fd == 0 {
-			err = writeBuffers()
+			err = writeBuffer()
 		} else {
 			err = writeFile()
 		}
