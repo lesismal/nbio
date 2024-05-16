@@ -74,3 +74,47 @@ func TestAlignedMemPool(t *testing.T) {
 		}
 	}
 }
+
+func TestTraceDebugerPool(t *testing.T) {
+	pool := NewTraceDebuger(New(1, 1))
+	// for i := 0; i < 1024*1024; i++ {
+	// 	buf := pool.Malloc(i)
+	// 	if len(buf) != i {
+	// 		t.Fatalf("invalid len: %v != %v", len(buf), i)
+	// 	}
+	// 	pool.Free(buf)
+	// }
+	// for i := 1024 * 1024; i < 1024*1024*1024; i += 1024 * 1024 {
+	// 	buf := pool.Malloc(i)
+	// 	if len(buf) != i {
+	// 		t.Fatalf("invalid len: %v != %v", len(buf), i)
+	// 	}
+	// 	pool.Free(buf)
+	// }
+
+	buf := pool.Malloc(1)
+	for i := 1; i < 1024; i++ {
+		buf = pool.Append(buf[:1], make([]byte, i)...)
+		if len(buf) != i+1 {
+			t.Fatalf("invalid len: %v != %v", len(buf), i)
+		}
+	}
+	pool.Free(buf)
+	// pool.Free(buf)
+}
+
+func TestStackFuncs(t *testing.T) {
+	stack1, stackPtr := getStackAndPtr()
+	stack2 := ptr2StackString(stackPtr)
+	if stack1 != stack2 {
+		t.Fatalf("stack not equal:\n\n%v\n\n%v", stack1, stack2)
+	}
+
+	buf := []byte{1}
+	p1 := bytesPointer(buf)
+	buf[0] = 2
+	p2 := bytesPointer(buf)
+	if p1 != p2 {
+		t.Fatalf("buf pointer not equal: %v, %v", p1, p2)
+	}
+}

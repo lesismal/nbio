@@ -38,7 +38,7 @@ func (td *TraceDebugger) Malloc(size int) []byte {
 	buf := td.allocator.Malloc(size)
 	ptr := bytesPointer(buf)
 	if stackPtr, ok := td.pAlloced[ptr]; ok {
-		printStack("malloc got a buf which has been malloced by otherwhere", stackPtr)
+		printStack(fmt.Sprintf("malloc got a buf which has been malloced by otherwhere: %v", ptr), stackPtr)
 	}
 	td.setBufferPointer(ptr)
 	return buf
@@ -78,7 +78,7 @@ func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
 	pnew := bytesPointer(newBuf)
 	if pnew != pold {
 		if preStack, ok := td.pAlloced[pnew]; ok {
-			printStack("Append got another new buf which has been malloced by otherwhere", preStack)
+			printStack(fmt.Sprintf("Append got another new buf which has been malloced by otherwhere: %v", pnew), preStack)
 		}
 		td.deleteBufferPointer(pold)
 		td.setBufferPointer(pnew)
