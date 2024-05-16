@@ -80,6 +80,7 @@ type Conn struct {
 	msgType                  MessageType
 	message                  []byte
 	bytesCached              []byte
+	parsing                  uint32
 
 	Engine  *nbhttp.Engine
 	Execute func(f func()) bool
@@ -330,6 +331,11 @@ func (c *Conn) nextFrame(data []byte) ([]byte, MessageType, []byte, bool, bool, 
 // Read .
 func (c *Conn) Parse(data []byte) error {
 	c.mux.Lock()
+	if c.closed {
+		c.mux.Unlock()
+		return net.ErrClosed
+	}
+
 	readLimit := c.Engine.ReadLimit
 	if readLimit > 0 && (len(c.bytesCached)+len(data) > readLimit) {
 		c.mux.Unlock()
@@ -356,6 +362,10 @@ func (c *Conn) Parse(data []byte) error {
 		func() {
 			c.mux.Lock()
 			defer c.mux.Unlock()
+			if c.closed {
+				err = net.ErrClosed
+				return
+			}
 			data, opcode, body, ok, fin, compress, err = c.nextFrame(data)
 			if err != nil {
 				return
@@ -464,6 +474,9 @@ func (c *Conn) Parse(data []byte) error {
 Exit:
 	c.mux.Lock()
 	defer c.mux.Unlock()
+	if c.closed {
+		return net.ErrClosed
+	}
 	// The data bytes were not all consumed, need to recache the current bytes left:
 	if len(data) > 0 {
 		// The data bytes were appended to the tail of the previous chaced data:
