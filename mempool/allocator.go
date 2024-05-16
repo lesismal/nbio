@@ -5,7 +5,7 @@ var DefaultMemPool = New(1024, 1024*1024*1024)
 
 type Allocator interface {
 	Malloc(size int) []byte
-	Realloc(buf []byte, size int) []byte
+	Realloc(buf []byte, size int) []byte // deprecated.
 	Append(buf []byte, more ...byte) []byte
 	AppendString(buf []byte, more string) []byte
 	Free(buf []byte)

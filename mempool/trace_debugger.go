@@ -44,24 +44,9 @@ func (td *TraceDebugger) Malloc(size int) []byte {
 	return buf
 }
 
-// Realloc .
+// deprecated.
 func (td *TraceDebugger) Realloc(buf []byte, size int) []byte {
-	td.mux.Lock()
-	defer td.mux.Unlock()
-
-	pold := bytesPointer(buf)
-	if _, ok := td.pAlloced[pold]; !ok {
-		printStack("realloc to a buf which has not been malloced", nilStackPtr)
-	}
 	newBuf := td.allocator.Realloc(buf, size)
-	pnew := bytesPointer(newBuf)
-	if pnew != pold {
-		if preStack, ok := td.pAlloced[pnew]; ok {
-			printStack("realloc got another new buf which has been malloced by otherwhere", preStack)
-		}
-		td.deleteBufferPointer(pold)
-		td.setBufferPointer(pnew)
-	}
 	return newBuf
 }
 
