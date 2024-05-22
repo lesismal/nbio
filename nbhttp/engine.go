@@ -107,7 +107,7 @@ type Config struct {
 	// NListener represents listner goroutine num for each ConfAddr, it's set to 1 by default.
 	NListener int
 
-	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
+	// NPoller represents poller goroutine num.
 	NPoller int
 
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
@@ -441,7 +441,10 @@ func (e *Engine) SetETAsyncRead() {
 // SetLTSyncRead .
 func (e *Engine) SetLTSyncRead() {
 	if e.NPoller <= 0 {
-		e.NPoller = runtime.NumCPU()
+		e.NPoller = runtime.NumCPU() / 4
+		if e.NPoller == 0 {
+			e.NPoller = 1
+		}
 	}
 	e.EpollMod = nbio.EPOLLLT
 	e.AsyncReadInPoller = false
@@ -605,8 +608,14 @@ func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	}
 	engine.conns[key] = struct{}{}
 	engine.mux.Unlock()
+	_, err = engine.AddConn(nbc)
+	if err != nil {
+		engine.mux.Lock()
+		delete(engine.conns, key)
+		engine.mux.Unlock()
+		return err
+	}
 	engine._onOpen(nbc)
-	engine.AddConn(nbc)
 	return nil
 }
 
@@ -653,7 +662,13 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	conn.Parser = parser
 	nbc.SetSession(parser)
 	nbc.OnData(engine.DataHandler)
-	engine.AddConn(nbc)
+	_, err = engine.AddConn(nbc)
+	if err != nil {
+		engine.mux.Lock()
+		delete(engine.conns, key)
+		engine.mux.Unlock()
+		return
+	}
 	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 
@@ -747,7 +762,12 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	nbc.SetSession(parser)
 
 	nbc.OnData(engine.TLSDataHandler)
-	engine.AddConn(nbc)
+	_, err = engine.AddConn(nbc)
+	if err != nil {
+		engine.mux.Lock()
+		delete(engine.conns, key)
+		engine.mux.Unlock()
+	}
 	nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 }
 

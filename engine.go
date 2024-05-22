@@ -61,7 +61,7 @@ type Config struct {
 	// if it is empty, no listener created, then the Engine is used for client by default.
 	Addrs []string
 
-	// NPoller represents poller goroutine num, it's set to runtime.NumCPU() by default.
+	// NPoller represents poller goroutine num.
 	NPoller int
 
 	// ReadBufferSize represents buffer size for reading, it's set to 64k by default.
