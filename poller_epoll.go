@@ -89,7 +89,6 @@ func (p *poller) addConn(c *Conn) error {
 	if err != nil {
 		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
-		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
 	return err
 }
@@ -112,7 +111,6 @@ func (p *poller) addDialer(c *Conn) error {
 	if err != nil {
 		p.g.connsUnix[fd] = nil
 		c.closeWithError(err)
-		logging.Error("[%v] add read event failed: %v", c.fd, err)
 	}
 	return err
 }
@@ -172,7 +170,16 @@ func (p *poller) acceptorLoop() {
 				conn.Close()
 				continue
 			}
-			p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
+			err = p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
+			if err != nil {
+				logging.Error("NBIO[%v][%v_%v] addConn [fd: %v] failed: %v",
+					p.g.Name,
+					p.pollType,
+					p.index,
+					c.fd,
+					err,
+				)
+			}
 		} else {
 			var ne net.Error
 			if ok := errors.As(err, &ne); ok && ne.Timeout() {
