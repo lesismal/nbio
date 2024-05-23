@@ -291,6 +291,10 @@ func (p *poller) readWriteLoop() {
 						} else {
 							g.onRead(c)
 						}
+
+						if len(c.writeList) > 0 {
+							c.flush()
+						}
 					}
 
 					if ev.Events&epollEventsError != 0 {

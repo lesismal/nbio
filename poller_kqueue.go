@@ -199,6 +199,10 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 				p.g.onRead(c)
 			}
 
+			if len(c.writeList) > 0 {
+				c.flush()
+			}
+
 			if ev.Flags&syscall.EV_EOF != 0 {
 				if c.onConnected == nil {
 					c.flush()
