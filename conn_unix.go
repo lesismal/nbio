@@ -476,7 +476,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
-func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) error {
+func (c *Conn) setDeadline(timer **time.Timer, errClose error, t time.Time) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
 	if c.closed {
@@ -485,7 +485,7 @@ func (c *Conn) setDeadline(timer **time.Timer, returnErr error, t time.Time) err
 	if !t.IsZero() {
 		if *timer == nil {
 			*timer = c.p.g.AfterFunc(time.Until(t), func() {
-				c.closeWithError(returnErr)
+				c.closeWithError(errClose)
 			})
 		} else {
 			(*timer).Reset(time.Until(t))
@@ -985,7 +985,7 @@ type udpConn struct {
 func (u *udpConn) Close() error {
 	parent := u.parent
 	if parent.connUDP != u {
-		// This connection is created by reding from a UDP server,
+		// This connection is created by reading from a UDP server,
 		// need to clear itself from the UDP server.
 		parent.mux.Lock()
 		delete(parent.connUDP.conns, u.rAddrKey)
