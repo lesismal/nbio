@@ -137,7 +137,7 @@ func NewEngine(conf Config) *Engine {
 	if conf.ReadBufferSize <= 0 {
 		conf.ReadBufferSize = DefaultReadBufferSize
 	}
-	if conf.MaxWriteBufferSize < 0 {
+	if conf.MaxWriteBufferSize <= 0 {
 		conf.MaxWriteBufferSize = DefaultMaxWriteBufferSize
 	}
 	if conf.Listen == nil {
