@@ -359,6 +359,7 @@ func (c *Conn) Parse(data []byte) error {
 	var body []byte
 	var frame []byte
 	var message []byte
+	var msgType MessageType
 	var protocolMessage []byte
 	var opcode MessageType
 	var ok, fin, compress bool
@@ -399,6 +400,7 @@ func (c *Conn) Parse(data []byte) error {
 					c.msgType = opcode
 					c.compress = compress
 				}
+				msgType = c.msgType
 				if bl > 0 && c.dataFrameHandler != nil {
 					frame = allocator.Malloc(bl)
 					copy(frame, body)
@@ -438,9 +440,9 @@ func (c *Conn) Parse(data []byte) error {
 								return
 							}
 						}
+						c.msgType = 0
 						c.compress = false
 						c.expectingFragments = false
-						c.msgType = 0
 					} else {
 						c.expectingFragments = true
 					}
@@ -473,11 +475,11 @@ func (c *Conn) Parse(data []byte) error {
 		}
 
 		if message != nil {
-			c.handleMessage(c.msgType, message)
+			c.handleMessage(msgType, message)
 			message = nil
 		}
 		if frame != nil {
-			c.handleDataFrame(c.msgType, fin, frame)
+			c.handleDataFrame(msgType, fin, frame)
 			frame = nil
 		}
 		if protocolMessage != nil {
