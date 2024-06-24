@@ -364,16 +364,6 @@ func (c *Conn) Parse(data []byte) error {
 	var ok, fin, compress bool
 	var totalFrameSize int
 
-	updateCache := func(consumed int) {
-		l := len(c.bytesCached)
-		if l == consumed {
-			c.Engine.BodyAllocator.Free(c.bytesCached)
-			c.bytesCached = nil
-		} else {
-			copy(c.bytesCached, data[consumed:l])
-			c.bytesCached = c.bytesCached[:l-consumed]
-		}
-	}
 	releaseBuf := func() {
 		if len(frame) > 0 {
 			allocator.Free(frame)
@@ -465,7 +455,14 @@ func (c *Conn) Parse(data []byte) error {
 				return
 			}
 
-			updateCache(totalFrameSize)
+			l := len(c.bytesCached)
+			if l == totalFrameSize {
+				c.Engine.BodyAllocator.Free(c.bytesCached)
+				c.bytesCached = nil
+			} else {
+				copy(c.bytesCached, c.bytesCached[totalFrameSize:l])
+				c.bytesCached = c.bytesCached[:l-totalFrameSize]
+			}
 		}()
 
 		if err != nil {
