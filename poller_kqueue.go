@@ -126,7 +126,11 @@ func (p *poller) trigger() {
 
 func (p *poller) addRead(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
+	var flags uint16 = syscall.EV_ADD
+	if p.g.EpollMod == EPOLLET {
+		flags |= syscall.EV_CLEAR
+	}
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_READ})
 	// p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
@@ -141,15 +145,23 @@ func (p *poller) resetRead(fd int) {
 
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	var flags uint16 = syscall.EV_ADD
+	if p.g.EpollMod == EPOLLET {
+		flags |= syscall.EV_CLEAR
+	}
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
 
 func (p *poller) addReadWrite(fd int) {
 	p.mux.Lock()
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
-	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
+	var flags uint16 = syscall.EV_ADD
+	if p.g.EpollMod == EPOLLET {
+		flags |= syscall.EV_CLEAR
+	}
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_READ})
+	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: flags, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
 	p.trigger()
 }
@@ -167,12 +179,17 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if ev.Flags&syscall.EV_DELETE > 0 {
 		return
 	}
+
+	if p.g.onRead == nil && p.g.EpollMod == EPOLLET {
+		p.g.MaxConnReadTimesPerEventLoop = 1<<31 - 1
+	}
+
 	fd := int(ev.Ident)
 	c := p.getConn(fd)
 	if c != nil {
 		if ev.Filter == syscall.EVFILT_READ {
 			if p.g.onRead == nil {
-				for {
+				for i := 0; i < p.g.MaxConnReadTimesPerEventLoop; i++ {
 					buffer := p.g.borrow(c)
 					rc, n, err := c.ReadAndGetConn(buffer)
 					if n > 0 {
@@ -297,6 +314,7 @@ func (p *poller) readWriteLoop() {
 			switch int(events[i].Ident) {
 			case p.evtfd:
 			default:
+				logging.Debug("NBIO[%v][%v_%v] trigger event, filter: %v, mod: %v", p.g.Name, p.pollType, p.index, events[i].Filter, p.g.EpollMod)
 				p.readWrite(&events[i])
 			}
 		}
