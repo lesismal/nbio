@@ -662,6 +662,7 @@ func (w *writeBuffer) Close() error {
 
 // CloseAndClean .
 func (c *Conn) CloseAndClean(err error) {
+	// c.WriteClose(1000, "normal close")
 	c.mux.Lock()
 	if c.closed {
 		c.mux.Unlock()

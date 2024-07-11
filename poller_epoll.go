@@ -342,6 +342,7 @@ func (p *poller) setRead(op int, fd int) error {
 					Events: events | syscall.EPOLLOUT,
 				})
 			}
+			return nil
 		}
 		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
@@ -390,6 +391,7 @@ func (p *poller) setReadWrite(op int, fd int) error {
 					Events: events,
 				})
 			}
+			return nil
 		}
 		return syscall.EpollCtl(p.epfd, op, fd, &syscall.EpollEvent{
 			Fd:     int32(fd),
