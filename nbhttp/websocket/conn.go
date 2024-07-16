@@ -482,7 +482,7 @@ func (c *Conn) Parse(data []byte) error {
 			c.handleDataFrame(msgType, fin, frame)
 			frame = nil
 		}
-		if protocolMessage != nil {
+		if fin && opcode == CloseMessage { //protocolMessage != nil {
 			c.handleProtocolMessage(opcode, protocolMessage)
 			protocolMessage = nil
 		}
