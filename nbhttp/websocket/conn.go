@@ -361,6 +361,7 @@ func (c *Conn) Parse(data []byte) error {
 	var message []byte
 	var msgType MessageType
 	var protocolMessage []byte
+	var isProtocolMessage bool
 	var opcode MessageType
 	var ok, fin, compress bool
 	var totalFrameSize int
@@ -448,6 +449,7 @@ func (c *Conn) Parse(data []byte) error {
 					}
 				}
 			case PingMessage, PongMessage, CloseMessage:
+				isProtocolMessage = true
 				if bl > 0 {
 					protocolMessage = allocator.Malloc(len(body))
 					copy(protocolMessage, body)
@@ -482,9 +484,10 @@ func (c *Conn) Parse(data []byte) error {
 			c.handleDataFrame(msgType, fin, frame)
 			frame = nil
 		}
-		if fin && opcode == CloseMessage { //protocolMessage != nil {
+		if isProtocolMessage {
 			c.handleProtocolMessage(opcode, protocolMessage)
 			protocolMessage = nil
+			isProtocolMessage = false
 		}
 
 		// need more data
