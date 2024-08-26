@@ -160,6 +160,15 @@ type Config struct {
 	// Handler sets HTTP handler for Engine.
 	Handler http.Handler
 
+	// `OnRequest` sets HTTP handler which will be called before `Handler.ServeHTTP`.
+	//
+	// A `Request` is pushed into a task queue and waits to be executed by the goroutine pool by default, which means the `Request`
+	// may not be executed at once and may wait for long to be executed: if the client-side supports `pipeline` and the previous
+	// `Requests` are handled for long. In some scenarios, we need to know when the `Request` is received, then we can control and
+	// customize whether we should drop the task or record the real processing time for the `Request`. That is what this func should
+	// be used for.
+	OnRequest http.HandlerFunc
+
 	// ServerExecutor sets the executor for data reading callbacks.
 	ServerExecutor func(f func())
 

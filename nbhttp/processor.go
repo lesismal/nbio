@@ -240,6 +240,10 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 
 	response := NewResponse(parser, request)
+
+	if engine.OnRequest != nil {
+		engine.OnRequest(response, request)
+	}
 	if !parser.Execute(func() {
 		engine.Handler.ServeHTTP(response, request)
 		p.flushResponse(parser, response)
