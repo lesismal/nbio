@@ -796,13 +796,14 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 				i := 0
 				for {
 					_, err := c.Conn.Write(buf)
-					c.Engine.BodyAllocator.Free(buf)
 					if err != nil {
 						c.CloseWithError(err)
 						return
 					}
-
+					c.Engine.BodyAllocator.Free(buf)
+					c.sendQueue[i] = nil
 					i++
+
 					c.mux.Lock()
 					if c.closed {
 						c.mux.Unlock()
@@ -815,7 +816,6 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					}
 
 					buf = c.sendQueue[i]
-					c.sendQueue[i] = nil
 
 					c.mux.Unlock()
 
