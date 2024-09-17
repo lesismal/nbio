@@ -583,6 +583,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		} else {
 			cw.Close()
 			data = w.Bytes()
+			return c.writeFrame(messageType, true, true, data, true)
 		}
 	}
 
