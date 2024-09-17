@@ -583,22 +583,23 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		} else {
 			cw.Close()
 			data = w.Bytes()
-			return c.writeFrame(messageType, true, true, data, true)
 		}
 	}
 
 	if len(data) > 0 {
 		sendOpcode := true
+		sendCompress := compress
 		for len(data) > 0 {
 			n := len(data)
 			if n > c.Engine.MaxWebsocketFramePayloadSize {
 				n = c.Engine.MaxWebsocketFramePayloadSize
 			}
-			err := c.writeFrame(messageType, sendOpcode, n == len(data), data[:n], compress)
+			err := c.writeFrame(messageType, sendOpcode, n == len(data), data[:n], sendCompress)
 			if err != nil {
 				return err
 			}
 			sendOpcode = false
+			sendCompress = false
 			data = data[n:]
 		}
 		return nil
