@@ -787,21 +787,19 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		}
 		c.sendQueue = append(c.sendQueue, buf)
 		isHead := (len(c.sendQueue) == 1)
-		if isHead {
-			c.sendQueue[0] = nil
-		}
 
 		if isHead {
+			c.sendQueue[0] = nil
 			go func() {
 				i := 0
 				for {
 					_, err := c.Conn.Write(buf)
+					c.Engine.BodyAllocator.Free(buf)
 					if err != nil {
 						c.CloseWithError(err)
 						return
 					}
-					c.Engine.BodyAllocator.Free(buf)
-					c.sendQueue[i] = nil
+
 					i++
 
 					c.mux.Lock()
@@ -816,6 +814,7 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 					}
 
 					buf = c.sendQueue[i]
+					c.sendQueue[i] = nil
 
 					c.mux.Unlock()
 
