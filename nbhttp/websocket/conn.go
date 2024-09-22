@@ -608,6 +608,21 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	return c.writeFrame(messageType, true, true, []byte{}, compress)
 }
 
+// Keepalive .
+func (c *Conn) Keepalive(d time.Duration) *time.Timer {
+	var fn func()
+	var timer *time.Timer
+	fn = func() {
+		err := c.WriteMessage(PingMessage, []byte{})
+		if err != nil {
+			return
+		}
+		timer.Reset(d)
+	}
+	timer = time.AfterFunc(d, fn)
+	return timer
+}
+
 // Session returns user session.
 func (c *Conn) Session() interface{} {
 	if c.chSessionInited == nil {

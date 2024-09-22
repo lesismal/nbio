@@ -18,11 +18,18 @@ func (ps *ProtocolStack) Add(p Protocol) {
 }
 
 func (ps *ProtocolStack) Delete(p Protocol) {
-	for i, v := range ps.stack {
-		if v == p {
+	i := len(ps.stack) - 1
+	for i >= 0 {
+		if ps.stack[i] == p {
 			ps.stack[i] = nil
+			if i+1 > len(ps.stack)-1 {
+				ps.stack = ps.stack[:i]
+			} else {
+				ps.stack = append(ps.stack[:i], ps.stack[i+1:]...)
+			}
 			return
 		}
+		i--
 	}
 }
 
