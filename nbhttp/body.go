@@ -140,6 +140,9 @@ func (br *BodyReader) append(data []byte) error {
 // NewBodyReader creates a BodyReader.
 func NewBodyReader(engine *Engine) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
+	br.left = 0
+	br.index = 0
+	br.buffers = nil
 	br.engine = engine
 	return br
 }
