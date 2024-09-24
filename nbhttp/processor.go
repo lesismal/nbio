@@ -236,7 +236,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	// }
 
 	if request.Body == nil {
-		request.Body = NewBodyReader(nil)
+		request.Body = NewBodyReader(engine)
 	}
 
 	response := NewResponse(parser, request)
