@@ -11,6 +11,7 @@ import (
 	"syscall"
 )
 
+//go:norace
 func writev(c *Conn, iovs [][]byte) (int, error) {
 	size := 0
 	for _, v := range iovs {

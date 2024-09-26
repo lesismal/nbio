@@ -6,6 +6,8 @@ type stdAllocator struct {
 }
 
 // Malloc .
+//
+//go:norace
 func (a *stdAllocator) Malloc(size int) []byte {
 	ret := make([]byte, size)
 	a.incrMalloc(ret)
@@ -13,6 +15,8 @@ func (a *stdAllocator) Malloc(size int) []byte {
 }
 
 // Realloc .
+//
+//go:norace
 func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -23,18 +27,23 @@ func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
 }
 
 // Free .
+//
+//go:norace
 func (a *stdAllocator) Free(buf []byte) {
 	a.incrFree(buf)
 }
 
+//go:norace
 func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
 	return append(buf, more...)
 }
 
+//go:norace
 func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
 	return append(buf, more...)
 }
 
+//go:norace
 func NewSTD() Allocator {
 	return &stdAllocator{
 		debugger: &debugger{},

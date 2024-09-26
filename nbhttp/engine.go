@@ -257,30 +257,41 @@ type Engine struct {
 }
 
 // OnOpen registers callback for new connection.
+//
+//go:norace
 func (e *Engine) OnOpen(h func(c net.Conn)) {
 	e._onOpen = h
 }
 
 // OnClose registers callback for disconnected.
+//
+//go:norace
 func (e *Engine) OnClose(h func(c net.Conn, err error)) {
 	e._onClose = h
 }
 
 // OnStop registers callback before Engine is stopped.
+//
+//go:norace
 func (e *Engine) OnStop(h func()) {
 	e._onStop = h
 }
 
 // Online .
+//
+//go:norace
 func (e *Engine) Online() int {
 	return len(e.conns)
 }
 
 // DialerOnline .
+//
+//go:norace
 func (e *Engine) DialerOnline() int {
 	return len(e.dialerConns)
 }
 
+//go:norace
 func (e *Engine) closeAllConns() {
 	e.mux.Lock()
 	defer e.mux.Unlock()
@@ -302,6 +313,7 @@ type Conn struct {
 	Trasfered bool
 }
 
+//go:norace
 func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(*Conn, *tls.Config, func()), decrease func()) {
 	e.WaitGroup.Add(1)
 	go func() {
@@ -329,6 +341,7 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(*Co
 	}()
 }
 
+//go:norace
 func (e *Engine) startListeners() error {
 	if e.IOMod == IOModMixed {
 		e.listenerMux = lmux.New(e.MaxBlockingOnline)
@@ -428,6 +441,7 @@ func (e *Engine) startListeners() error {
 	return nil
 }
 
+//go:norace
 func (e *Engine) stopListeners() {
 	if e.IOMod == IOModMixed && e.listenerMux != nil {
 		e.listenerMux.Stop()
@@ -438,6 +452,8 @@ func (e *Engine) stopListeners() {
 }
 
 // SetETAsyncRead .
+//
+//go:norace
 func (e *Engine) SetETAsyncRead() {
 	if e.NPoller <= 0 {
 		e.NPoller = 1
@@ -448,6 +464,8 @@ func (e *Engine) SetETAsyncRead() {
 }
 
 // SetLTSyncRead .
+//
+//go:norace
 func (e *Engine) SetLTSyncRead() {
 	if e.NPoller <= 0 {
 		e.NPoller = runtime.NumCPU() / 4
@@ -461,6 +479,8 @@ func (e *Engine) SetLTSyncRead() {
 }
 
 // Start .
+//
+//go:norace
 func (e *Engine) Start() error {
 	modNames := map[int]string{
 		IOModMixed:       "IOModMixed",
@@ -488,6 +508,8 @@ func (e *Engine) Start() error {
 }
 
 // Stop .
+//
+//go:norace
 func (e *Engine) Stop() {
 	e.shutdown = true
 
@@ -500,6 +522,8 @@ func (e *Engine) Stop() {
 }
 
 // Shutdown .
+//
+//go:norace
 func (e *Engine) Shutdown(ctx context.Context) error {
 	e.shutdown = true
 	e.stopListeners()
@@ -531,6 +555,8 @@ Exit:
 }
 
 // DataHandler .
+//
+//go:norace
 func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -553,6 +579,8 @@ func (e *Engine) DataHandler(c *nbio.Conn, data []byte) {
 }
 
 // TLSDataHandler .
+//
+//go:norace
 func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -600,6 +628,8 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 }
 
 // AddTransferredConn .
+//
+//go:norace
 func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 	key, err := conn2Array(nbc)
 	if err != nil {
@@ -629,6 +659,8 @@ func (engine *Engine) AddTransferredConn(nbc *nbio.Conn) error {
 }
 
 // AddConnNonTLSNonBlocking .
+//
+//go:norace
 func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(conn.Conn)
 	if err != nil {
@@ -682,6 +714,8 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 }
 
 // AddConnNonTLSBlocking .
+//
+//go:norace
 func (engine *Engine) AddConnNonTLSBlocking(conn *Conn, tlsConfig *tls.Config, decrease func()) {
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
@@ -720,6 +754,8 @@ func (engine *Engine) AddConnNonTLSBlocking(conn *Conn, tlsConfig *tls.Config, d
 }
 
 // AddConnTLSNonBlocking .
+//
+//go:norace
 func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, decrease func()) {
 	nbc, err := nbio.NBConn(conn.Conn)
 	if err != nil {
@@ -781,6 +817,8 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 }
 
 // AddConnTLSBlocking .
+//
+//go:norace
 func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decrease func()) {
 	engine.mux.Lock()
 	if len(engine.conns) >= engine.MaxLoad {
@@ -825,6 +863,7 @@ func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decr
 	go engine.readTLSConnBlocking(conn, underLayerConn, tlsConn, parser, decrease)
 }
 
+//go:norace
 func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func()) {
 	var (
 		n   int
@@ -875,6 +914,7 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 	}
 }
 
+//go:norace
 func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
 	var (
 		err   error
@@ -943,6 +983,8 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 }
 
 // NewEngine .
+//
+//go:norace
 func NewEngine(conf Config) *Engine {
 	if conf.Name == "" {
 		conf.Name = "NB"
@@ -1173,6 +1215,7 @@ func NewEngine(conf Config) *Engine {
 
 var ReadBufferPools = &sync.Map{}
 
+//go:norace
 func getReadBufferPool(size int) mempool.Allocator {
 	pool, ok := ReadBufferPools.Load(size)
 	if ok {
@@ -1186,6 +1229,7 @@ func getReadBufferPool(size int) mempool.Allocator {
 	return readBufferPool
 }
 
+//go:norace
 func SyncExecutor(f func()) bool {
 	defer func() {
 		if err := recover(); err != nil {

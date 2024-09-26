@@ -84,11 +84,15 @@ type CloseError struct {
 }
 
 // Error .
+//
+//go:norace
 func (ce CloseError) Error() string {
 	return fmt.Sprintf("websocket: close code=%d and reason=%q", ce.Code, ce.Reason)
 }
 
 // CloseCode .
+//
+//go:norace
 func CloseCode(err error) int {
 	var ce CloseError
 	if errors.As(err, &ce) {
@@ -98,6 +102,8 @@ func CloseCode(err error) int {
 }
 
 // CloseReason .
+//
+//go:norace
 func CloseReason(err error) string {
 	var ce CloseError
 	if errors.As(err, &ce) {

@@ -18,6 +18,8 @@ import (
 const maxSendfileSize = 4 << 20
 
 // Sendfile .
+//
+//go:norace
 func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 	if f == nil {
 		return 0, nil

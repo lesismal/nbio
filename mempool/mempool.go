@@ -17,6 +17,8 @@ type MemPool struct {
 }
 
 // New .
+//
+//go:norace
 func New(bufSize, freeSize int) Allocator {
 	if bufSize <= 0 {
 		bufSize = 64
@@ -43,6 +45,8 @@ func New(bufSize, freeSize int) Allocator {
 }
 
 // Malloc .
+//
+//go:norace
 func (mp *MemPool) Malloc(size int) []byte {
 	var ret []byte
 	if size > mp.freeSize {
@@ -61,6 +65,8 @@ func (mp *MemPool) Malloc(size int) []byte {
 }
 
 // Realloc .
+//
+//go:norace
 func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -81,16 +87,22 @@ func (mp *MemPool) Realloc(buf []byte, size int) []byte {
 }
 
 // Append .
+//
+//go:norace
 func (mp *MemPool) Append(buf []byte, more ...byte) []byte {
 	return append(buf, more...)
 }
 
 // AppendString .
+//
+//go:norace
 func (mp *MemPool) AppendString(buf []byte, more string) []byte {
 	return append(buf, more...)
 }
 
 // Free .
+//
+//go:norace
 func (mp *MemPool) Free(buf []byte) {
 	mp.incrFree(buf)
 	if cap(buf) > mp.freeSize {

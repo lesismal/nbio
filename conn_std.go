@@ -51,11 +51,15 @@ type Conn struct {
 }
 
 // Hash returns a hashcode.
+//
+//go:norace
 func (c *Conn) Hash() int {
 	return c.hash
 }
 
 // Read wraps net.Conn.Read.
+//
+//go:norace
 func (c *Conn) Read(b []byte) (int, error) {
 	if c.closeErr != nil {
 		return 0, c.closeErr
@@ -72,6 +76,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 	return nread, err
 }
 
+//go:norace
 func (c *Conn) read(b []byte) (int, error) {
 	var err error
 	var nread int
@@ -87,6 +92,7 @@ func (c *Conn) read(b []byte) (int, error) {
 	return nread, err
 }
 
+//go:norace
 func (c *Conn) readTCP(b []byte) (int, error) {
 	g := c.p.g
 	// g.beforeRead(c)
@@ -109,6 +115,7 @@ func (c *Conn) readTCP(b []byte) (int, error) {
 	return nread, err
 }
 
+//go:norace
 func (c *Conn) readUDP(b []byte) (int, error) {
 	if c.connUDP == nil {
 		return 0, errors.New("invalid conn")
@@ -152,6 +159,8 @@ func (c *Conn) readUDP(b []byte) (int, error) {
 }
 
 // Write wraps net.Conn.Write.
+//
+//go:norace
 func (c *Conn) Write(b []byte) (int, error) {
 	var n int
 	var err error
@@ -171,6 +180,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 	return n, err
 }
 
+//go:norace
 func (c *Conn) writeTCP(b []byte) (int, error) {
 	// c.p.g.beforeWrite(c)
 	nwrite, err := c.conn.Write(b)
@@ -184,6 +194,7 @@ func (c *Conn) writeTCP(b []byte) (int, error) {
 	return nwrite, err
 }
 
+//go:norace
 func (c *Conn) writeUDPClientFromDial(b []byte) (int, error) {
 	nwrite, err := c.connUDP.Write(b)
 	if err != nil {
@@ -195,6 +206,7 @@ func (c *Conn) writeUDPClientFromDial(b []byte) (int, error) {
 	return nwrite, err
 }
 
+//go:norace
 func (c *Conn) writeUDPClientFromRead(b []byte) (int, error) {
 	nwrite, err := c.connUDP.WriteToUDP(b, c.connUDP.rAddr)
 	if err != nil {
@@ -207,6 +219,8 @@ func (c *Conn) writeUDPClientFromRead(b []byte) (int, error) {
 }
 
 // Writev wraps buffers.WriteTo/syscall.Writev.
+//
+//go:norace
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	if c.connUDP == nil {
 		buffers := net.Buffers(in)
@@ -253,6 +267,8 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 }
 
 // Close wraps net.Conn.Close.
+//
+//go:norace
 func (c *Conn) Close() error {
 	var err error
 	c.mux.Lock()
@@ -283,6 +299,8 @@ func (c *Conn) Close() error {
 }
 
 // CloseWithError .
+//
+//go:norace
 func (c *Conn) CloseWithError(err error) error {
 	if c.closeErr == nil {
 		c.closeErr = err
@@ -291,6 +309,8 @@ func (c *Conn) CloseWithError(err error) error {
 }
 
 // LocalAddr wraps net.Conn.LocalAddr.
+//
+//go:norace
 func (c *Conn) LocalAddr() net.Addr {
 	switch c.typ {
 	case ConnTypeTCP:
@@ -303,6 +323,8 @@ func (c *Conn) LocalAddr() net.Addr {
 }
 
 // RemoteAddr wraps net.Conn.RemoteAddr.
+//
+//go:norace
 func (c *Conn) RemoteAddr() net.Addr {
 	switch c.typ {
 	case ConnTypeTCP:
@@ -317,6 +339,8 @@ func (c *Conn) RemoteAddr() net.Addr {
 }
 
 // SetDeadline wraps net.Conn.SetDeadline.
+//
+//go:norace
 func (c *Conn) SetDeadline(t time.Time) error {
 	if c.typ == ConnTypeTCP {
 		return c.conn.SetDeadline(t)
@@ -325,6 +349,8 @@ func (c *Conn) SetDeadline(t time.Time) error {
 }
 
 // SetReadDeadline wraps net.Conn.SetReadDeadline.
+//
+//go:norace
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	if t.IsZero() {
 		t = time.Now().Add(timer.TimeForever)
@@ -347,6 +373,8 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 }
 
 // SetWriteDeadline wraps net.Conn.SetWriteDeadline.
+//
+//go:norace
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -360,6 +388,8 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 }
 
 // SetNoDelay wraps net.Conn.SetNoDelay.
+//
+//go:norace
 func (c *Conn) SetNoDelay(nodelay bool) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -373,6 +403,8 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 }
 
 // SetReadBuffer wraps net.Conn.SetReadBuffer.
+//
+//go:norace
 func (c *Conn) SetReadBuffer(bytes int) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -386,6 +418,8 @@ func (c *Conn) SetReadBuffer(bytes int) error {
 }
 
 // SetWriteBuffer wraps net.Conn.SetWriteBuffer.
+//
+//go:norace
 func (c *Conn) SetWriteBuffer(bytes int) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -399,6 +433,8 @@ func (c *Conn) SetWriteBuffer(bytes int) error {
 }
 
 // SetKeepAlive wraps net.Conn.SetKeepAlive.
+//
+//go:norace
 func (c *Conn) SetKeepAlive(keepalive bool) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -412,6 +448,8 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 }
 
 // SetKeepAlivePeriod wraps net.Conn.SetKeepAlivePeriod.
+//
+//go:norace
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -425,6 +463,8 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 }
 
 // SetLinger wraps net.Conn.SetLinger.
+//
+//go:norace
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	if c.typ != ConnTypeTCP {
 		return nil
@@ -437,6 +477,7 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return nil
 }
 
+//go:norace
 func newConn(conn net.Conn) *Conn {
 	c := &Conn{}
 	addr := conn.LocalAddr().String()
@@ -473,6 +514,8 @@ func newConn(conn net.Conn) *Conn {
 }
 
 // NBConn converts net.Conn to *Conn.
+//
+//go:norace
 func NBConn(conn net.Conn) (*Conn, error) {
 	if conn == nil {
 		return nil, errors.New("invalid conn: nil")
@@ -493,6 +536,7 @@ type udpConn struct {
 	conns  map[string]*Conn
 }
 
+//go:norace
 func (u *udpConn) Close() error {
 	parent := u.parent
 	if parent != nil {
@@ -509,6 +553,7 @@ func (u *udpConn) Close() error {
 	return nil
 }
 
+//go:norace
 func (u *udpConn) getConn(p *poller, rAddr *net.UDPAddr) (*Conn, bool) {
 	u.mux.RLock()
 	addr := rAddr.String()
@@ -540,6 +585,7 @@ func (u *udpConn) getConn(p *poller, rAddr *net.UDPAddr) (*Conn, bool) {
 	return c, ok
 }
 
+//go:norace
 func (c *Conn) SyscallConn() (syscall.RawConn, error) {
 	if rc, ok := c.conn.(interface {
 		SyscallConn() (syscall.RawConn, error)

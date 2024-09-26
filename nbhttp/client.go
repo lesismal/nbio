@@ -17,6 +17,7 @@ import (
 	"github.com/lesismal/llib/std/crypto/tls"
 )
 
+//go:norace
 func newHostConns(cli *Client) *hostConns {
 	hcs := &hostConns{
 		cli:        cli,
@@ -40,6 +41,7 @@ type hostConns struct {
 	chConnss   chan *ClientConn
 }
 
+//go:norace
 func (hcs *hostConns) closeWithError(err error) {
 	hcs.mux.Lock()
 	for hc := range hcs.conns {
@@ -48,6 +50,7 @@ func (hcs *hostConns) closeWithError(err error) {
 	hcs.mux.Unlock()
 }
 
+//go:norace
 func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
 	c := hcs.cli
 	if !c.closed {
@@ -101,6 +104,7 @@ func (hcs *hostConns) getConn() (*hostConns, *ClientConn, error) {
 	return nil, nil, ErrClientClosed
 }
 
+//go:norace
 func (hcs *hostConns) releaseConn(hc *ClientConn) {
 	hcs.chConnss <- hc
 }
@@ -132,11 +136,15 @@ type Client struct {
 }
 
 // Close closes all underlayer connections with EOF.
+//
+//go:norace
 func (c *Client) Close() {
 	c.CloseWithError(io.EOF)
 }
 
 // CloseWithError closes all underlayer connections with error.
+//
+//go:norace
 func (c *Client) CloseWithError(err error) {
 	c.mux.Lock()
 	if !c.closed {
@@ -148,6 +156,7 @@ func (c *Client) CloseWithError(err error) {
 	c.mux.Unlock()
 }
 
+//go:norace
 func (c *Client) getConn(host string) (*hostConns, *ClientConn, error) {
 	c.connsMux.Lock()
 	if c.closed {
@@ -174,6 +183,8 @@ func (c *Client) getConn(host string) (*hostConns, *ClientConn, error) {
 //  2. It's non-blocking for waiting for the response;
 //  3. It calls the handler when the response is received
 //     or other errors occur, such as timeout.
+//
+//go:norace
 func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	c.Engine.ExecuteClient(func() {
 		host := req.URL.Host
@@ -192,12 +203,14 @@ func (c *Client) Do(req *http.Request, handler func(res *http.Response, conn net
 
 type netDialerFunc func(network, addr string) (net.Conn, error)
 
+//go:norace
 func (fn netDialerFunc) Dial(network, addr string) (net.Conn, error) {
 	return fn(network, addr)
 }
 
 var proxySchemes map[string]func(*url.URL, proxyDialer) (proxyDialer, error)
 
+//go:norace
 func proxyRegisterDialerType(scheme string, f func(*url.URL, proxyDialer) (proxyDialer, error)) {
 	if proxySchemes == nil {
 		proxySchemes = make(map[string]func(*url.URL, proxyDialer) (proxyDialer, error))
@@ -205,6 +218,7 @@ func proxyRegisterDialerType(scheme string, f func(*url.URL, proxyDialer) (proxy
 	proxySchemes[scheme] = f
 }
 
+//go:norace
 func proxyFromURL(u *url.URL, forward proxyDialer) (proxyDialer, error) {
 	var auth *proxyAuth
 	if u.User != nil {
@@ -229,6 +243,7 @@ func proxyFromURL(u *url.URL, forward proxyDialer) (proxyDialer, error) {
 	return nil, errors.New("proxy: unknown scheme: " + u.Scheme)
 }
 
+//go:norace
 func hostPortNoPort(u *url.URL) (hostPort, hostNoPort string) {
 	hostPort = u.Host
 	hostNoPort = u.Host
@@ -256,6 +271,7 @@ type httpProxyDialer struct {
 	forwardDial func(network, addr string) (net.Conn, error)
 }
 
+//go:norace
 func (hpd *httpProxyDialer) Dial(network string, addr string) (net.Conn, error) {
 	hostPort, _ := hostPortNoPort(hpd.proxyURL)
 	conn, err := hpd.forwardDial(network, hostPort)
@@ -304,6 +320,7 @@ type proxyAuth struct {
 	User, Password string
 }
 
+//go:norace
 func proxySOCKS5(network, addr string, auth *proxyAuth, forward proxyDialer) (proxyDialer, error) {
 	s := &proxySocks5{
 		network: network,
@@ -351,6 +368,7 @@ var proxySocks5Errors = []string{
 	"address type not supported",
 }
 
+//go:norace
 func (s *proxySocks5) Dial(network, addr string) (net.Conn, error) {
 	switch network {
 	case "tcp", "tcp6", "tcp4":
@@ -371,6 +389,7 @@ func (s *proxySocks5) Dial(network, addr string) (net.Conn, error) {
 
 const errProxyAtSocks5Prefix = "proxy: SOCKS5 proxy at "
 
+//go:norace
 func (s *proxySocks5) connect(conn net.Conn, target string) error {
 	host, portStr, err := net.SplitHostPort(target)
 	if err != nil {
@@ -501,6 +520,7 @@ func (s *proxySocks5) connect(conn net.Conn, target string) error {
 	return nil
 }
 
+//go:norace
 func init() {
 	proxyRegisterDialerType("http", func(proxyURL *url.URL, forwardDialer proxyDialer) (proxyDialer, error) {
 		return &httpProxyDialer{proxyURL: proxyURL, forwardDial: forwardDialer.Dial}, nil

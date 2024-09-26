@@ -29,6 +29,7 @@ const (
 	statusFailed        = "FAILED"
 )
 
+//go:norace
 func failing(behavior string) bool {
 	switch behavior {
 	// case statusUnclean, statusFailed, statusNonStrict: // we should probably fix the nonstrict as well at some point
@@ -49,6 +50,7 @@ type statusCounter struct {
 	Failed        int
 }
 
+//go:norace
 func (c *statusCounter) Inc(s string) {
 	c.Total++
 	switch s {
@@ -69,6 +71,7 @@ func (c *statusCounter) Inc(s string) {
 	}
 }
 
+//go:norace
 func main() {
 	log.SetFlags(0)
 	flag.Parse()
@@ -196,6 +199,7 @@ type entryReport struct {
 	Duration    int    `json:"duration"`
 }
 
+//go:norace
 func decodeFile(path string, x interface{}) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -207,6 +211,7 @@ func decodeFile(path string, x interface{}) error {
 	return d.Decode(x)
 }
 
+//go:norace
 func compareBySegment(a, b string) int {
 	as := strings.Split(a, ".")
 	bs := strings.Split(b, ".")
@@ -221,6 +226,7 @@ func compareBySegment(a, b string) int {
 	return len(b) - len(a)
 }
 
+//go:norace
 func mustInt(s string) int64 {
 	const bits = 32 << (^uint(0) >> 63)
 	x, err := strconv.ParseInt(s, 10, bits)
@@ -230,6 +236,7 @@ func mustInt(s string) int64 {
 	return x
 }
 
+//go:norace
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -237,6 +244,7 @@ func min(a, b int) int {
 	return b
 }
 
+//go:norace
 func handlerIndex() func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
@@ -262,6 +270,7 @@ var index = template.Must(template.New("").Parse(`
 </html>
 `))
 
+//go:norace
 func sortBySegment(s []string) {
 	sort.Slice(s, func(i, j int) bool {
 		return compareBySegment(s[i], s[j]) < 0

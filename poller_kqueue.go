@@ -61,6 +61,7 @@ type poller struct {
 	eventList []syscall.Kevent_t
 }
 
+//go:norace
 func (p *poller) addConn(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
@@ -81,6 +82,7 @@ func (p *poller) addConn(c *Conn) error {
 	return nil
 }
 
+//go:norace
 func (p *poller) addDialer(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
@@ -98,10 +100,12 @@ func (p *poller) addDialer(c *Conn) error {
 	return nil
 }
 
+//go:norace
 func (p *poller) getConn(fd int) *Conn {
 	return p.g.connsUnix[fd]
 }
 
+//go:norace
 func (p *poller) deleteConn(c *Conn) {
 	if c == nil {
 		return
@@ -120,10 +124,12 @@ func (p *poller) deleteConn(c *Conn) {
 	}
 }
 
+//go:norace
 func (p *poller) trigger() {
 	syscall.Kevent(p.kfd, []syscall.Kevent_t{{Ident: 0, Filter: syscall.EVFILT_USER, Fflags: syscall.NOTE_TRIGGER}}, nil, nil)
 }
 
+//go:norace
 func (p *poller) addRead(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
@@ -132,6 +138,7 @@ func (p *poller) addRead(fd int) {
 	p.trigger()
 }
 
+//go:norace
 func (p *poller) resetRead(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
@@ -139,6 +146,7 @@ func (p *poller) resetRead(fd int) {
 	p.trigger()
 }
 
+//go:norace
 func (p *poller) modWrite(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
@@ -146,6 +154,7 @@ func (p *poller) modWrite(fd int) {
 	p.trigger()
 }
 
+//go:norace
 func (p *poller) addReadWrite(fd int) {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_READ})
@@ -163,6 +172,7 @@ func (p *poller) addReadWrite(fd int) {
 // 	p.trigger()
 // }
 
+//go:norace
 func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	if ev.Flags&syscall.EV_DELETE > 0 {
 		return
@@ -222,6 +232,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 	}
 }
 
+//go:norace
 func (p *poller) start() {
 	if p.g.LockPoller {
 		runtime.LockOSThread()
@@ -240,6 +251,7 @@ func (p *poller) start() {
 	}
 }
 
+//go:norace
 func (p *poller) acceptorLoop() {
 	if p.g.LockListener {
 		runtime.LockOSThread()
@@ -272,6 +284,7 @@ func (p *poller) acceptorLoop() {
 	}
 }
 
+//go:norace
 func (p *poller) readWriteLoop() {
 	if p.g.LockPoller {
 		runtime.LockOSThread()
@@ -303,6 +316,7 @@ func (p *poller) readWriteLoop() {
 	}
 }
 
+//go:norace
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
@@ -315,6 +329,7 @@ func (p *poller) stop() {
 	p.trigger()
 }
 
+//go:norace
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
 		if len(g.Addrs) == 0 {
@@ -368,5 +383,6 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	return p, nil
 }
 
+//go:norace
 func (c *Conn) ResetPollerEvent() {
 }

@@ -19,6 +19,8 @@ type listenerAB struct {
 }
 
 // New returns a ListenerMux.
+//
+//go:norace
 func New(maxOnlineA int) *ListenerMux {
 	return &ListenerMux{
 		listeners:  map[net.Listener]listenerAB{},
@@ -39,6 +41,8 @@ type ListenerMux struct {
 // Mux creates and returns ChanListener A and B:
 // If the online num of A is less than ListenerMux. maxOnlineA, the new connection will be dispatched to A;
 // Else the new connection will be dispatched to B.
+//
+//go:norace
 func (lm *ListenerMux) Mux(l net.Listener) (*ChanListener, *ChanListener) {
 	if l == nil || lm == nil {
 		return nil, nil
@@ -64,6 +68,8 @@ func (lm *ListenerMux) Mux(l net.Listener) (*ChanListener, *ChanListener) {
 }
 
 // Start starts to accept and dispatch the connections to ChanListener A or B.
+//
+//go:norace
 func (lm *ListenerMux) Start() {
 	if lm == nil {
 		return
@@ -100,6 +106,8 @@ func (lm *ListenerMux) Start() {
 }
 
 // Stop stops all the listeners.
+//
+//go:norace
 func (lm *ListenerMux) Stop() {
 	if lm == nil {
 		return
@@ -114,6 +122,8 @@ func (lm *ListenerMux) Stop() {
 }
 
 // DecreaseOnlineA decreases the online num of ChanListener A.
+//
+//go:norace
 func (lm *ListenerMux) DecreaseOnlineA() {
 	atomic.AddInt32(&lm.onlineA, -1)
 }
@@ -127,6 +137,8 @@ type ChanListener struct {
 }
 
 // Accept accepts a connection.
+//
+//go:norace
 func (l *ChanListener) Accept() (net.Conn, error) {
 	select {
 	case e := <-l.chEvent:
@@ -138,16 +150,22 @@ func (l *ChanListener) Accept() (net.Conn, error) {
 
 // Close does nothing but implementing net.Conn.Close.
 // User should call ListenerMux.Close to close it automatically.
+//
+//go:norace
 func (l *ChanListener) Close() error {
 	return nil
 }
 
 // Addr returns the listener's network address.
+//
+//go:norace
 func (l *ChanListener) Addr() net.Addr {
 	return l.addr
 }
 
 // Decrease decreases the online num if it's A.
+//
+//go:norace
 func (l *ChanListener) Decrease() {
 	if l.decrease != nil {
 		l.decrease()

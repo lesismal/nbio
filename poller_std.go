@@ -42,6 +42,7 @@ type poller struct {
 	chStop chan struct{}
 }
 
+//go:norace
 func (p *poller) accept() error {
 	conn, err := p.listener.Accept()
 	if err != nil {
@@ -55,6 +56,7 @@ func (p *poller) accept() error {
 	return nil
 }
 
+//go:norace
 func (p *poller) readConn(c *Conn) {
 	for {
 		buffer := p.g.borrow(c)
@@ -67,6 +69,7 @@ func (p *poller) readConn(c *Conn) {
 	}
 }
 
+//go:norace
 func (p *poller) addConn(c *Conn) error {
 	c.p = p
 	p.g.mux.Lock()
@@ -86,6 +89,7 @@ func (p *poller) addConn(c *Conn) error {
 	return nil
 }
 
+//go:norace
 func (p *poller) addDialer(c *Conn) error {
 	c.p = p
 	p.g.mux.Lock()
@@ -95,6 +99,7 @@ func (p *poller) addDialer(c *Conn) error {
 	return nil
 }
 
+//go:norace
 func (p *poller) deleteConn(c *Conn) {
 	p.g.mux.Lock()
 	delete(p.g.connsStd, c)
@@ -105,6 +110,7 @@ func (p *poller) deleteConn(c *Conn) {
 	}
 }
 
+//go:norace
 func (p *poller) start() {
 	if p.g.LockListener {
 		runtime.LockOSThread()
@@ -138,6 +144,7 @@ func (p *poller) start() {
 	<-p.chStop
 }
 
+//go:norace
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
@@ -147,6 +154,7 @@ func (p *poller) stop() {
 	close(p.chStop)
 }
 
+//go:norace
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	p := &poller{
 		g:          g,
@@ -170,6 +178,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	return p, nil
 }
 
+//go:norace
 func (c *Conn) ResetPollerEvent() {
 
 }

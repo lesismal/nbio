@@ -19,6 +19,7 @@ const (
 	alignedPoolBucketNum     = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1 // 12
 )
 
+//go:norace
 func init() {
 	var poolSizes [alignedPoolBucketNum]int
 	for i := range alignedPools {
@@ -45,6 +46,8 @@ func init() {
 }
 
 // NewAligned .
+//
+//go:norace
 func NewAligned() Allocator {
 	amp := &AlignedAllocator{
 		debugger: &debugger{},
@@ -58,6 +61,8 @@ type AlignedAllocator struct {
 }
 
 // Malloc .
+//
+//go:norace
 func (amp *AlignedAllocator) Malloc(size int) []byte {
 	if size < 0 {
 		return nil
@@ -74,6 +79,8 @@ func (amp *AlignedAllocator) Malloc(size int) []byte {
 }
 
 // Realloc .
+//
+//go:norace
 func (amp *AlignedAllocator) Realloc(buf []byte, size int) []byte {
 	if size <= cap(buf) {
 		return buf[:size]
@@ -84,6 +91,8 @@ func (amp *AlignedAllocator) Realloc(buf []byte, size int) []byte {
 }
 
 // Append .
+//
+//go:norace
 func (amp *AlignedAllocator) Append(buf []byte, more ...byte) []byte {
 	if cap(buf)-len(buf) >= len(more) {
 		return append(buf, more...)
@@ -96,6 +105,8 @@ func (amp *AlignedAllocator) Append(buf []byte, more ...byte) []byte {
 }
 
 // AppendString .
+//
+//go:norace
 func (amp *AlignedAllocator) AppendString(buf []byte, s string) []byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
@@ -104,6 +115,8 @@ func (amp *AlignedAllocator) AppendString(buf []byte, s string) []byte {
 }
 
 // Free .
+//
+//go:norace
 func (amp *AlignedAllocator) Free(buf []byte) {
 	size := cap(buf)
 	if (size&minAlignedBufferSizeMask) != 0 || size > maxAlignedBufferSize {

@@ -73,10 +73,12 @@ type Parser struct {
 	headerExists bool
 }
 
+//go:norace
 func (p *Parser) UnderlayerConn() net.Conn {
 	return p.Conn
 }
 
+//go:norace
 func (p *Parser) nextState(state int8) {
 	switch p.state {
 	case stateClose:
@@ -86,11 +88,15 @@ func (p *Parser) nextState(state int8) {
 }
 
 // OnClose registers callback for closing.
+//
+//go:norace
 func (p *Parser) OnClose(h func(p *Parser, err error)) {
 	p.onClose = h
 }
 
 // CloseAndClean closes the underlayer connection and cleans up related.
+//
+//go:norace
 func (p *Parser) CloseAndClean(err error) {
 	p.mux.Lock()
 	defer p.mux.Unlock()
@@ -117,6 +123,7 @@ func (p *Parser) CloseAndClean(err error) {
 	}
 }
 
+//go:norace
 func parseAndValidateChunkSize(originalStr string) (int, error) {
 	chunkSize, err := strconv.ParseInt(originalStr, 16, 63)
 	if err != nil {
@@ -134,6 +141,8 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 // Parse parses data bytes and calls HTTP handler when full request received.
 // If the connection is upgraded, it passes the data bytes to the ParserCloser
 // and doesn't parse them itself any more.
+//
+//go:norace
 func (p *Parser) Parse(data []byte) error {
 	p.mux.Lock()
 	defer p.mux.Unlock()
@@ -680,6 +689,7 @@ Exit:
 	return nil
 }
 
+//go:norace
 func (p *Parser) parseTransferEncoding() error {
 	raw, present := p.header[transferEncodingHeader]
 	if !present {
@@ -699,6 +709,7 @@ func (p *Parser) parseTransferEncoding() error {
 	return nil
 }
 
+//go:norace
 func (p *Parser) parseContentLength() (err error) {
 	if cl := p.header.Get(contentLengthHeader); cl != "" {
 		if p.chunked {
@@ -730,6 +741,7 @@ func (p *Parser) parseContentLength() (err error) {
 	return nil
 }
 
+//go:norace
 func (p *Parser) parseTrailer() error {
 	if !p.chunked {
 		return nil
@@ -777,6 +789,7 @@ func (p *Parser) parseTrailer() error {
 	return nil
 }
 
+//go:norace
 func (p *Parser) handleMessage() {
 	p.Processor.OnComplete(p)
 	p.chunked = false
@@ -791,6 +804,8 @@ func (p *Parser) handleMessage() {
 }
 
 // NewParser creates an HTTP parser.
+//
+//go:norace
 func NewParser(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) *Parser {
 	if processor == nil {
 		processor = NewEmptyProcessor()

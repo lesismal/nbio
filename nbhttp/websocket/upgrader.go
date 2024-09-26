@@ -73,6 +73,7 @@ type commonFields struct {
 
 type Options = Upgrader
 
+//go:norace
 func NewOptions() *Options {
 	return NewUpgrader()
 }
@@ -142,6 +143,8 @@ type Upgrader struct {
 }
 
 // NewUpgrader .
+//
+//go:norace
 func NewUpgrader() *Upgrader {
 	u := &Upgrader{
 		commonFields: commonFields{
@@ -183,11 +186,15 @@ func NewUpgrader() *Upgrader {
 }
 
 // EnableCompression .
+//
+//go:norace
 func (u *Upgrader) EnableCompression(enable bool) {
 	u.enableCompression = enable
 }
 
 // SetCompressionLevel .
+//
+//go:norace
 func (u *Upgrader) SetCompressionLevel(level int) error {
 	if !isValidCompressionLevel(level) {
 		return errors.New("websocket: invalid compression level")
@@ -197,6 +204,8 @@ func (u *Upgrader) SetCompressionLevel(level int) error {
 }
 
 // SetCloseHandler .
+//
+//go:norace
 func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
 	if h != nil {
 		u.closeMessageHandler = h
@@ -204,6 +213,8 @@ func (u *Upgrader) SetCloseHandler(h func(*Conn, int, string)) {
 }
 
 // SetPingHandler .
+//
+//go:norace
 func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
 	if h != nil {
 		u.pingMessageHandler = h
@@ -211,6 +222,8 @@ func (u *Upgrader) SetPingHandler(h func(*Conn, string)) {
 }
 
 // SetPongHandler .
+//
+//go:norace
 func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
 	if h != nil {
 		u.pongMessageHandler = h
@@ -218,11 +231,15 @@ func (u *Upgrader) SetPongHandler(h func(*Conn, string)) {
 }
 
 // OnOpen .
+//
+//go:norace
 func (u *Upgrader) OnOpen(h func(*Conn)) {
 	u.openHandler = h
 }
 
 // OnMessage .
+//
+//go:norace
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
@@ -237,6 +254,8 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 }
 
 // OnDataFrame .
+//
+//go:norace
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
@@ -249,11 +268,15 @@ func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 }
 
 // OnClose .
+//
+//go:norace
 func (u *Upgrader) OnClose(h func(*Conn, error)) {
 	u.onClose = h
 }
 
 // Upgrade .
+//
+//go:norace
 func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeader http.Header, args ...interface{}) (*Conn, error) {
 	challengeKey, subprotocol, compress, err := u.commCheck(w, r, responseHeader)
 	if err != nil {
@@ -528,11 +551,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	return wsc, nil
 }
 
+//go:norace
 func (u *Upgrader) UpgradeAndTransferConnToPoller(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
 	const trasferConn = true
 	return u.Upgrade(w, r, responseHeader, trasferConn)
 }
 
+//go:norace
 func (u *Upgrader) UpgradeWithoutHandlingReadForConnFromSTDServer(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (*Conn, error) {
 	// handle std server's conn, no need transfer conn to nbio Engine
 	const trasferConn = false
@@ -540,6 +565,7 @@ func (u *Upgrader) UpgradeWithoutHandlingReadForConnFromSTDServer(w http.Respons
 	return u.Upgrade(w, r, responseHeader, trasferConn, handleRead)
 }
 
+//go:norace
 func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHeader http.Header) (string, string, bool, error) {
 	if !headerContains(r.Header, "Connection", "upgrade") {
 		return "", "", false, u.returnError(w, r, http.StatusBadRequest, ErrUpgradeTokenNotFound)
@@ -590,6 +616,7 @@ func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHea
 	return challengeKey, subprotocol, compress, nil
 }
 
+//go:norace
 func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, challengeKey, subprotocol string, compress bool) error {
 	allocator := u.Engine.BodyAllocator
 	buf := allocator.Malloc(1024)[0:0]
@@ -638,12 +665,14 @@ func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, chall
 	return nil
 }
 
+//go:norace
 func (u *Upgrader) returnError(w http.ResponseWriter, _ *http.Request, status int, err error) error {
 	w.Header().Set("Sec-Websocket-Version", "13")
 	http.Error(w, http.StatusText(status), status)
 	return err
 }
 
+//go:norace
 func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header) string {
 	if u.Subprotocols != nil {
 		clientProtocols := subprotocols(r)
@@ -660,6 +689,7 @@ func (u *Upgrader) selectSubprotocol(r *http.Request, responseHeader http.Header
 	return ""
 }
 
+//go:norace
 func subprotocols(r *http.Request) []string {
 	h := strings.TrimSpace(r.Header.Get("Sec-Websocket-Protocol"))
 	if h == "" {
@@ -674,6 +704,7 @@ func subprotocols(r *http.Request) []string {
 
 var keyGUID = []byte("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")
 
+//go:norace
 func acceptKeyString(challengeKey string) string {
 	h := sha1.New() //nolint:gosec // per websocket protocol spec
 	h.Write([]byte(challengeKey))
@@ -681,6 +712,7 @@ func acceptKeyString(challengeKey string) string {
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
 
+//go:norace
 func acceptKeyBytes(challengeKey string) []byte {
 	h := sha1.New() //nolint:gosec // per websocket protocol spec
 	h.Write([]byte(challengeKey))
@@ -691,6 +723,7 @@ func acceptKeyBytes(challengeKey string) []byte {
 	return buf
 }
 
+//go:norace
 func challengeKey() (string, error) {
 	p := make([]byte, 16)
 	if _, err := io.ReadFull(rand.Reader, p); err != nil {
@@ -699,6 +732,7 @@ func challengeKey() (string, error) {
 	return base64.StdEncoding.EncodeToString(p), nil
 }
 
+//go:norace
 func checkSameOrigin(r *http.Request) bool {
 	origin := r.Header["Origin"]
 	if len(origin) == 0 {
@@ -711,6 +745,7 @@ func checkSameOrigin(r *http.Request) bool {
 	return equalASCIIFold(u.Host, r.Host)
 }
 
+//go:norace
 func headerContains(header http.Header, name string, value string) bool {
 	var t string
 	values := header[name]
@@ -737,6 +772,7 @@ headers:
 	return false
 }
 
+//go:norace
 func equalASCIIFold(s, t string) bool {
 	for s != "" && t != "" {
 		sr, size := utf8.DecodeRuneInString(s)
@@ -759,6 +795,7 @@ func equalASCIIFold(s, t string) bool {
 	return s == t
 }
 
+//go:norace
 func parseExtensions(header http.Header) []map[string]string {
 	var result []map[string]string
 headers:
@@ -884,6 +921,7 @@ var isTokenOctet = [256]bool{
 	'~':  true,
 }
 
+//go:norace
 func skipSpace(s string) (rest string) {
 	i := 0
 	for ; i < len(s); i++ {
@@ -894,6 +932,7 @@ func skipSpace(s string) (rest string) {
 	return s[i:]
 }
 
+//go:norace
 func nextToken(s string) (token, rest string) {
 	i := 0
 	for ; i < len(s); i++ {
@@ -904,6 +943,7 @@ func nextToken(s string) (token, rest string) {
 	return s[:i], s[i:]
 }
 
+//go:norace
 func nextTokenOrQuoted(s string) (value string, rest string) {
 	if !strings.HasPrefix(s, "\"") {
 		return nextToken(s)

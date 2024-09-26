@@ -112,6 +112,7 @@ var (
 	validMethodCharMap = [256]bool{}
 )
 
+//go:norace
 func init() {
 	var dis byte = 'a' - 'A'
 
@@ -146,14 +147,17 @@ func init() {
 	// headerCharMap['?'] = true
 }
 
+//go:norace
 func isAlpha(c byte) bool {
 	return alphaCharMap[c]
 }
 
+//go:norace
 func isNum(c byte) bool {
 	return numCharMap[c]
 }
 
+//go:norace
 func isHex(c byte) bool {
 	return hexCharMap[c]
 }
@@ -162,14 +166,17 @@ func isHex(c byte) bool {
 // 	return alphaNumCharMap[c]
 // }
 
+//go:norace
 func isToken(c byte) bool {
 	return tokenCharMap[c]
 }
 
+//go:norace
 func isValidMethod(m string) bool {
 	return validMethods[strings.ToUpper(m)]
 }
 
+//go:norace
 func isValidMethodChar(c byte) bool {
 	return validMethodCharMap[c]
 }

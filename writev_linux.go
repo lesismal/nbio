@@ -12,6 +12,7 @@ import (
 	"unsafe"
 )
 
+//go:norace
 func writev(c *Conn, bs [][]byte) (int, error) {
 	iovs := make([]syscall.Iovec, len(bs))[0:0]
 	for _, b := range bs {

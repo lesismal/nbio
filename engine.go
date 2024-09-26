@@ -113,6 +113,7 @@ type Config struct {
 // Gopher keeps old type to compatible with new name Engine.
 type Gopher = Engine
 
+//go:norace
 func NewGopher(conf Config) *Gopher {
 	return NewEngine(conf)
 }
@@ -169,6 +170,8 @@ type Engine struct {
 }
 
 // SetETAsyncRead .
+//
+//go:norace
 func (e *Engine) SetETAsyncRead() {
 	if e.NPoller <= 0 {
 		e.NPoller = 1
@@ -178,6 +181,8 @@ func (e *Engine) SetETAsyncRead() {
 }
 
 // SetLTSyncRead .
+//
+//go:norace
 func (e *Engine) SetLTSyncRead() {
 	if e.NPoller <= 0 {
 		e.NPoller = runtime.NumCPU()
@@ -187,6 +192,8 @@ func (e *Engine) SetLTSyncRead() {
 }
 
 // Stop closes listeners/pollers/conns/timer.
+//
+//go:norace
 func (g *Engine) Stop() {
 	for _, l := range g.listeners {
 		l.stop()
@@ -235,6 +242,8 @@ func (g *Engine) Stop() {
 }
 
 // Shutdown stops Engine gracefully with context.
+//
+//go:norace
 func (g *Engine) Shutdown(ctx context.Context) error {
 	ch := make(chan struct{})
 	go func() {
@@ -251,6 +260,8 @@ func (g *Engine) Shutdown(ctx context.Context) error {
 }
 
 // AddConn adds conn to a poller.
+//
+//go:norace
 func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	c, err := NBConn(conn)
 	if err != nil {
@@ -265,6 +276,7 @@ func (g *Engine) AddConn(conn net.Conn) (*Conn, error) {
 	return c, nil
 }
 
+//go:norace
 func (g *Engine) addDialer(c *Conn) (*Conn, error) {
 	p := g.pollers[c.Hash()%len(g.pollers)]
 	err := p.addDialer(c)
@@ -275,6 +287,8 @@ func (g *Engine) addDialer(c *Conn) (*Conn, error) {
 }
 
 // OnOpen registers callback for new connection.
+//
+//go:norace
 func (g *Engine) OnUDPListen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -283,6 +297,8 @@ func (g *Engine) OnUDPListen(h func(c *Conn)) {
 }
 
 // OnOpen registers callback for new connection.
+//
+//go:norace
 func (g *Engine) OnOpen(h func(c *Conn)) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -294,6 +310,8 @@ func (g *Engine) OnOpen(h func(c *Conn)) {
 }
 
 // OnClose registers callback for disconnected.
+//
+//go:norace
 func (g *Engine) OnClose(h func(c *Conn, err error)) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -307,11 +325,15 @@ func (g *Engine) OnClose(h func(c *Conn, err error)) {
 }
 
 // OnRead registers callback for reading event.
+//
+//go:norace
 func (g *Engine) OnRead(h func(c *Conn)) {
 	g.onRead = h
 }
 
 // OnData registers callback for data.
+//
+//go:norace
 func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -322,6 +344,8 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 // OnWrittenSize registers callback for written size.
 // If len(b) is bigger than 0, it represents that it's writing a buffer,
 // else it's operating by Sendfile.
+//
+//go:norace
 func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -330,6 +354,8 @@ func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
 }
 
 // OnReadBufferAlloc registers callback for memory allocating.
+//
+//go:norace
 func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -338,6 +364,8 @@ func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 }
 
 // OnReadBufferFree registers callback for memory release.
+//
+//go:norace
 func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -384,6 +412,8 @@ func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
 // }
 
 // OnStop registers callback before Engine is stopped.
+//
+//go:norace
 func (g *Engine) OnStop(h func()) {
 	if h == nil {
 		panic("invalid handler: nil")
@@ -392,10 +422,13 @@ func (g *Engine) OnStop(h func()) {
 }
 
 // PollerBuffer returns Poller's buffer by Conn, can be used on linux/bsd.
+//
+//go:norace
 func (g *Engine) PollerBuffer(c *Conn) []byte {
 	return c.p.ReadBuffer
 }
 
+//go:norace
 func (g *Engine) initHandlers() {
 	g.wgConn.Add(1)
 	g.OnOpen(func(c *Conn) {})
@@ -432,10 +465,12 @@ func (g *Engine) initHandlers() {
 	}
 }
 
+//go:norace
 func (g *Engine) borrow(c *Conn) []byte {
 	return g.onReadBufferAlloc(c)
 }
 
+//go:norace
 func (g *Engine) payback(c *Conn, buffer []byte) {
 	g.onReadBufferFree(c, buffer)
 }

@@ -68,6 +68,8 @@ type poller struct {
 }
 
 // add the connection to poller and handle its io events.
+//
+//go:norace
 func (p *poller) addConn(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
@@ -94,6 +96,8 @@ func (p *poller) addConn(c *Conn) error {
 }
 
 // add the connection to poller and handle its io events.
+//
+//go:norace
 func (p *poller) addDialer(c *Conn) error {
 	fd := c.fd
 	if fd >= len(p.g.connsUnix) {
@@ -115,10 +119,12 @@ func (p *poller) addDialer(c *Conn) error {
 	return err
 }
 
+//go:norace
 func (p *poller) getConn(fd int) *Conn {
 	return p.g.connsUnix[fd]
 }
 
+//go:norace
 func (p *poller) deleteConn(c *Conn) {
 	if c == nil {
 		return
@@ -137,6 +143,7 @@ func (p *poller) deleteConn(c *Conn) {
 	}
 }
 
+//go:norace
 func (p *poller) start() {
 	defer p.g.Done()
 
@@ -154,6 +161,7 @@ func (p *poller) start() {
 	}
 }
 
+//go:norace
 func (p *poller) acceptorLoop() {
 	if p.g.LockListener {
 		runtime.LockOSThread()
@@ -204,6 +212,7 @@ func (p *poller) acceptorLoop() {
 	}
 }
 
+//go:norace
 func (p *poller) readWriteLoop() {
 	if p.g.LockPoller {
 		runtime.LockOSThread()
@@ -303,6 +312,7 @@ func (p *poller) readWriteLoop() {
 	}
 }
 
+//go:norace
 func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
@@ -317,14 +327,17 @@ func (p *poller) stop() {
 	}
 }
 
+//go:norace
 func (p *poller) addRead(fd int) error {
 	return p.setRead(syscall.EPOLL_CTL_ADD, fd)
 }
 
+//go:norace
 func (p *poller) resetRead(fd int) error {
 	return p.setRead(syscall.EPOLL_CTL_MOD, fd)
 }
 
+//go:norace
 func (p *poller) setRead(op int, fd int) error {
 	switch p.g.EpollMod {
 	case EPOLLET:
@@ -365,14 +378,17 @@ func (p *poller) setRead(op int, fd int) error {
 	}
 }
 
+//go:norace
 func (p *poller) modWrite(fd int) error {
 	return p.setReadWrite(syscall.EPOLL_CTL_MOD, fd)
 }
 
+//go:norace
 func (p *poller) addReadWrite(fd int) error {
 	return p.setReadWrite(syscall.EPOLL_CTL_ADD, fd)
 }
 
+//go:norace
 func (p *poller) setReadWrite(op int, fd int) error {
 	switch p.g.EpollMod {
 	case EPOLLET:
@@ -422,6 +438,7 @@ func (p *poller) setReadWrite(op int, fd int) error {
 // 	)
 // }
 
+//go:norace
 func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	if isListener {
 		if len(g.Addrs) == 0 {
@@ -482,6 +499,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 	return p, nil
 }
 
+//go:norace
 func (c *Conn) ResetPollerEvent() {
 	p := c.p
 	g := p.g

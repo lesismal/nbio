@@ -51,6 +51,8 @@ type ClientConn struct {
 }
 
 // Reset resets itself as new created.
+//
+//go:norace
 func (c *ClientConn) Reset() {
 	c.mux.Lock()
 	if c.closed {
@@ -62,16 +64,22 @@ func (c *ClientConn) Reset() {
 }
 
 // OnClose registers a callback for closing.
+//
+//go:norace
 func (c *ClientConn) OnClose(h func()) {
 	c.onClose = h
 }
 
 // Close closes underlayer connection with EOF.
+//
+//go:norace
 func (c *ClientConn) Close() {
 	c.CloseWithError(io.EOF)
 }
 
 // CloseWithError closes underlayer connection with error.
+//
+//go:norace
 func (c *ClientConn) CloseWithError(err error) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -81,6 +89,7 @@ func (c *ClientConn) CloseWithError(err error) {
 	}
 }
 
+//go:norace
 func (c *ClientConn) closeWithErrorWithoutLock(err error) {
 	if err == nil {
 		err = io.EOF
@@ -110,6 +119,7 @@ func (c *ClientConn) closeWithErrorWithoutLock(err error) {
 	}
 }
 
+//go:norace
 func (c *ClientConn) onResponse(res *http.Response, err error) {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -149,6 +159,8 @@ func (c *ClientConn) onResponse(res *http.Response, err error) {
 //  2. It's non-blocking for waiting for the response;
 //  3. It calls the handler when the response is received
 //     or other errors occur, such as timeout.
+//
+//go:norace
 func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn net.Conn, err error)) {
 	c.mux.Lock()
 	defer func() {

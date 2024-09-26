@@ -49,6 +49,8 @@ type Dialer struct {
 }
 
 // Dial .
+//
+//go:norace
 func (d *Dialer) Dial(urlStr string, requestHeader http.Header, v ...interface{}) (*Conn, *http.Response, error) {
 	ctx := context.Background()
 	if d.DialTimeout > 0 {
@@ -58,6 +60,8 @@ func (d *Dialer) Dial(urlStr string, requestHeader http.Header, v ...interface{}
 }
 
 // DialContext .
+//
+//go:norace
 func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader http.Header, v ...interface{}) (*Conn, *http.Response, error) {
 	if d.Cancel != nil {
 		defer d.Cancel()

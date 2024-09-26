@@ -29,6 +29,7 @@ import (
 //	}
 // )
 
+//go:norace
 func (c *Conn) newToWriteBuf(buf []byte) {
 	c.left += len(buf)
 
@@ -66,6 +67,7 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 	}
 }
 
+//go:norace
 func (c *Conn) newToWriteFile(fd int, offset, remain int64) {
 	t := &toWrite{} // poolToWrite.New().(*toWrite)
 	t.fd = fd
@@ -74,6 +76,7 @@ func (c *Conn) newToWriteFile(fd int, offset, remain int64) {
 	c.writeList = append(c.writeList, t)
 }
 
+//go:norace
 func (c *Conn) releaseToWrite(t *toWrite) {
 	if t.buf != nil {
 		c.p.g.BodyAllocator.Free(t.buf)
@@ -143,11 +146,15 @@ type Conn struct {
 }
 
 // Hash returns a hash code of this connection.
+//
+//go:norace
 func (c *Conn) Hash() int {
 	return c.fd
 }
 
 // AsyncReadInPoller is used for reading data async.
+//
+//go:norace
 func (c *Conn) AsyncRead() {
 	g := c.p.g
 
@@ -226,6 +233,8 @@ func (c *Conn) AsyncRead() {
 // `ReadAndGetConn` instead, which can handle different types of connection and
 // returns the consistent connection instance for UDP.
 // Notice: non-blocking interface, should not be used as you use std.
+//
+//go:norace
 func (c *Conn) Read(b []byte) (int, error) {
 	// When the connection is closed and the fd is reused on Unix,
 	// new connection maybe hold the same fd.
@@ -252,6 +261,8 @@ func (c *Conn) Read(b []byte) (int, error) {
 //     Conn for the same socket which has the same local addr and remote addr.
 //
 // Notice: non-blocking interface, should not be used as you use std.
+//
+//go:norace
 func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	// When the connection is closed and the fd is reused on Unix,
 	// new connection maybe hold the same fd.
@@ -271,6 +282,7 @@ func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	return dstConn, n, err
 }
 
+//go:norace
 func (c *Conn) doRead(b []byte) (*Conn, int, error) {
 	switch c.typ {
 	case ConnTypeTCP, ConnTypeUnix:
@@ -286,12 +298,16 @@ func (c *Conn) doRead(b []byte) (*Conn, int, error) {
 }
 
 // read from TCP/Unix socket.
+//
+//go:norace
 func (c *Conn) readStream(b []byte) (*Conn, int, error) {
 	nread, err := syscall.Read(c.fd, b)
 	return c, nread, err
 }
 
 // read from UDP socket.
+//
+//go:norace
 func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 	nread, rAddr, err := syscall.Recvfrom(c.fd, b, 0)
 	if c.closeErr == nil {
@@ -324,6 +340,8 @@ func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 //  1. This is a non-blocking interface, but you can use it as you use std.
 //  2. When it can't write all the data now, the connection will cache the data
 //     left to be written and wait for the writing event then try to flush it.
+//
+//go:norace
 func (c *Conn) Write(b []byte) (int, error) {
 	// c.p.g.beforeWrite(c)
 
@@ -360,6 +378,8 @@ func (c *Conn) Write(b []byte) (int, error) {
 
 // Writev does similar things as Write, but with [][]byte input arg.
 // Notice: doesn't support UDP if more than 1 []byte.
+//
+//go:norace
 func (c *Conn) Writev(in [][]byte) (int, error) {
 	// c.p.g.beforeWrite(c)
 
@@ -402,16 +422,22 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 }
 
 // write to TCP/Unix socket.
+//
+//go:norace
 func (c *Conn) writeStream(b []byte) (int, error) {
 	return syscall.Write(c.fd, b)
 }
 
 // write to UDP dialer.
+//
+//go:norace
 func (c *Conn) writeUDPClientFromDial(b []byte) (int, error) {
 	return syscall.Write(c.fd, b)
 }
 
 // write to UDP connection which is from server reading.
+//
+//go:norace
 func (c *Conn) writeUDPClientFromRead(b []byte) (int, error) {
 	err := syscall.Sendto(c.fd, b, 0, c.connUDP.rAddr)
 	if err != nil {
@@ -421,27 +447,37 @@ func (c *Conn) writeUDPClientFromRead(b []byte) (int, error) {
 }
 
 // Close implements closes connection.
+//
+//go:norace
 func (c *Conn) Close() error {
 	return c.closeWithError(nil)
 }
 
 // CloseWithError closes connection with user specified error.
+//
+//go:norace
 func (c *Conn) CloseWithError(err error) error {
 	return c.closeWithError(err)
 }
 
 // LocalAddr returns the local network address, if known.
+//
+//go:norace
 func (c *Conn) LocalAddr() net.Addr {
 	return c.lAddr
 }
 
 // RemoteAddr returns the remote network address, if known.
+//
+//go:norace
 func (c *Conn) RemoteAddr() net.Addr {
 	return c.rAddr
 }
 
 // SetDeadline sets deadline for both read and write.
 // If it is time.Zero, SetDeadline will clear the deadlines.
+//
+//go:norace
 func (c *Conn) SetDeadline(t time.Time) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -476,6 +512,7 @@ func (c *Conn) SetDeadline(t time.Time) error {
 	return nil
 }
 
+//go:norace
 func (c *Conn) setDeadline(timer **time.Timer, errClose error, t time.Time) error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -506,6 +543,8 @@ func (c *Conn) setDeadline(timer **time.Timer, errClose error, t time.Time) erro
 //  1. Users should update the read deadline in time.
 //  2. For example, call SetReadDeadline whenever a new WebSocket message
 //     is received.
+//
+//go:norace
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	return c.setDeadline(&c.rTimer, errReadTimeout, t)
 }
@@ -517,6 +556,8 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 // left to bewritten, the deadline timer will be cleared automatically;
 // Else when the user doesn't update the deadline and the deadline exceeds,
 // the connection will be closed.
+//
+//go:norace
 func (c *Conn) SetWriteDeadline(t time.Time) error {
 	return c.setDeadline(&c.wTimer, errWriteTimeout, t)
 }
@@ -525,6 +566,8 @@ func (c *Conn) SetWriteDeadline(t time.Time) error {
 // packet transmission in hopes of sending fewer packets (Nagle's
 // algorithm).  The default is true (no delay), meaning that data is
 // sent as soon as possible after a Write.
+//
+//go:norace
 func (c *Conn) SetNoDelay(nodelay bool) error {
 	if nodelay {
 		return syscall.SetsockoptInt(
@@ -544,6 +587,8 @@ func (c *Conn) SetNoDelay(nodelay bool) error {
 
 // SetReadBuffer sets the size of the operating system's
 // receive buffer associated with the connection.
+//
+//go:norace
 func (c *Conn) SetReadBuffer(bytes int) error {
 	return syscall.SetsockoptInt(
 		c.fd,
@@ -555,6 +600,8 @@ func (c *Conn) SetReadBuffer(bytes int) error {
 
 // SetWriteBuffer sets the size of the operating system's
 // transmit buffer associated with the connection.
+//
+//go:norace
 func (c *Conn) SetWriteBuffer(bytes int) error {
 	return syscall.SetsockoptInt(
 		c.fd,
@@ -566,6 +613,8 @@ func (c *Conn) SetWriteBuffer(bytes int) error {
 
 // SetKeepAlive sets whether the operating system should send
 // keep-alive messages on the connection.
+//
+//go:norace
 func (c *Conn) SetKeepAlive(keepalive bool) error {
 	if keepalive {
 		return syscall.SetsockoptInt(
@@ -584,6 +633,8 @@ func (c *Conn) SetKeepAlive(keepalive bool) error {
 }
 
 // SetKeepAlivePeriod sets period between keep-alives.
+//
+//go:norace
 func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 	if runtime.GOOS == "linux" {
 		d += (time.Second - time.Nanosecond)
@@ -607,6 +658,8 @@ func (c *Conn) SetKeepAlivePeriod(d time.Duration) error {
 }
 
 // SetLinger .
+//
+//go:norace
 func (c *Conn) SetLinger(onoff int32, linger int32) error {
 	return syscall.SetsockoptLinger(
 		c.fd,
@@ -620,6 +673,8 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 }
 
 // sets writing event.
+//
+//go:norace
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
@@ -628,6 +683,8 @@ func (c *Conn) modWrite() {
 }
 
 // reset io event to read only.
+//
+//go:norace
 func (c *Conn) resetRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
@@ -636,6 +693,7 @@ func (c *Conn) resetRead() {
 	}
 }
 
+//go:norace
 func (c *Conn) write(b []byte) (int, error) {
 	if len(b) == 0 {
 		return 0, nil
@@ -669,6 +727,7 @@ func (c *Conn) write(b []byte) (int, error) {
 	return len(b), nil
 }
 
+//go:norace
 func (c *Conn) writev(in [][]byte) (int, error) {
 	size := 0
 	for _, v := range in {
@@ -727,6 +786,8 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 // }
 
 // flush cached data to the fd when writing available.
+//
+//go:norace
 func (c *Conn) flush() error {
 	c.mux.Lock()
 	defer c.mux.Unlock()
@@ -886,6 +947,7 @@ func (c *Conn) flush() error {
 	return nil
 }
 
+//go:norace
 func (c *Conn) doWrite(b []byte) (int, error) {
 	var n int
 	var err error
@@ -905,11 +967,13 @@ func (c *Conn) doWrite(b []byte) (int, error) {
 	return n, err
 }
 
+//go:norace
 func (c *Conn) overflow(n int) bool {
 	g := c.p.g
 	return g.MaxWriteBufferSize > 0 && (c.left+n > g.MaxWriteBufferSize)
 }
 
+//go:norace
 func (c *Conn) closeWithError(err error) error {
 	c.mux.Lock()
 	if !c.closed {
@@ -931,6 +995,7 @@ func (c *Conn) closeWithError(err error) error {
 	return nil
 }
 
+//go:norace
 func (c *Conn) closeWithErrorWithoutLock(err error) error {
 	c.closeErr = err
 
@@ -957,6 +1022,8 @@ func (c *Conn) closeWithErrorWithoutLock(err error) error {
 }
 
 // NBConn converts net.Conn to *Conn.
+//
+//go:norace
 func NBConn(conn net.Conn) (*Conn, error) {
 	if conn == nil {
 		return nil, errors.New("invalid conn: nil")
@@ -982,6 +1049,7 @@ type udpConn struct {
 	conns map[udpAddrKey]*Conn
 }
 
+//go:norace
 func (u *udpConn) Close() error {
 	parent := u.parent
 	if parent.connUDP != u {
@@ -1002,6 +1070,7 @@ func (u *udpConn) Close() error {
 	return nil
 }
 
+//go:norace
 func (u *udpConn) getConn(p *poller, fd int, rsa syscall.Sockaddr) (*Conn, bool) {
 	rAddrKey := getUDPNetAddrKey(rsa)
 	u.mux.RLock()
@@ -1034,6 +1103,7 @@ func (u *udpConn) getConn(p *poller, fd int, rsa syscall.Sockaddr) (*Conn, bool)
 
 type udpAddrKey [22]byte
 
+//go:norace
 func getUDPNetAddrKey(sa syscall.Sockaddr) udpAddrKey {
 	var ret udpAddrKey
 	if sa == nil {
@@ -1052,6 +1122,7 @@ func getUDPNetAddrKey(sa syscall.Sockaddr) udpAddrKey {
 	return ret
 }
 
+//go:norace
 func getUDPNetAddr(sa syscall.Sockaddr) *net.UDPAddr {
 	ret := &net.UDPAddr{}
 	switch vt := sa.(type) {
@@ -1071,6 +1142,7 @@ func getUDPNetAddr(sa syscall.Sockaddr) *net.UDPAddr {
 	return ret
 }
 
+//go:norace
 func (c *Conn) SyscallConn() (syscall.RawConn, error) {
 	return &rawConn{fd: c.fd}, nil
 }
@@ -1079,15 +1151,18 @@ type rawConn struct {
 	fd int
 }
 
+//go:norace
 func (c *rawConn) Control(f func(fd uintptr)) error {
 	f(uintptr(c.fd))
 	return nil
 }
 
+//go:norace
 func (c *rawConn) Read(f func(fd uintptr) (done bool)) error {
 	return ErrUnsupported
 }
 
+//go:norace
 func (c *rawConn) Write(f func(fd uintptr) (done bool)) error {
 	return ErrUnsupported
 }

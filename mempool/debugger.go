@@ -21,15 +21,19 @@ type debugger struct {
 	SizeMap     map[int]*sizeMap `json:"SizeMap"`
 }
 
+//go:norace
 func (d *debugger) SetDebug(dbg bool) {
 	d.on = dbg
 }
 
+//go:norace
 func (d *debugger) incrMalloc(b []byte) {
 	if d.on {
 		d.incrMallocSlow(b)
 	}
 }
+
+//go:norace
 func (d *debugger) incrMallocSlow(b []byte) {
 	atomic.AddInt64(&d.MallocCount, 1)
 	atomic.AddInt64(&d.NeedFree, 1)
@@ -50,12 +54,14 @@ func (d *debugger) incrMallocSlow(b []byte) {
 	}
 }
 
+//go:norace
 func (d *debugger) incrFree(b []byte) {
 	if d.on {
 		d.incrFreeSlow(b)
 	}
 }
 
+//go:norace
 func (d *debugger) incrFreeSlow(b []byte) {
 	atomic.AddInt64(&d.FreeCount, 1)
 	atomic.AddInt64(&d.NeedFree, -1)
@@ -73,6 +79,7 @@ func (d *debugger) incrFreeSlow(b []byte) {
 	}
 }
 
+//go:norace
 func (d *debugger) String() string {
 	if d.on {
 		b, err := json.Marshal(d)

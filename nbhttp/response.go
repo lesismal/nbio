@@ -44,6 +44,8 @@ type Response struct {
 }
 
 // Hijack .
+//
+//go:norace
 func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if res.Parser == nil {
 		return nil, nil, errors.New("nil Proccessor")
@@ -53,11 +55,15 @@ func (res *Response) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 }
 
 // Header .
+//
+//go:norace
 func (res *Response) Header() http.Header {
 	return res.header
 }
 
 // WriteHeader .
+//
+//go:norace
 func (res *Response) WriteHeader(statusCode int) {
 	if !res.hijacked && res.statusCode == 0 && res.statusCode != statusCode {
 		status := http.StatusText(statusCode)
@@ -82,6 +88,8 @@ func (res *Response) WriteHeader(statusCode int) {
 const maxPacketSize = 65536
 
 // WriteString .
+//
+//go:norace
 func (res *Response) WriteString(s string) (int, error) {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
@@ -90,6 +98,8 @@ func (res *Response) WriteString(s string) (int, error) {
 }
 
 // Write .
+//
+//go:norace
 func (res *Response) Write(data []byte) (int, error) {
 	l := len(data)
 	conn := res.Parser.Conn
@@ -165,6 +175,8 @@ func (res *Response) Write(data []byte) (int, error) {
 }
 
 // ReadFrom .
+//
+//go:norace
 func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 	c := res.Parser.Conn
 	if c == nil {
@@ -217,6 +229,8 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 }
 
 // checkChunked .
+//
+//go:norace
 func (res *Response) checkChunked() {
 	if res.chunkChecked {
 		return
@@ -246,6 +260,8 @@ func (res *Response) checkChunked() {
 }
 
 // flush .
+//
+//go:norace
 func (res *Response) eoncodeHead() {
 	if res.headEncoded {
 		return
@@ -336,6 +352,7 @@ func (res *Response) eoncodeHead() {
 	res.buffer = data
 }
 
+//go:norace
 func (res *Response) flushTrailer(conn io.Writer) error {
 	var err error
 
@@ -389,6 +406,7 @@ func (res *Response) flushTrailer(conn io.Writer) error {
 
 var numMap = []byte{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f'}
 
+//go:norace
 func (res *Response) formatInt(n int, base int) string {
 	if n < 0 || n > 0x7FFFFFFF {
 		return ""
@@ -408,6 +426,8 @@ func (res *Response) formatInt(n int, base int) string {
 }
 
 // NewResponse .
+//
+//go:norace
 func NewResponse(parser *Parser, request *http.Request) *Response {
 	res := responsePool.Get().(*Response)
 	res.Parser = parser

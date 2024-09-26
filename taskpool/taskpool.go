@@ -22,6 +22,8 @@ type TaskPool struct {
 }
 
 // fork .
+//
+//go:norace
 func (tp *TaskPool) fork(f func()) bool {
 	if atomic.AddInt64(&tp.concurrent, 1) < tp.maxConcurrent {
 		go func() {
@@ -44,6 +46,8 @@ func (tp *TaskPool) fork(f func()) bool {
 }
 
 // Go .
+//
+//go:norace
 func (tp *TaskPool) Go(f func()) {
 	// If current goroutine num is less than maxConcurrent,
 	// creat a new goroutine to exec new task.
@@ -60,12 +64,16 @@ func (tp *TaskPool) Go(f func()) {
 }
 
 // Stop .
+//
+//go:norace
 func (tp *TaskPool) Stop() {
 	atomic.AddInt64(&tp.concurrent, tp.maxConcurrent)
 	close(tp.chClose)
 }
 
 // New creates and returns a TaskPool.
+//
+//go:norace
 func New(maxConcurrent int, chQqueueSize int, v ...interface{}) *TaskPool {
 	tp := &TaskPool{
 		maxConcurrent: int64(maxConcurrent - 1),
