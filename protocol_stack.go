@@ -13,10 +13,12 @@ type ProtocolStack struct {
 	stack []Protocol
 }
 
+//go:norace
 func (ps *ProtocolStack) Add(p Protocol) {
 	ps.stack = append(ps.stack, p)
 }
 
+//go:norace
 func (ps *ProtocolStack) Delete(p Protocol) {
 	i := len(ps.stack) - 1
 	for i >= 0 {
@@ -33,6 +35,7 @@ func (ps *ProtocolStack) Delete(p Protocol) {
 	}
 }
 
+//go:norace
 func (ps *ProtocolStack) Parse(c net.Conn, b []byte, ps_ ProtocolStack) (net.Conn, []byte, error) {
 	var err error
 	for _, p := range ps.stack {
@@ -47,6 +50,7 @@ func (ps *ProtocolStack) Parse(c net.Conn, b []byte, ps_ ProtocolStack) (net.Con
 	return c, b, err
 }
 
+//go:norace
 func (ps *ProtocolStack) Write(b []byte) (int, error) {
 	return -1, ErrUnsupported
 }

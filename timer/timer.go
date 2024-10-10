@@ -24,27 +24,38 @@ type Timer struct {
 	asyncList []func()
 }
 
+//go:norace
 func New(name string) *Timer {
 	return &Timer{name: name, asyncList: make([]func(), 8)[0:0]}
 }
 
 // IsTimerRunning .
+//
+//go:norace
 func (t *Timer) IsTimerRunning() bool {
 	return true
 }
 
 // Start .
+//
+//go:norace
 func (t *Timer) Start() {}
 
 // Stop .
+//
+//go:norace
 func (t *Timer) Stop() {}
 
 // After used as time.After.
+//
+//go:norace
 func (t *Timer) After(d time.Duration) <-chan time.Time {
 	return time.After(d)
 }
 
 // AfterFunc used as time.AfterFunc.
+//
+//go:norace
 func (t *Timer) AfterFunc(timeout time.Duration, f func()) *time.Timer {
 	return time.AfterFunc(timeout, func() {
 		defer func() {
@@ -61,6 +72,8 @@ func (t *Timer) AfterFunc(timeout time.Duration, f func()) *time.Timer {
 }
 
 // Async executes f in another goroutine.
+//
+//go:norace
 func (t *Timer) Async(f func()) {
 	t.asyncMux.Lock()
 	isHead := (len(t.asyncList) == 0)

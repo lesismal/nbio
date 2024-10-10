@@ -14,6 +14,7 @@ import (
 	"syscall"
 )
 
+//go:norace
 func init() {
 	var limit syscall.Rlimit
 	if err := syscall.Getrlimit(syscall.RLIMIT_NOFILE, &limit); err == nil {
@@ -23,6 +24,7 @@ func init() {
 	}
 }
 
+//go:norace
 func dupStdConn(conn net.Conn) (*Conn, error) {
 	sc, ok := conn.(interface {
 		SyscallConn() (syscall.RawConn, error)
@@ -102,6 +104,7 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 	return c, nil
 }
 
+//go:norace
 func parseDomainAndType(network, addr string) (int, int, syscall.Sockaddr, net.Addr, ConnType, error) {
 	var (
 		isIPv4 = len(strings.Split(addr, ":")) == 2

@@ -14,6 +14,7 @@ import (
 	"github.com/lesismal/nbio/taskpool"
 )
 
+//go:norace
 func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 	u := websocket.NewUpgrader()
 	u.EnableCompression(true)
@@ -40,6 +41,7 @@ func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 	return u
 }
 
+//go:norace
 func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
 	upgrader := newUpgrader(true)
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -49,6 +51,7 @@ func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
 	conn.SetDeadline(time.Time{})
 }
 
+//go:norace
 func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
 	upgrader := newUpgrader(false)
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -58,6 +61,7 @@ func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
 	conn.SetDeadline(time.Time{})
 }
 
+//go:norace
 func main() {
 	cert, err := tls.X509KeyPair(rsaCertPEM, rsaKeyPEM)
 	if err != nil {

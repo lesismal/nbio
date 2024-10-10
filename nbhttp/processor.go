@@ -40,6 +40,7 @@ var (
 	}
 )
 
+//go:norace
 func releaseRequest(req *http.Request, retainHTTPBody bool) {
 	if req != nil {
 		if req.Body != nil {
@@ -59,6 +60,7 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 	}
 }
 
+//go:norace
 func releaseResponse(res *Response) {
 	if res != nil {
 		*res = emptyResponse
@@ -66,6 +68,7 @@ func releaseResponse(res *Response) {
 	}
 }
 
+//go:norace
 func releaseClientResponse(res *http.Response) {
 	if res != nil {
 		if res.Body != nil {
@@ -103,6 +106,8 @@ type ServerProcessor struct {
 }
 
 // OnMethod .
+//
+//go:norace
 func (p *ServerProcessor) OnMethod(parser *Parser, method string) {
 	if p.request == nil {
 		p.request = requestPool.Get().(*http.Request)
@@ -117,6 +122,8 @@ func (p *ServerProcessor) OnMethod(parser *Parser, method string) {
 }
 
 // OnURL .
+//
+//go:norace
 func (p *ServerProcessor) OnURL(parser *Parser, rawurl string) error {
 	p.request.RequestURI = rawurl
 
@@ -138,6 +145,8 @@ func (p *ServerProcessor) OnURL(parser *Parser, rawurl string) error {
 }
 
 // OnProto .
+//
+//go:norace
 func (p *ServerProcessor) OnProto(parser *Parser, proto string) error {
 	protoMajor, protoMinor, ok := http.ParseHTTPVersion(proto)
 	if !ok {
@@ -150,11 +159,15 @@ func (p *ServerProcessor) OnProto(parser *Parser, proto string) error {
 }
 
 // OnStatus .
+//
+//go:norace
 func (p *ServerProcessor) OnStatus(parser *Parser, code int, status string) {
 
 }
 
 // OnHeader .
+//
+//go:norace
 func (p *ServerProcessor) OnHeader(parser *Parser, key, value string) {
 	values := p.request.Header[key]
 	values = append(values, value)
@@ -163,11 +176,15 @@ func (p *ServerProcessor) OnHeader(parser *Parser, key, value string) {
 }
 
 // OnContentLength .
+//
+//go:norace
 func (p *ServerProcessor) OnContentLength(parser *Parser, contentLength int) {
 	p.request.ContentLength = int64(contentLength)
 }
 
 // OnBody .
+//
+//go:norace
 func (p *ServerProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.request.Body == nil {
 		p.request.Body = NewBodyReader(parser.Engine)
@@ -176,6 +193,8 @@ func (p *ServerProcessor) OnBody(parser *Parser, data []byte) error {
 }
 
 // OnTrailerHeader .
+//
+//go:norace
 func (p *ServerProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 	if p.request.Trailer == nil {
 		p.request.Trailer = http.Header{}
@@ -184,6 +203,8 @@ func (p *ServerProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 }
 
 // OnComplete .
+//
+//go:norace
 func (p *ServerProcessor) OnComplete(parser *Parser) {
 	request := p.request
 	p.request = nil
@@ -252,6 +273,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	}
 }
 
+//go:norace
 func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 	conn := parser.Conn
 	engine := parser.Engine
@@ -278,6 +300,8 @@ func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 }
 
 // Clean .
+//
+//go:norace
 func (p *ServerProcessor) Clean(parser *Parser) {
 	if p.request != nil {
 		releaseRequest(p.request, parser.Engine.RetainHTTPBody)
@@ -287,11 +311,15 @@ func (p *ServerProcessor) Clean(parser *Parser) {
 }
 
 // Close .
+//
+//go:norace
 func (p *ServerProcessor) Close(parser *Parser, err error) {
 	p.Clean(parser)
 }
 
 // NewServerProcessor .
+//
+//go:norace
 func NewServerProcessor() Processor {
 	return &ServerProcessor{}
 }
@@ -304,15 +332,21 @@ type ClientProcessor struct {
 }
 
 // OnMethod .
+//
+//go:norace
 func (p *ClientProcessor) OnMethod(parser *Parser, method string) {
 }
 
 // OnURL .
+//
+//go:norace
 func (p *ClientProcessor) OnURL(parser *Parser, uri string) error {
 	return nil
 }
 
 // OnProto .
+//
+//go:norace
 func (p *ClientProcessor) OnProto(parser *Parser, proto string) error {
 	protoMajor, protoMinor, ok := http.ParseHTTPVersion(proto)
 	if !ok {
@@ -331,22 +365,30 @@ func (p *ClientProcessor) OnProto(parser *Parser, proto string) error {
 }
 
 // OnStatus .
+//
+//go:norace
 func (p *ClientProcessor) OnStatus(parser *Parser, code int, status string) {
 	p.response.StatusCode = code
 	p.response.Status = status
 }
 
 // OnHeader .
+//
+//go:norace
 func (p *ClientProcessor) OnHeader(parser *Parser, key, value string) {
 	p.response.Header.Add(key, value)
 }
 
 // OnContentLength .
+//
+//go:norace
 func (p *ClientProcessor) OnContentLength(parser *Parser, contentLength int) {
 	p.response.ContentLength = int64(contentLength)
 }
 
 // OnBody .
+//
+//go:norace
 func (p *ClientProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.response.Body == nil {
 		p.response.Body = NewBodyReader(parser.Engine)
@@ -355,6 +397,8 @@ func (p *ClientProcessor) OnBody(parser *Parser, data []byte) error {
 }
 
 // OnTrailerHeader .
+//
+//go:norace
 func (p *ClientProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 	if p.response.Trailer == nil {
 		p.response.Trailer = http.Header{}
@@ -363,6 +407,8 @@ func (p *ClientProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 }
 
 // OnComplete .
+//
+//go:norace
 func (p *ClientProcessor) OnComplete(parser *Parser) {
 	res := p.response
 	p.response = nil
@@ -388,6 +434,8 @@ func (p *ClientProcessor) OnComplete(parser *Parser) {
 }
 
 // Clean .
+//
+//go:norace
 func (p *ClientProcessor) Clean(parser *Parser) {
 	if p.response != nil {
 		releaseClientResponse(p.response)
@@ -396,12 +444,16 @@ func (p *ClientProcessor) Clean(parser *Parser) {
 }
 
 // Close .
+//
+//go:norace
 func (p *ClientProcessor) Close(parser *Parser, err error) {
 	p.conn.CloseWithError(err)
 	p.Clean(parser)
 }
 
 // NewClientProcessor .
+//
+//go:norace
 func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err error)) Processor {
 	return &ClientProcessor{
 		conn:    conn,
@@ -413,61 +465,85 @@ func NewClientProcessor(conn *ClientConn, handler func(res *http.Response, err e
 type EmptyProcessor struct{}
 
 // OnMethod .
+//
+//go:norace
 func (p *EmptyProcessor) OnMethod(parser *Parser, method string) {
 
 }
 
 // OnURL .
+//
+//go:norace
 func (p *EmptyProcessor) OnURL(parser *Parser, uri string) error {
 	return nil
 }
 
 // OnProto .
+//
+//go:norace
 func (p *EmptyProcessor) OnProto(parser *Parser, proto string) error {
 	return nil
 }
 
 // OnStatus .
+//
+//go:norace
 func (p *EmptyProcessor) OnStatus(parser *Parser, code int, status string) {
 
 }
 
 // OnHeader .
+//
+//go:norace
 func (p *EmptyProcessor) OnHeader(parser *Parser, key, value string) {
 
 }
 
 // OnContentLength .
+//
+//go:norace
 func (p *EmptyProcessor) OnContentLength(parser *Parser, contentLength int) {
 
 }
 
 // OnBody .
+//
+//go:norace
 func (p *EmptyProcessor) OnBody(parser *Parser, data []byte) error {
 	return nil
 }
 
 // OnTrailerHeader .
+//
+//go:norace
 func (p *EmptyProcessor) OnTrailerHeader(parser *Parser, key, value string) {
 
 }
 
 // OnComplete .
+//
+//go:norace
 func (p *EmptyProcessor) OnComplete(parser *Parser) {
 
 }
 
 // Clean .
+//
+//go:norace
 func (p *EmptyProcessor) Clean(parser *Parser) {
 
 }
 
 // Close .
+//
+//go:norace
 func (p *EmptyProcessor) Close(parser *Parser, err error) {
 
 }
 
 // NewEmptyProcessor .
+//
+//go:norace
 func NewEmptyProcessor() Processor {
 	return &EmptyProcessor{}
 }

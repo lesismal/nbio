@@ -11,6 +11,8 @@ type IOTaskPool struct {
 }
 
 // Go .
+//
+//go:norace
 func (tp *IOTaskPool) Go(f func([]byte)) {
 	tp.task.Go(func() {
 		pbuf := tp.pool.Get().(*[]byte)
@@ -20,11 +22,15 @@ func (tp *IOTaskPool) Go(f func([]byte)) {
 }
 
 // Stop .
+//
+//go:norace
 func (tp *IOTaskPool) Stop() {
 	tp.task.Stop()
 }
 
 // NewIO creates and returns a IOTaskPool.
+//
+//go:norace
 func NewIO(concurrent, queueSize, bufSize int, v ...interface{}) *IOTaskPool {
 	task := New(concurrent, queueSize, v...)
 

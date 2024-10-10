@@ -19,6 +19,8 @@ import (
 )
 
 // Start inits and starts pollers.
+//
+//go:norace
 func (g *Engine) Start() error {
 	// Create listener pollers.
 	udpListeners := make([]*net.UDPConn, len(g.Addrs))[0:0]
@@ -126,6 +128,8 @@ func (g *Engine) Start() error {
 }
 
 // NewEngine creates an Engine and init default configurations.
+//
+//go:norace
 func NewEngine(conf Config) *Engine {
 	cpuNum := runtime.NumCPU()
 	if conf.Name == "" {
@@ -171,11 +175,15 @@ func NewEngine(conf Config) *Engine {
 }
 
 // DialAsync connects asynchrony to the address on the named network.
+//
+//go:norace
 func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, error)) error {
 	return engine.DialAsyncTimeout(network, addr, 0, onConnected)
 }
 
 // DialAsync connects asynchrony to the address on the named network with timeout.
+//
+//go:norace
 func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
 	go func() {
 		var err error

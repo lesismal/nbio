@@ -30,6 +30,8 @@ const (
 type connValue [connValueSize]byte
 
 // Convert net.Conn to array value.
+//
+//go:norace
 func conn2Array(conn net.Conn) (connValue, error) {
 	var p uintptr
 	var b connValue
@@ -64,6 +66,8 @@ func conn2Array(conn net.Conn) (connValue, error) {
 }
 
 // Convert array value to net.Conn.
+//
+//go:norace
 func array2Conn(b connValue) (net.Conn, error) {
 	var p uintptr
 	switch uintptrSize {

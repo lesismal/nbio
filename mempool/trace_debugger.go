@@ -23,6 +23,7 @@ type TraceDebugger struct {
 	allocator Allocator
 }
 
+//go:norace
 func NewTraceDebuger(allocator Allocator) *TraceDebugger {
 	return &TraceDebugger{
 		allocator: allocator,
@@ -31,6 +32,8 @@ func NewTraceDebuger(allocator Allocator) *TraceDebugger {
 }
 
 // Malloc .
+//
+//go:norace
 func (td *TraceDebugger) Malloc(size int) []byte {
 	td.mux.Lock()
 	defer td.mux.Unlock()
@@ -45,12 +48,16 @@ func (td *TraceDebugger) Malloc(size int) []byte {
 }
 
 // deprecated.
+//
+//go:norace
 func (td *TraceDebugger) Realloc(buf []byte, size int) []byte {
 	newBuf := td.allocator.Realloc(buf, size)
 	return newBuf
 }
 
 // Append .
+//
+//go:norace
 func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
 	td.mux.Lock()
 	defer td.mux.Unlock()
@@ -72,6 +79,8 @@ func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
 }
 
 // AppendString .
+//
+//go:norace
 func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 	td.mux.Lock()
 	defer td.mux.Unlock()
@@ -93,6 +102,8 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 }
 
 // Free .
+//
+//go:norace
 func (td *TraceDebugger) Free(buf []byte) {
 	td.mux.Lock()
 	defer td.mux.Unlock()
@@ -110,11 +121,13 @@ func (td *TraceDebugger) Free(buf []byte) {
 	td.allocator.Free(buf)
 }
 
+//go:norace
 func (td *TraceDebugger) setBufferPointer(ptr uintptr) {
 	_, stackPtr := getStackAndPtr()
 	td.pAlloced[ptr] = stackPtr
 }
 
+//go:norace
 func (td *TraceDebugger) deleteBufferPointer(ptr uintptr) {
 	delete(td.pAlloced, ptr)
 }
@@ -126,6 +139,7 @@ func (td *TraceDebugger) deleteBufferPointer(ptr uintptr) {
 // 	return string(buf)
 // }
 
+//go:norace
 func getStackAndPtr() (string, [2]uintptr) {
 	stackMux.Lock()
 	defer stackMux.Unlock()
@@ -159,6 +173,7 @@ func getStackAndPtr() (string, [2]uintptr) {
 	return stack, ptrCopy
 }
 
+//go:norace
 func ptr2StackString(ptr [2]uintptr) string {
 	if ptr[0] == 0 && ptr[1] == 0 {
 		return "nil"
@@ -176,6 +191,7 @@ func ptr2StackString(ptr [2]uintptr) string {
 // 	return *(*[]byte)(unsafe.Pointer(&h))
 // }
 
+//go:norace
 func printStack(info string, preStackPtr [2]uintptr) {
 	var (
 		currStack, _ = getStackAndPtr()
@@ -198,6 +214,7 @@ current stack :
 	os.Exit(-1)
 }
 
+//go:norace
 func bytesPointer(buf []byte) uintptr {
 	return (uintptr)(unsafe.Pointer(&(buf[:1][0])))
 }

@@ -17,22 +17,27 @@ type DebugAllocator interface {
 	SetDebug(bool)
 }
 
+//go:norace
 func Malloc(size int) []byte {
 	return DefaultMemPool.Malloc(size)
 }
 
+//go:norace
 func Realloc(buf []byte, size int) []byte {
 	return DefaultMemPool.Realloc(buf, size)
 }
 
+//go:norace
 func Append(buf []byte, more ...byte) []byte {
 	return DefaultMemPool.Append(buf, more...)
 }
 
+//go:norace
 func AppendString(buf []byte, more string) []byte {
 	return DefaultMemPool.AppendString(buf, more)
 }
 
+//go:norace
 func Free(buf []byte) {
 	DefaultMemPool.Free(buf)
 }

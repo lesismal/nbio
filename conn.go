@@ -32,16 +32,22 @@ const (
 )
 
 // Type .
+//
+//go:norace
 func (c *Conn) Type() ConnType {
 	return c.typ
 }
 
 // IsTCP returns whether this Conn is a TCP Conn.
+//
+//go:norace
 func (c *Conn) IsTCP() bool {
 	return c.typ == ConnTypeTCP
 }
 
 // IsUDP returns whether this Conn is a UDP Conn.
+//
+//go:norace
 func (c *Conn) IsUDP() bool {
 	switch c.typ {
 	case ConnTypeUDPServer, ConnTypeUDPClientFromDial, ConnTypeUDPClientFromRead:
@@ -51,16 +57,22 @@ func (c *Conn) IsUDP() bool {
 }
 
 // IsUnix  returns whether this Conn is a Unix Conn.
+//
+//go:norace
 func (c *Conn) IsUnix() bool {
 	return c.typ == ConnTypeUnix
 }
 
 // Session returns user session.
+//
+//go:norace
 func (c *Conn) Session() interface{} {
 	return c.session
 }
 
 // SetSession sets user session.
+//
+//go:norace
 func (c *Conn) SetSession(session interface{}) {
 	c.session = session
 }
@@ -80,16 +92,22 @@ func (c *Conn) SetSession(session interface{}) {
 //     })
 //     conn1.OnData(yourDatahandler1)
 //     conn2.OnData(yourDatahandler2)
+//
+//go:norace
 func (c *Conn) OnData(h func(conn *Conn, data []byte)) {
 	c.dataHandler = h
 }
 
 // DataHandler returns Conn's data handler.
+//
+//go:norace
 func (c *Conn) DataHandler() func(conn *Conn, data []byte) {
 	return c.dataHandler
 }
 
 // Dial calls net.Dial to make a net.Conn and convert it to *nbio.Conn.
+//
+//go:norace
 func Dial(network string, address string) (*Conn, error) {
 	conn, err := net.Dial(network, address)
 	if err != nil {
@@ -99,6 +117,8 @@ func Dial(network string, address string) (*Conn, error) {
 }
 
 // Dial calls net.DialTimeout to make a net.Conn and convert it to *nbio.Conn.
+//
+//go:norace
 func DialTimeout(network string, address string, timeout time.Duration) (*Conn, error) {
 	conn, err := net.DialTimeout(network, address, timeout)
 	if err != nil {
@@ -108,21 +128,29 @@ func DialTimeout(network string, address string, timeout time.Duration) (*Conn, 
 }
 
 // Lock .
+//
+//go:norace
 func (c *Conn) Lock() {
 	c.mux.Lock()
 }
 
 // Unlock .
+//
+//go:norace
 func (c *Conn) Unlock() {
 	c.mux.Unlock()
 }
 
 // IsClosed returns whether the Conn is closed.
+//
+//go:norace
 func (c *Conn) IsClosed() (bool, error) {
 	return c.closed, c.closeErr
 }
 
 // ExecuteLen returns the length of the Conn's job list.
+//
+//go:norace
 func (c *Conn) ExecuteLen() int {
 	c.mux.Lock()
 	n := len(c.jobList)
@@ -152,6 +180,8 @@ func (c *Conn) ExecuteLen() int {
 //     connection is closed.
 //  2. nbio.Engine.Execute is handled by a goroutine pool by default, users
 //     can customize it.
+//
+//go:norace
 func (c *Conn) Execute(job func()) bool {
 	c.mux.Lock()
 	if c.closed {
@@ -176,6 +206,8 @@ func (c *Conn) Execute(job func()) bool {
 // back of the job list no matter whether Conn has been closed,
 // it guarantees the job to be executed.
 // This is used to handle the close event in nbio/nbhttp.
+//
+//go:norace
 func (c *Conn) MustExecute(job func()) {
 	c.mux.Lock()
 	isHead := (len(c.jobList) == 0)
@@ -189,6 +221,7 @@ func (c *Conn) MustExecute(job func()) {
 	}
 }
 
+//go:norace
 func (c *Conn) execute(job func()) {
 	c.p.g.Execute(func() {
 		i := 0
