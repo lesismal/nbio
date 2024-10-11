@@ -77,6 +77,7 @@ type Conn struct {
 	isInReadingLoop          bool
 	expectingFragments       bool
 	compress                 bool
+	releasePayload           bool
 	msgType                  MessageType
 	message                  []byte
 	bytesCached              []byte
@@ -193,13 +194,13 @@ func (c *Conn) handleMessage(opcode MessageType, body []byte) {
 func (c *Conn) handleProtocolMessage(opcode MessageType, body []byte) {
 	if c.isBlockingMod {
 		c.handleWsMessage(opcode, body)
-		if len(body) > 0 && c.ReleasePayload {
+		if len(body) > 0 && c.releasePayload {
 			c.Engine.BodyAllocator.Free(body)
 		}
 	} else {
 		if !c.Execute(func() {
 			c.handleWsMessage(opcode, body)
-			if len(body) > 0 && c.ReleasePayload {
+			if len(body) > 0 && c.releasePayload {
 				c.Engine.BodyAllocator.Free(body)
 			}
 		}) {
@@ -529,7 +530,7 @@ func (c *Conn) Parse(data []byte) error {
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		c.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.ReleasePayload && len(data) > 0 {
+			if c.releasePayload && len(data) > 0 {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			if !c.closed {
@@ -545,7 +546,7 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			if c.ReleasePayload {
+			if c.releasePayload {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, fin, data)
