@@ -243,7 +243,7 @@ func (u *Upgrader) OnOpen(h func(*Conn)) {
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
 		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.ReleasePayload && len(data) > 0 {
+			if c.releasePayload && len(data) > 0 {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			if !c.closed {
@@ -259,7 +259,7 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
 		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			if c.ReleasePayload {
+			if c.releasePayload {
 				defer c.Engine.BodyAllocator.Free(data)
 			}
 			h(c, messageType, fin, data)
@@ -544,8 +544,13 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 		}
 	}
 
-	if !wsc.ReleasePayload {
-		wsc.ReleasePayload = wsc.Engine.ReleaseWebsocketPayload
+	// If upgrader.ReleasePayload is false, which maybe by default,
+	// then set it to engine.ReleaseWebsocketPayload.
+	// Considering compatibility with old versions, should set it to
+	// upgrader.ReleasePayload only when upgrader.ReleasePayload is true.
+	wsc.releasePayload = u.ReleasePayload
+	if !wsc.releasePayload {
+		wsc.releasePayload = wsc.Engine.ReleaseWebsocketPayload
 	}
 
 	return wsc, nil
