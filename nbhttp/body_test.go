@@ -60,6 +60,7 @@ func TestBodyReader(t *testing.T) {
 	if !bytes.Equal(allBytes, body1) {
 		t.Fatalf("!bytes.Equal(allBytes, body1)")
 	}
+	br1.Close()
 
 	br2 := newBR()
 	body2 := make([]byte, len(allBytes))
@@ -72,4 +73,5 @@ func TestBodyReader(t *testing.T) {
 	if !bytes.Equal(allBytes, body2) {
 		t.Fatalf("!bytes.Equal(allBytes, body2)")
 	}
+	br2.Close()
 }

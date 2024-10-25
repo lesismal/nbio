@@ -24,6 +24,7 @@ type BodyReader struct {
 	left    int      // num of byte left
 	buffers [][]byte // buffers that storage HTTP body
 	engine  *Engine  // allocator that manages buffers
+	closed  bool
 }
 
 // Read reads body bytes to p, returns the num of bytes read and error.
@@ -56,13 +57,17 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 //
 //go:norace
 func (br *BodyReader) Close() error {
+	if br.closed {
+		return nil
+	}
+	br.closed = true
 	if br.buffers != nil {
 		for _, b := range br.buffers {
 			br.engine.BodyAllocator.Free(b)
 		}
 	}
-	*br = emptyBodyReader
-	bodyReaderPool.Put(br)
+	// *br = emptyBodyReader
+	// bodyReaderPool.Put(br)
 	return nil
 }
 

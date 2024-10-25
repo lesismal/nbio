@@ -49,6 +49,8 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 					// do not release the body
 				} else {
 					br.Close()
+					*br = emptyBodyReader
+					bodyReaderPool.Put(br)
 				}
 			} else if !retainHTTPBody {
 				req.Body.Close()
@@ -74,6 +76,8 @@ func releaseClientResponse(res *http.Response) {
 		if res.Body != nil {
 			br := res.Body.(*BodyReader)
 			br.Close()
+			*br = emptyBodyReader
+			bodyReaderPool.Put(br)
 		}
 		*res = emptyClientResponse
 		clientResponsePool.Put(res)
