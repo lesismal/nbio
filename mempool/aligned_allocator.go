@@ -63,7 +63,7 @@ type AlignedAllocator struct {
 // Malloc .
 //
 //go:norace
-func (amp *AlignedAllocator) Malloc(size int) []byte {
+func (amp *AlignedAllocator) Malloc(size int) *[]byte {
 	if size < 0 {
 		return nil
 	}
@@ -74,55 +74,58 @@ func (amp *AlignedAllocator) Malloc(size int) []byte {
 	} else {
 		ret = make([]byte, size)
 	}
-	amp.incrMalloc(ret)
-	return ret
+	amp.incrMalloc(&ret)
+	return &ret
 }
 
 // Realloc .
 //
 //go:norace
-func (amp *AlignedAllocator) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
+func (amp *AlignedAllocator) Realloc(pbuf *[]byte, size int) *[]byte {
+	if size <= cap(*pbuf) {
+		*pbuf = (*pbuf)[:size]
+		return pbuf
 	}
-	newBuf := amp.Malloc(size)
-	copy(newBuf, buf)
-	return newBuf
+	newBufPtr := amp.Malloc(size)
+	copy(*newBufPtr, *pbuf)
+	amp.Free(pbuf)
+	return newBufPtr
 }
 
 // Append .
 //
 //go:norace
-func (amp *AlignedAllocator) Append(buf []byte, more ...byte) []byte {
-	if cap(buf)-len(buf) >= len(more) {
-		return append(buf, more...)
+func (amp *AlignedAllocator) Append(pbuf *[]byte, more ...byte) *[]byte {
+	if cap(*pbuf)-len(*pbuf) >= len(more) {
+		*pbuf = append(*pbuf, more...)
+		return pbuf
 	}
-	newBuf := amp.Malloc(len(buf) + len(more))
-	copy(newBuf, buf)
-	copy(newBuf[len(buf):], more)
-	amp.Free(buf)
-	return newBuf
+	newBufPtr := amp.Malloc(len(*pbuf) + len(more))
+	copy(*newBufPtr, *pbuf)
+	copy((*newBufPtr)[len(*pbuf):], more)
+	amp.Free(pbuf)
+	return newBufPtr
 }
 
 // AppendString .
 //
 //go:norace
-func (amp *AlignedAllocator) AppendString(buf []byte, s string) []byte {
+func (amp *AlignedAllocator) AppendString(pbuf *[]byte, s string) *[]byte {
 	x := (*[2]uintptr)(unsafe.Pointer(&s))
 	h := [3]uintptr{x[0], x[1], x[1]}
 	more := *(*[]byte)(unsafe.Pointer(&h))
-	return amp.Append(buf, more...)
+	return amp.Append(pbuf, more...)
 }
 
 // Free .
 //
 //go:norace
-func (amp *AlignedAllocator) Free(buf []byte) {
-	size := cap(buf)
+func (amp *AlignedAllocator) Free(pbuf *[]byte) {
+	size := cap(*pbuf)
 	if (size&minAlignedBufferSizeMask) != 0 || size > maxAlignedBufferSize {
 		return
 	}
-	amp.incrFree(buf)
+	amp.incrFree(pbuf)
 	idx := alignedIndexes[size]
-	alignedPools[idx].Put(&buf)
+	alignedPools[idx].Put(pbuf)
 }

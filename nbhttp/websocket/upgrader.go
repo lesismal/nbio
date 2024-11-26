@@ -175,11 +175,11 @@ func NewUpgrader() *Upgrader {
 			c.WriteMessage(CloseMessage, nil)
 			return
 		}
-		buf := u.Engine.BodyAllocator.Malloc(len(text) + 2)
-		binary.BigEndian.PutUint16(buf[:2], uint16(code))
-		copy(buf[2:], text)
-		c.WriteMessage(CloseMessage, buf)
-		u.Engine.BodyAllocator.Free(buf)
+		pbuf := u.Engine.BodyAllocator.Malloc(len(text) + 2)
+		binary.BigEndian.PutUint16((*pbuf)[:2], uint16(code))
+		copy((*pbuf)[2:], text)
+		c.WriteMessage(CloseMessage, (*pbuf))
+		u.Engine.BodyAllocator.Free(pbuf)
 	}
 
 	return u
@@ -242,12 +242,9 @@ func (u *Upgrader) OnOpen(h func(*Conn)) {
 //go:norace
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 	if h != nil {
-		u.messageHandler = func(c *Conn, messageType MessageType, data []byte) {
-			if c.releasePayload && len(data) > 0 {
-				defer c.Engine.BodyAllocator.Free(data)
-			}
+		u.messageHandler = func(c *Conn, messageType MessageType, message []byte) {
 			if !c.closed {
-				h(c, messageType, data)
+				h(c, messageType, message)
 			}
 		}
 	}
@@ -258,11 +255,10 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 //go:norace
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
 	if h != nil {
-		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, data []byte) {
-			if c.releasePayload {
-				defer c.Engine.BodyAllocator.Free(data)
+		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, frame []byte) {
+			if !c.closed {
+				h(c, messageType, fin, frame)
 			}
-			h(c, messageType, fin, data)
 		}
 	}
 }
@@ -624,44 +620,45 @@ func (u *Upgrader) commCheck(w http.ResponseWriter, r *http.Request, responseHea
 //go:norace
 func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, challengeKey, subprotocol string, compress bool) error {
 	allocator := u.Engine.BodyAllocator
-	buf := allocator.Malloc(1024)[0:0]
-	buf = allocator.AppendString(buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
-	buf = allocator.Append(buf, acceptKeyBytes(challengeKey)...)
-	buf = allocator.AppendString(buf, "\r\n")
+	pbuf := allocator.Malloc(1024)
+	*pbuf = (*pbuf)[0:0]
+	pbuf = allocator.AppendString(pbuf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ")
+	pbuf = allocator.Append(pbuf, acceptKeyBytes(challengeKey)...)
+	pbuf = allocator.AppendString(pbuf, "\r\n")
 	if subprotocol != "" {
-		buf = allocator.AppendString(buf, "Sec-WebSocket-Protocol: ")
-		buf = allocator.AppendString(buf, subprotocol)
-		buf = allocator.AppendString(buf, "\r\n")
+		pbuf = allocator.AppendString(pbuf, "Sec-WebSocket-Protocol: ")
+		pbuf = allocator.AppendString(pbuf, subprotocol)
+		pbuf = allocator.AppendString(pbuf, "\r\n")
 	}
 	if compress {
-		buf = allocator.AppendString(buf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
+		pbuf = allocator.AppendString(pbuf, "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n")
 	}
 	for k, vs := range responseHeader {
 		if k == "Sec-Websocket-Protocol" {
 			continue
 		}
 		for _, v := range vs {
-			buf = allocator.AppendString(buf, k)
-			buf = allocator.AppendString(buf, ": ")
+			pbuf = allocator.AppendString(pbuf, k)
+			pbuf = allocator.AppendString(pbuf, ": ")
 			for i := 0; i < len(v); i++ {
 				b := v[i]
 				if b <= 31 {
 					// prevent response splitting.
 					b = ' '
 				}
-				buf = allocator.Append(buf, b)
+				pbuf = allocator.Append(pbuf, b)
 			}
-			buf = allocator.AppendString(buf, "\r\n")
+			pbuf = allocator.AppendString(pbuf, "\r\n")
 		}
 	}
-	buf = allocator.AppendString(buf, "\r\n")
+	pbuf = allocator.AppendString(pbuf, "\r\n")
 
 	if u.HandshakeTimeout > 0 {
 		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
-	_, err := conn.Write(buf)
-	allocator.Free(buf)
+	_, err := conn.Write(*pbuf)
+	allocator.Free(pbuf)
 	if err != nil {
 		conn.Close()
 		return err

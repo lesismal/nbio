@@ -11,7 +11,9 @@ import (
 
 func TestBodyReaderPool(t *testing.T) {
 	br := bodyReaderPool.Get().(*BodyReader)
-	br.buffers = append(br.buffers, make([]byte, 10))
+	buf := make([]byte, 10)
+	pbuf := &buf
+	br.buffers = append(br.buffers, pbuf)
 	*br = emptyBodyReader
 	bodyReaderPool.Put(br)
 
@@ -20,7 +22,9 @@ func TestBodyReaderPool(t *testing.T) {
 		if br2.buffers != nil {
 			t.Fatal("len>0")
 		}
-		br2.buffers = append(br.buffers, make([]byte, 10))
+		buf = make([]byte, 10)
+		pbuf = &buf
+		br2.buffers = append(br.buffers, pbuf)
 		*br2 = emptyBodyReader
 		bodyReaderPool.Put(br)
 	}

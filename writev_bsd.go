@@ -17,11 +17,12 @@ func writev(c *Conn, iovs [][]byte) (int, error) {
 	for _, v := range iovs {
 		size += len(v)
 	}
-	buf := c.p.g.BodyAllocator.Malloc(size)[:0]
+	pbuf := c.p.g.BodyAllocator.Malloc(size)
+	*pbuf = (*pbuf)[0:0]
 	for _, v := range iovs {
-		buf = append(buf, v...)
+		pbuf = c.p.g.BodyAllocator.Append(pbuf, v...)
 	}
-	n, err := syscall.Write(c.fd, buf)
-	c.p.g.BodyAllocator.Free(buf)
+	n, err := syscall.Write(c.fd, *pbuf)
+	c.p.g.BodyAllocator.Free(pbuf)
 	return n, err
 }

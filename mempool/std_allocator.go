@@ -8,39 +8,42 @@ type stdAllocator struct {
 // Malloc .
 //
 //go:norace
-func (a *stdAllocator) Malloc(size int) []byte {
+func (a *stdAllocator) Malloc(size int) *[]byte {
 	ret := make([]byte, size)
-	a.incrMalloc(ret)
-	return ret
+	a.incrMalloc(&ret)
+	return &ret
 }
 
 // Realloc .
 //
 //go:norace
-func (a *stdAllocator) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
+func (a *stdAllocator) Realloc(pbuf *[]byte, size int) *[]byte {
+	if size <= cap(*pbuf) {
+		*pbuf = (*pbuf)[:size]
+		return pbuf
 	}
 	newBuf := make([]byte, size)
-	copy(newBuf, buf)
-	return newBuf
+	copy(newBuf, *pbuf)
+	return &newBuf
 }
 
 // Free .
 //
 //go:norace
-func (a *stdAllocator) Free(buf []byte) {
-	a.incrFree(buf)
+func (a *stdAllocator) Free(pbuf *[]byte) {
+	a.incrFree(pbuf)
 }
 
 //go:norace
-func (a *stdAllocator) Append(buf []byte, more ...byte) []byte {
-	return append(buf, more...)
+func (a *stdAllocator) Append(pbuf *[]byte, more ...byte) *[]byte {
+	*pbuf = append(*pbuf, more...)
+	return pbuf
 }
 
 //go:norace
-func (a *stdAllocator) AppendString(buf []byte, more string) []byte {
-	return append(buf, more...)
+func (a *stdAllocator) AppendString(pbuf *[]byte, more string) *[]byte {
+	*pbuf = append(*pbuf, more...)
+	return pbuf
 }
 
 //go:norace

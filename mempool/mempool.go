@@ -43,60 +43,64 @@ func New(bufSize, freeSize int) Allocator {
 }
 
 // Malloc .
-func (mp *MemPool) Malloc(size int) []byte {
+func (mp *MemPool) Malloc(size int) *[]byte {
 	var ret []byte
 	if size > mp.freeSize {
 		ret = make([]byte, size)
-		mp.incrMalloc(ret)
-		return ret
+		mp.incrMalloc(&ret)
+		return &ret
 	}
 	pbuf := mp.pool.Get().(*[]byte)
 	n := cap(*pbuf)
 	if n < size {
 		*pbuf = append((*pbuf)[:n], make([]byte, size-n)...)
 	}
-	ret = (*pbuf)[:size]
-	mp.incrMalloc(ret)
-	return ret
+	(*pbuf) = (*pbuf)[:size]
+	mp.incrMalloc(pbuf)
+	return pbuf
 }
 
 // Realloc .
-func (mp *MemPool) Realloc(buf []byte, size int) []byte {
-	if size <= cap(buf) {
-		return buf[:size]
+func (mp *MemPool) Realloc(pbuf *[]byte, size int) *[]byte {
+	if size <= cap(*pbuf) {
+		*pbuf = (*pbuf)[:size]
+		return pbuf
 	}
 
-	if cap(buf) < mp.freeSize {
-		pbuf := mp.pool.Get().(*[]byte)
-		n := cap(buf)
+	if cap(*pbuf) < mp.freeSize {
+		newBufPtr := mp.pool.Get().(*[]byte)
+		n := cap(*newBufPtr)
 		if n < size {
-			*pbuf = append((*pbuf)[:n], make([]byte, size-n)...)
+			*newBufPtr = append((*newBufPtr)[:n], make([]byte, size-n)...)
 		}
-		*pbuf = (*pbuf)[:size]
-		copy(*pbuf, buf)
-		mp.Free(buf)
-		return *pbuf
+		*newBufPtr = (*newBufPtr)[:size]
+		copy(*newBufPtr, *pbuf)
+		mp.Free(pbuf)
+		return newBufPtr
 	}
-	return append(buf[:cap(buf)], make([]byte, size-cap(buf))...)[:size]
+	*pbuf = append((*pbuf)[:cap(*pbuf)], make([]byte, size-cap(*pbuf))...)[:size]
+	return pbuf
 }
 
 // Append .
-func (mp *MemPool) Append(buf []byte, more ...byte) []byte {
-	return append(buf, more...)
+func (mp *MemPool) Append(pbuf *[]byte, more ...byte) *[]byte {
+	*pbuf = append(*pbuf, more...)
+	return pbuf
 }
 
 // AppendString .
-func (mp *MemPool) AppendString(buf []byte, more string) []byte {
-	return append(buf, more...)
+func (mp *MemPool) AppendString(pbuf *[]byte, more string) *[]byte {
+	*pbuf = append(*pbuf, more...)
+	return pbuf
 }
 
 // Free .
-func (mp *MemPool) Free(buf []byte) {
-	if buf != nil && cap(buf) > 0 {
-		mp.incrFree(buf)
-		if cap(buf) > mp.freeSize {
+func (mp *MemPool) Free(pbuf *[]byte) {
+	if pbuf != nil && cap(*pbuf) > 0 {
+		mp.incrFree(pbuf)
+		if cap(*pbuf) > mp.freeSize {
 			return
 		}
-		mp.pool.Put(&buf)
+		mp.pool.Put(pbuf)
 	}
 }

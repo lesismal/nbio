@@ -1,3 +1,5 @@
+github.com/lesismal/llib v1.1.13-0.20241126034939-843600986aa0 h1:WAmyawCZj5BXct7I6WPrCpgMAG1yLM3//bp/9kOE+fI=
+github.com/lesismal/llib v1.1.13-0.20241126034939-843600986aa0/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
 github.com/lesismal/llib v1.1.13 h1:+w1+t0PykXpj2dXQck0+p6vdC9/mnbEXHgUy/HXDGfE=
 github.com/lesismal/llib v1.1.13/go.mod h1:70tFXXe7P1FZ02AU9l8LgSOK7d7sRrpnkUr3rd3gKSg=
 golang.org/x/crypto v0.0.0-20210513122933-cd7d49e622d5 h1:N6Jp/LCiEoIBX56BZSR2bepK5GtbSC2DDOYT742mMfE=
