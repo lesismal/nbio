@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/lesismal/nbio/logging"
+	"github.com/lesismal/nbio/mempool"
 	"github.com/lesismal/nbio/nbhttp"
 )
 
@@ -293,10 +294,13 @@ func (c *Conn) nextFrame() (int, MessageType, []byte, bool, bool, bool, error) {
 		ok, fin, res1, res2, res3 bool
 		err                       error
 		pdata                     = c.bytesCached
-		l                         = int64(len(*pdata))
+		l                         int64
 		headLen                   = int64(2)
 		total                     int64
 	)
+	if pdata != nil {
+		l = int64(len(*pdata))
+	}
 	if l >= 2 {
 		opcode = MessageType((*pdata)[0] & 0xF)
 		res1 = int8((*pdata)[0]&0x40) != 0
@@ -321,7 +325,11 @@ func (c *Conn) nextFrame() (int, MessageType, []byte, bool, bool, bool, error) {
 			bodyLen = int64(payloadLen)
 		}
 
-		if c.isMessageTooLarge(len(*c.message) + int(bodyLen)) {
+		ml := 0
+		if c.message != nil {
+			ml = len(*c.message)
+		}
+		if c.isMessageTooLarge(ml + int(bodyLen)) {
 			return 0, 0, nil, false, false, false, ErrMessageTooLarge
 		}
 
@@ -366,13 +374,13 @@ func (c *Conn) Parse(data []byte) error {
 	}
 
 	readLimit := c.Engine.ReadLimit
-	if readLimit > 0 && (len(*c.bytesCached)+len(data) > readLimit) {
+	if readLimit > 0 && (c.bytesCached != nil && (len(*c.bytesCached)+len(data) > readLimit)) {
 		c.mux.Unlock()
 		return nbhttp.ErrTooLong
 	}
 
 	var allocator = c.Engine.BodyAllocator
-	if len(*c.bytesCached) == 0 {
+	if c.bytesCached == nil {
 		c.bytesCached = allocator.Malloc(len(data))
 		copy(*c.bytesCached, data)
 	} else {
@@ -597,11 +605,9 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 	compress := c.enableWriteCompression && (messageType == TextMessage || messageType == BinaryMessage)
 	if compress {
 		w := &writeBuffer{
-			// free:   c.Engine.BodyAllocator.Free,
-			Buffer: bytes.NewBuffer(make([]byte, len(data))),
+			allocator: c.Engine.BodyAllocator,
 		}
-		// defer w.Close()
-		w.Reset()
+		defer w.Close()
 
 		var cw io.WriteCloser
 		if c.WebsocketCompressor != nil {
@@ -614,7 +620,9 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 			compress = false
 		} else {
 			cw.Close()
-			data = w.Bytes()
+			if w.pbuf != nil {
+				data = *w.pbuf
+			}
 		}
 	}
 
@@ -712,15 +720,29 @@ func (c *Conn) SetSession(session interface{}) {
 }
 
 type writeBuffer struct {
-	*bytes.Buffer
-	// free func(*[]byte)
+	pbuf      *[]byte
+	allocator mempool.Allocator
+}
+
+// Write .
+//
+//go:norace
+func (w *writeBuffer) Write(p []byte) (n int, err error) {
+	if w.pbuf == nil {
+		w.pbuf = w.allocator.Malloc(len(p))
+		return copy(*w.pbuf, p), nil
+	}
+	w.pbuf = w.allocator.Append(w.pbuf, p...)
+	return len(p), nil
 }
 
 // Close .
 //
 //go:norace
 func (w *writeBuffer) Close() error {
-	// w.free(w.Bytes())
+	if w.pbuf != nil {
+		w.allocator.Free(w.pbuf)
+	}
 	return nil
 }
 

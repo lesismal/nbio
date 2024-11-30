@@ -296,7 +296,10 @@ func (res *Response) eoncodeHead() {
 			pdata = mempool.Append(pdata, '0', '\r', '\n')
 		} else {
 			pdata = mempool.AppendString(pdata, contentLenthPrefix)
-			l := len(*res.bodyBuffer)
+			l := 0
+			if res.bodyBuffer != nil {
+				l = len(*res.bodyBuffer)
+			}
 			if l > 0 {
 				s := strconv.FormatInt(int64(l), 10)
 				pdata = mempool.AppendString(pdata, s)
