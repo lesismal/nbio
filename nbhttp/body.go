@@ -20,10 +20,10 @@ var (
 
 // BodyReader implements io.ReadCloser and is to be used as HTTP body.
 type BodyReader struct {
-	index   int      // first buffer read index
-	left    int      // num of byte left
-	buffers [][]byte // buffers that storage HTTP body
-	engine  *Engine  // allocator that manages buffers
+	index   int       // first buffer read index
+	left    int       // num of byte left
+	buffers []*[]byte // buffers that storage HTTP body
+	engine  *Engine   // allocator that manages buffers
 	closed  bool
 }
 
@@ -37,10 +37,10 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 	}
 	ncopy := 0
 	for ncopy < need && br.left > 0 {
-		b := br.buffers[0]
-		nc := copy(p[ncopy:], b[br.index:])
-		if nc+br.index >= len(b) {
-			br.engine.BodyAllocator.Free(b)
+		pbuf := br.buffers[0]
+		nc := copy(p[ncopy:], (*pbuf)[br.index:])
+		if nc+br.index >= len(*pbuf) {
+			br.engine.BodyAllocator.Free(pbuf)
 			br.buffers[0] = nil
 			br.buffers = br.buffers[1:]
 			br.index = 0
@@ -88,7 +88,7 @@ func (br *BodyReader) Left() int {
 // Buffers returns the underlayer buffers that store the HTTP Body.
 //
 //go:norace
-func (br *BodyReader) Buffers() [][]byte {
+func (br *BodyReader) Buffers() []*[]byte {
 	return br.buffers
 }
 
@@ -100,11 +100,11 @@ func (br *BodyReader) Buffers() [][]byte {
 //go:norace
 func (br *BodyReader) RawBodyBuffers() [][]byte {
 	buffers := make([][]byte, len(br.buffers))
-	for i, b := range br.buffers {
+	for i, pbuf := range br.buffers {
 		if i == 0 {
-			buffers[i] = b[br.index:]
+			buffers[i] = (*pbuf)[br.index:]
 		} else {
-			buffers[i] = b
+			buffers[i] = *pbuf
 		}
 	}
 	return buffers
@@ -131,28 +131,28 @@ func (br *BodyReader) append(data []byte) error {
 
 	br.left += (len(data))
 	if len(br.buffers) == 0 {
-		b := br.engine.BodyAllocator.Malloc(len(data))
-		copy(b, data)
-		br.buffers = append(br.buffers, b)
+		pbuf := br.engine.BodyAllocator.Malloc(len(data))
+		copy(*pbuf, data)
+		br.buffers = append(br.buffers, pbuf)
 	} else {
 		i := len(br.buffers) - 1
-		b := br.buffers[i]
-		l := len(b)
-		bLeft := cap(b) - len(b)
+		pbuf := br.buffers[i]
+		l := len(*pbuf)
+		bLeft := cap(*pbuf) - len(*pbuf)
 		if bLeft > 0 {
 			if bLeft > len(data) {
-				b = b[:l+len(data)]
+				*pbuf = (*pbuf)[:l+len(data)]
 			} else {
-				b = b[:cap(b)]
+				*pbuf = (*pbuf)[:cap(*pbuf)]
 			}
-			nc := copy(b[l:], data)
+			nc := copy((*pbuf)[l:], data)
 			data = data[nc:]
-			br.buffers[i] = b
+			br.buffers[i] = pbuf
 		}
 		if len(data) > 0 {
-			b = br.engine.BodyAllocator.Malloc(len(data))
-			copy(b, data)
-			br.buffers = append(br.buffers, b)
+			pbuf = br.engine.BodyAllocator.Malloc(len(data))
+			copy(*pbuf, data)
+			br.buffers = append(br.buffers, pbuf)
 		}
 	}
 	return nil

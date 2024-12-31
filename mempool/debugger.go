@@ -27,17 +27,17 @@ func (d *debugger) SetDebug(dbg bool) {
 }
 
 //go:norace
-func (d *debugger) incrMalloc(b []byte) {
+func (d *debugger) incrMalloc(pbuf *[]byte) {
 	if d.on {
-		d.incrMallocSlow(b)
+		d.incrMallocSlow(pbuf)
 	}
 }
 
 //go:norace
-func (d *debugger) incrMallocSlow(b []byte) {
+func (d *debugger) incrMallocSlow(pbuf *[]byte) {
 	atomic.AddInt64(&d.MallocCount, 1)
 	atomic.AddInt64(&d.NeedFree, 1)
-	size := cap(b)
+	size := cap(*pbuf)
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	if d.SizeMap == nil {
@@ -55,17 +55,17 @@ func (d *debugger) incrMallocSlow(b []byte) {
 }
 
 //go:norace
-func (d *debugger) incrFree(b []byte) {
+func (d *debugger) incrFree(pbuf *[]byte) {
 	if d.on {
-		d.incrFreeSlow(b)
+		d.incrFreeSlow(pbuf)
 	}
 }
 
 //go:norace
-func (d *debugger) incrFreeSlow(b []byte) {
+func (d *debugger) incrFreeSlow(pbuf *[]byte) {
 	atomic.AddInt64(&d.FreeCount, 1)
 	atomic.AddInt64(&d.NeedFree, -1)
-	size := cap(b)
+	size := cap(*pbuf)
 	d.mux.Lock()
 	defer d.mux.Unlock()
 	if v, ok := d.SizeMap[size]; ok {

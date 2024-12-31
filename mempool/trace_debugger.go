@@ -3,7 +3,6 @@ package mempool
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"runtime"
 	"sync"
 	"unsafe"
@@ -34,40 +33,40 @@ func NewTraceDebuger(allocator Allocator) *TraceDebugger {
 // Malloc .
 //
 //go:norace
-func (td *TraceDebugger) Malloc(size int) []byte {
+func (td *TraceDebugger) Malloc(size int) *[]byte {
 	td.mux.Lock()
 	defer td.mux.Unlock()
 
-	buf := td.allocator.Malloc(size)
-	ptr := bytesPointer(buf)
+	pbuf := td.allocator.Malloc(size)
+	ptr := bytesPointer(pbuf)
 	if stackPtr, ok := td.pAlloced[ptr]; ok {
 		printStack(fmt.Sprintf("malloc got a buf which has been malloced by otherwhere: %v", ptr), stackPtr)
 	}
 	td.setBufferPointer(ptr)
-	return buf
+	return pbuf
 }
 
 // deprecated.
 //
 //go:norace
-func (td *TraceDebugger) Realloc(buf []byte, size int) []byte {
-	newBuf := td.allocator.Realloc(buf, size)
-	return newBuf
+func (td *TraceDebugger) Realloc(pbuf *[]byte, size int) *[]byte {
+	newBufPtr := td.allocator.Realloc(pbuf, size)
+	return newBufPtr
 }
 
 // Append .
 //
 //go:norace
-func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
+func (td *TraceDebugger) Append(pbuf *[]byte, more ...byte) *[]byte {
 	td.mux.Lock()
 	defer td.mux.Unlock()
 
-	pold := bytesPointer(buf)
+	pold := bytesPointer(pbuf)
 	if _, ok := td.pAlloced[pold]; !ok {
 		printStack("Append to a buf which has not been malloced", nilStackPtr)
 	}
-	newBuf := td.allocator.Append(buf, more...)
-	pnew := bytesPointer(newBuf)
+	newBufPtr := td.allocator.Append(pbuf, more...)
+	pnew := bytesPointer(newBufPtr)
 	if pnew != pold {
 		if preStack, ok := td.pAlloced[pnew]; ok {
 			printStack(fmt.Sprintf("Append got another new buf which has been malloced by otherwhere: %v", pnew), preStack)
@@ -75,22 +74,22 @@ func (td *TraceDebugger) Append(buf []byte, more ...byte) []byte {
 		td.deleteBufferPointer(pold)
 		td.setBufferPointer(pnew)
 	}
-	return newBuf
+	return newBufPtr
 }
 
 // AppendString .
 //
 //go:norace
-func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
+func (td *TraceDebugger) AppendString(pbuf *[]byte, more string) *[]byte {
 	td.mux.Lock()
 	defer td.mux.Unlock()
 
-	pold := bytesPointer(buf)
+	pold := bytesPointer(pbuf)
 	if _, ok := td.pAlloced[pold]; !ok {
 		printStack("AppendString to a buf which has not been malloced", nilStackPtr)
 	}
-	newBuf := td.allocator.AppendString(buf, more)
-	pnew := bytesPointer(newBuf)
+	newBufPtr := td.allocator.AppendString(pbuf, more)
+	pnew := bytesPointer(newBufPtr)
 	if pnew != pold {
 		if preStack, ok := td.pAlloced[pnew]; ok {
 			printStack("AppendString got another new buf which has been malloced by otherwhere", preStack)
@@ -98,27 +97,27 @@ func (td *TraceDebugger) AppendString(buf []byte, more string) []byte {
 		td.deleteBufferPointer(pold)
 		td.setBufferPointer(pnew)
 	}
-	return newBuf
+	return newBufPtr
 }
 
 // Free .
 //
 //go:norace
-func (td *TraceDebugger) Free(buf []byte) {
+func (td *TraceDebugger) Free(pbuf *[]byte) {
 	td.mux.Lock()
 	defer td.mux.Unlock()
 
-	if cap(buf) == 0 {
+	if cap(*pbuf) == 0 {
 		printStack("Free invalid buf with cap 0", nilStackPtr)
 		return
 	}
-	ptr := bytesPointer(buf)
+	ptr := bytesPointer(pbuf)
 	_, ok := td.pAlloced[ptr]
 	if !ok {
 		printStack("Free a buf which is not malloced by allocator", nilStackPtr)
 	}
 	td.deleteBufferPointer(ptr)
-	td.allocator.Free(buf)
+	td.allocator.Free(pbuf)
 }
 
 //go:norace
@@ -211,12 +210,12 @@ current stack :
 -------------------------------------------
 
 `, info, preStack, currStack)
-	os.Exit(-1)
+	// os.Exit(-1)
 }
 
 //go:norace
-func bytesPointer(buf []byte) uintptr {
-	return (uintptr)(unsafe.Pointer(&(buf[:1][0])))
+func bytesPointer(pbuf *[]byte) uintptr {
+	return (uintptr)(unsafe.Pointer(&((*pbuf)[:1][0])))
 }
 
 // func stringPointer(s *string) uintptr {

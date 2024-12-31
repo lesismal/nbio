@@ -36,9 +36,9 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 	allocator := c.p.g.BodyAllocator
 	appendBuffer := func() {
 		t := &toWrite{} // poolToWrite.New().(*toWrite)
-		b := allocator.Malloc(len(buf))
-		copy(b, buf)
-		t.buf = b
+		pbuf := allocator.Malloc(len(buf))
+		copy(*pbuf, buf)
+		t.buf = pbuf
 		c.writeList = append(c.writeList, t)
 	}
 
@@ -52,15 +52,16 @@ func (c *Conn) newToWriteBuf(buf []byte) {
 		appendBuffer()
 	} else {
 		l := len(buf)
-		tailLen := len(tail.buf)
+		tailLen := len(*tail.buf)
 		if tailLen+l > maxWriteCacheOrFlushSize {
 			appendBuffer()
 		} else {
-			if cap(tail.buf) < tailLen+l {
-				b := allocator.Malloc(tailLen + l)[:tailLen]
-				copy(b, tail.buf)
+			if cap(*tail.buf) < tailLen+l {
+				pbuf := allocator.Malloc(tailLen + l)
+				*pbuf = (*pbuf)[:tailLen]
+				copy(*pbuf, *tail.buf)
 				allocator.Free(tail.buf)
-				tail.buf = b
+				tail.buf = pbuf
 			}
 			tail.buf = allocator.Append(tail.buf, buf...)
 		}
@@ -91,10 +92,10 @@ func (c *Conn) releaseToWrite(t *toWrite) {
 const maxWriteCacheOrFlushSize = 1024 * 64
 
 type toWrite struct {
-	fd     int    // file descriptor, used for sendfile
-	buf    []byte // buffer to write
-	offset int64  // buffer or file offset
-	remain int64  // buffer or file remain bytes
+	fd     int     // file descriptor, used for sendfile
+	buf    *[]byte // buffer to write
+	offset int64   // buffer or file offset
+	remain int64   // buffer or file remain bytes
 }
 
 // Conn implements net.Conn with non-blocking interfaces.
@@ -881,7 +882,7 @@ func (c *Conn) flush() error {
 	// }
 	writeBuffer := func() error {
 		head := c.writeList[0]
-		buf := head.buf[head.offset:]
+		buf := (*head.buf)[head.offset:]
 		n, err := syscall.Write(c.fd, buf)
 		if n > 0 {
 			if c.p.g.onWrittenSize != nil {
@@ -910,6 +911,7 @@ func (c *Conn) flush() error {
 				v.offset += int64(n)
 				if v.remain <= 0 {
 					c.releaseToWrite(c.writeList[0])
+					c.writeList[0] = nil
 					c.writeList = c.writeList[1:]
 				}
 			}

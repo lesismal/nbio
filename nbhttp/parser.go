@@ -38,7 +38,7 @@ type Parser struct {
 	mux sync.Mutex
 
 	// bytesCached for half packet.
-	bytesCached []byte
+	bytesCached *[]byte
 
 	// errClose error
 
@@ -115,7 +115,7 @@ func (p *Parser) CloseAndClean(err error) {
 	if p.Processor != nil {
 		p.Processor.Close(p, err)
 	}
-	if len(p.bytesCached) > 0 {
+	if p.bytesCached != nil && len(*p.bytesCached) > 0 {
 		mempool.Free(p.bytesCached)
 	}
 	if p.onClose != nil {
@@ -156,13 +156,16 @@ func (p *Parser) Parse(data []byte) error {
 	}
 
 	var start = 0
-	var offset = len(p.bytesCached)
+	var offset = 0
+	if p.bytesCached != nil {
+		offset = len(*p.bytesCached)
+	}
 	if offset > 0 {
 		if p.Engine.ReadLimit > 0 && offset+len(data) > p.Engine.ReadLimit {
 			return ErrTooLong
 		}
 		p.bytesCached = mempool.Append(p.bytesCached, data...)
-		data = p.bytesCached
+		data = *p.bytesCached
 	}
 
 UPGRADER:
@@ -674,14 +677,14 @@ Exit:
 	if left > 0 {
 		if p.bytesCached == nil {
 			p.bytesCached = mempool.Malloc(left)
-			copy(p.bytesCached, data[start:])
+			copy(*p.bytesCached, data[start:])
 		} else if start > 0 {
 			oldbytesCached := p.bytesCached
 			p.bytesCached = mempool.Malloc(left)
-			copy(p.bytesCached, data[start:])
+			copy(*p.bytesCached, data[start:])
 			mempool.Free(oldbytesCached)
 		}
-	} else if len(p.bytesCached) > 0 {
+	} else if p.bytesCached != nil && len(*p.bytesCached) > 0 {
 		mempool.Free(p.bytesCached)
 		p.bytesCached = nil
 	}

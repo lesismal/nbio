@@ -285,7 +285,7 @@ func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 		req := res.request
 		if !res.hijacked {
 			res.eoncodeHead()
-			if err := res.flushTrailer(conn); err != nil {
+			if err := res.flush(conn); err != nil {
 				conn.Close()
 				releaseRequest(req, engine.RetainHTTPBody)
 				releaseResponse(res)

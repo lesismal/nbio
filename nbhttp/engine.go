@@ -875,10 +875,10 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
 	}
 
-	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
+	pbuf := readBufferPool.Malloc(engine.BlockingReadBufferSize)
 	var parserCloser ParserCloser = parser
 	defer func() {
-		readBufferPool.Free(buffer)
+		readBufferPool.Free(pbuf)
 		if !conn.Trasfered {
 			parserCloser.CloseAndClean(err)
 		}
@@ -895,11 +895,11 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 	}()
 
 	for {
-		n, err = conn.Read(buffer)
+		n, err = conn.Read(*pbuf)
 		if err != nil {
 			return
 		}
-		parserCloser.Parse(buffer[:n])
+		parserCloser.Parse((*pbuf)[:n])
 		if conn.Trasfered {
 			parser.onClose = nil
 			parser.CloseAndClean(nil)
@@ -925,10 +925,10 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 	if readBufferPool == nil {
 		readBufferPool = getReadBufferPool(engine.BlockingReadBufferSize)
 	}
-	buffer := readBufferPool.Malloc(engine.BlockingReadBufferSize)
+	pbuf := readBufferPool.Malloc(engine.BlockingReadBufferSize)
 	var parserCloser ParserCloser = parser
 	defer func() {
-		readBufferPool.Free(buffer)
+		readBufferPool.Free(pbuf)
 		if !conn.Trasfered {
 			parserCloser.CloseAndClean(err)
 			tlsConn.Close()
@@ -945,20 +945,20 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 	}()
 
 	for {
-		nread, err = rconn.Read(buffer)
+		nread, err = rconn.Read(*pbuf)
 		if err != nil {
 			return
 		}
 
-		readed := buffer[:nread]
+		readed := (*pbuf)[:nread]
 		for {
-			_, nread, err = tlsConn.AppendAndRead(readed, buffer)
+			_, nread, err = tlsConn.AppendAndRead(readed, *pbuf)
 			readed = nil
 			if err != nil {
 				return
 			}
 			if nread > 0 {
-				err = parserCloser.Parse(buffer[:nread])
+				err = parserCloser.Parse((*pbuf)[:nread])
 				if err != nil {
 					logging.Debug("parser.Read failed: %v", err)
 					return
