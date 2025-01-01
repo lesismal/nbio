@@ -155,8 +155,8 @@ func (res *Response) Write(data []byte) (int, error) {
 APPEND_BODY:
 	if res.bodyBuffer == nil {
 		// If "Content-Length" has been set,
-		// no cached buffer, and
-		// the data size >= maxPacketSize,
+		// and no cached buffer,
+		// and the data size >= maxPacketSize,
 		// send the data directly.
 		if cl > 0 && len(data) >= maxPacketSize {
 			res.bodyWritten += l
@@ -166,32 +166,44 @@ APPEND_BODY:
 		// Prepare a new buffer for caching the data.
 		res.bodyBuffer = mempool.Malloc(l)
 		*res.bodyBuffer = (*res.bodyBuffer)[0:0]
-	} else if cl > 0 && len(*res.bodyBuffer)+len(data) >= maxPacketSize {
+	} else if cl > 0 && len(*res.bodyBuffer)+len(data) > maxPacketSize {
 		// If "Content-Length" has been set,
 		// has cached buffer, and
 		// the data total size >= maxPacketSize,
 		// send the cached buffer first.
-		_, err = conn.Write(*res.bodyBuffer)
-		if err != nil {
-			mempool.Free(res.bodyBuffer)
-			res.bodyBuffer = nil
-			return 0, err
+		if len(*res.bodyBuffer) > 0 {
+			_, err = conn.Write(*res.bodyBuffer)
+			*res.bodyBuffer = (*res.bodyBuffer)[0:0]
+			if err != nil {
+				mempool.Free(res.bodyBuffer)
+				res.bodyBuffer = nil
+				return 0, err
+			}
 		}
 
 		// If the new data size >= maxPacketSize,
 		// send the new data directly.
 		if len(data) >= maxPacketSize {
 			res.bodyWritten += l
+			mempool.Free(res.bodyBuffer)
+			res.bodyBuffer = nil
 			return conn.Write(data)
 		}
-
-		// Reset the cached buffer.
-		*res.bodyBuffer = (*res.bodyBuffer)[0:0]
 	}
 
 	// Append the data to the body buffer cache.
 	res.bodyWritten += l
 	res.bodyBuffer = mempool.Append(res.bodyBuffer, data...)
+	if len(*res.bodyBuffer) >= maxPacketSize {
+		l, err := conn.Write(*res.bodyBuffer)
+		if err != nil {
+			mempool.Free(res.bodyBuffer)
+			res.bodyBuffer = nil
+		} else {
+			*res.bodyBuffer = (*res.bodyBuffer)[0:0]
+		}
+		return l, err
+	}
 
 	return l, nil
 }
@@ -463,7 +475,7 @@ func (res *Response) flush(conn io.Writer) error {
 
 	if !res.chunked {
 		if res.buffer != nil {
-			if res.bodyBuffer != nil {
+			if res.bodyBuffer != nil && len(*res.bodyBuffer) > 0 {
 				if len(*res.buffer)+len(*res.bodyBuffer) > maxPacketSize {
 					_, err = conn.Write(*res.buffer)
 					mempool.Free(res.buffer)
@@ -488,7 +500,7 @@ func (res *Response) flush(conn io.Writer) error {
 				return err
 			}
 		}
-		if res.bodyBuffer != nil {
+		if res.bodyBuffer != nil && len(*res.bodyBuffer) > 0 {
 			_, err = conn.Write(*res.bodyBuffer)
 			mempool.Free(res.bodyBuffer)
 			res.bodyBuffer = nil
