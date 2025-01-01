@@ -86,7 +86,6 @@ func (res *Response) WriteHeader(statusCode int) {
 }
 
 const maxPacketSize = 65536
-const halfPacketSize = 32768
 
 // WriteString .
 //
@@ -147,7 +146,6 @@ func (res *Response) Write(data []byte) (int, error) {
 		} else {
 			_, err = conn.Write(*pbuf)
 			mempool.Free(pbuf)
-			pbuf = nil
 			if err != nil {
 				return 0, err
 			}
@@ -204,18 +202,21 @@ APPEND_BODY:
 func (res *Response) writeChunk(conn net.Conn, data []byte, l int) (int, error) {
 	res.eoncodeHead()
 
-	pbuf := res.buffer
+	var pbuf = res.buffer
 	res.buffer = nil
-	lenStr := res.formatInt(l, 16)
-	totalSize := 0
+	var lenStr = res.formatInt(l, 16)
+	var totalSize = len(lenStr) + len(data) + 4
+
 	if pbuf != nil {
-		totalSize = len(*pbuf) + len(lenStr) + l + 4
-	} else {
-		totalSize = len(lenStr) + l + 4
-		pbuf = mempool.Malloc(totalSize)
-		*pbuf = (*pbuf)[0:0]
+		totalSize += len(*pbuf)
 	}
+
+	// If total size < maxPacketSize, append the data to the cache buffer,
+	// then return and wait for new data.
 	if totalSize < maxPacketSize {
+		if pbuf == nil {
+			pbuf = mempool.Malloc(totalSize)
+		}
 		pbuf = mempool.AppendString(pbuf, lenStr)
 		pbuf = mempool.AppendString(pbuf, "\r\n")
 		pbuf = mempool.Append(pbuf, data...)
@@ -223,27 +224,31 @@ func (res *Response) writeChunk(conn net.Conn, data []byte, l int) (int, error) 
 		res.buffer = pbuf
 		return l, nil
 	}
-	lenStrWrote := false
-	firstLen := len(*pbuf) + len(lenStr) + 2
-	if cap(*pbuf) >= firstLen || firstLen <= halfPacketSize {
+
+	var err error
+
+	// When total size >= maxPacketSize:
+	// 1. If has cache buffer, send the cache buffer and length string first.
+	if pbuf != nil {
 		pbuf = mempool.AppendString(pbuf, lenStr)
 		pbuf = mempool.AppendString(pbuf, "\r\n")
-		lenStrWrote = true
-	}
-	_, err := conn.Write(*pbuf)
-	mempool.Free(pbuf)
-	if err != nil {
-		return 0, err
-	}
-	if lenStrWrote {
-		pbuf = mempool.Malloc(len(data) + 2)
+		_, err = conn.Write(*pbuf)
+		mempool.Free(pbuf)
+		if err != nil {
+			return 0, err
+		}
+
+		// Reset the cache buffer.
 		*pbuf = (*pbuf)[0:0]
 	} else {
-		pbuf = mempool.Malloc(len(data) + len(lenStr) + 4)
+		// 2. Append length string to the new buffer.
+		pbuf = mempool.Malloc(totalSize)
 		*pbuf = (*pbuf)[0:0]
 		pbuf = mempool.AppendString(pbuf, lenStr)
 		pbuf = mempool.AppendString(pbuf, "\r\n")
 	}
+
+	// 3. Append data and tail to the buffer and send the buffer.
 	pbuf = mempool.Append(pbuf, data...)
 	pbuf = mempool.AppendString(pbuf, "\r\n")
 	if len(*pbuf) < maxPacketSize {
