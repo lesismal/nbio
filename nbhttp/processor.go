@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lesismal/nbio/mempool"
 )
 
 var (
@@ -65,6 +67,12 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 //go:norace
 func releaseResponse(res *Response) {
 	if res != nil {
+		if res.buffer != nil {
+			mempool.Free(res.buffer)
+		}
+		if res.bodyBuffer != nil {
+			mempool.Free(res.bodyBuffer)
+		}
 		*res = emptyResponse
 		responsePool.Put(res)
 	}
@@ -284,6 +292,8 @@ func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 	if conn != nil {
 		req := res.request
 		if !res.hijacked {
+			res.WriteHeader(http.StatusOK)
+			res.checkChunked()
 			res.eoncodeHead()
 			if err := res.flush(conn); err != nil {
 				conn.Close()
