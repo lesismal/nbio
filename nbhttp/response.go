@@ -195,7 +195,7 @@ APPEND_BODY:
 	res.bodyWritten += l
 	res.bodyBuffer = mempool.Append(res.bodyBuffer, data...)
 	if len(*res.bodyBuffer) >= maxPacketSize {
-		l, err := conn.Write(*res.bodyBuffer)
+		l, err = conn.Write(*res.bodyBuffer)
 		if err != nil {
 			mempool.Free(res.bodyBuffer)
 			res.bodyBuffer = nil
