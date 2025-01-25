@@ -167,7 +167,9 @@ func (c *Conn) handleDataFrame(opcode MessageType, fin bool, pbody *[]byte) {
 		if c.releasePayload {
 			defer c.Engine.BodyAllocator.Free(pbody)
 		}
-		h(c, opcode, fin, *pbody)
+		c.Engine.SyncCall(func() {
+			h(c, opcode, fin, *pbody)
+		})
 	} else {
 		if !c.Execute(func() {
 			if c.releasePayload {
@@ -188,7 +190,9 @@ func (c *Conn) handleMessage(opcode MessageType, pbody *[]byte) {
 		if c.releasePayload {
 			defer c.Engine.BodyAllocator.Free(pbody)
 		}
-		c.handleWsMessage(opcode, *pbody)
+		c.Engine.SyncCall(func() {
+			c.handleWsMessage(opcode, *pbody)
+		})
 	} else {
 		if !c.Execute(func() {
 			if c.releasePayload {
@@ -209,7 +213,9 @@ func (c *Conn) handleProtocolMessage(opcode MessageType, pbody *[]byte) {
 		if c.releasePayload {
 			defer c.Engine.BodyAllocator.Free(pbody)
 		}
-		c.handleWsMessage(opcode, *pbody)
+		c.Engine.SyncCall(func() {
+			c.handleWsMessage(opcode, *pbody)
+		})
 	} else {
 		if !c.Execute(func() {
 			if c.releasePayload {

@@ -45,6 +45,13 @@ func (tp *TaskPool) fork(f func()) bool {
 	return false
 }
 
+// Call .
+//
+//go:norace
+func (tp *TaskPool) Call(f func()) {
+	tp.caller(f)
+}
+
 // Go .
 //
 //go:norace

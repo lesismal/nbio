@@ -10,6 +10,17 @@ type IOTaskPool struct {
 	pool sync.Pool
 }
 
+// Call .
+//
+//go:norace
+func (tp *IOTaskPool) Call(f func([]byte)) {
+	tp.task.Call(func() {
+		pbuf := tp.pool.Get().(*[]byte)
+		f(*pbuf)
+		tp.pool.Put(pbuf)
+	})
+}
+
 // Go .
 //
 //go:norace
