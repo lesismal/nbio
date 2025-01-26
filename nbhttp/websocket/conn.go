@@ -161,7 +161,18 @@ func (c *Conn) CompressionEnabled() bool {
 }
 
 //go:norace
+func (c *Conn) safeBufferPointer(pbody *[]byte) *[]byte {
+	if pbody == nil {
+		var b []byte
+		pbody = &b
+	}
+	return pbody
+}
+
+//go:norace
 func (c *Conn) handleDataFrame(opcode MessageType, fin bool, pbody *[]byte) {
+	pbody = c.safeBufferPointer(pbody)
+
 	h := c.dataFrameHandler
 	if c.isBlockingMod {
 		if c.releasePayload {
@@ -186,6 +197,8 @@ func (c *Conn) handleDataFrame(opcode MessageType, fin bool, pbody *[]byte) {
 
 //go:norace
 func (c *Conn) handleMessage(opcode MessageType, pbody *[]byte) {
+	pbody = c.safeBufferPointer(pbody)
+
 	if c.isBlockingMod {
 		if c.releasePayload {
 			defer c.Engine.BodyAllocator.Free(pbody)
@@ -209,25 +222,7 @@ func (c *Conn) handleMessage(opcode MessageType, pbody *[]byte) {
 
 //go:norace
 func (c *Conn) handleProtocolMessage(opcode MessageType, pbody *[]byte) {
-	if c.isBlockingMod {
-		if c.releasePayload {
-			defer c.Engine.BodyAllocator.Free(pbody)
-		}
-		c.Engine.SyncCall(func() {
-			c.handleWsMessage(opcode, *pbody)
-		})
-	} else {
-		if !c.Execute(func() {
-			if c.releasePayload {
-				defer c.Engine.BodyAllocator.Free(pbody)
-			}
-			c.handleWsMessage(opcode, *pbody)
-		}) {
-			if c.releasePayload {
-				defer c.Engine.BodyAllocator.Free(pbody)
-			}
-		}
-	}
+	c.handleMessage(opcode, pbody)
 }
 
 //go:norace
