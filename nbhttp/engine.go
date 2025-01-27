@@ -1138,7 +1138,9 @@ func NewEngine(conf Config) *Engine {
 		emptyRequest: (&http.Request{}).WithContext(baseCtx),
 		BaseCtx:      baseCtx,
 		Cancel:       cancel,
-		SyncCall:     serverCall,
+	}
+	if engine.SyncCall == nil {
+		engine.SyncCall = serverCall
 	}
 
 	// shouldSupportTLS := !conf.SupportServerOnly || len(conf.AddrsTLS) > 0
