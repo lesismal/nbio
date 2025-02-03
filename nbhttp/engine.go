@@ -612,6 +612,7 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 					return
 				}
 				if nread > 0 {
+					parserCloser = c.Session().(ParserCloser)
 					err := parserCloser.Parse(buffer[:nread])
 					if err != nil {
 						logging.Debug("ParserCloser.Read failed: %v", err)
