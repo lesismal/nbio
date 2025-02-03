@@ -253,6 +253,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 		}
 
 		wsConn = NewClientConn(options, conn, resp.Header.Get(secWebsocketProtoHeaderField), remoteCompressionEnabled, false)
+		parser.ParserCloser = wsConn
 		wsConn.Engine = parser.Engine
 		wsConn.Execute = parser.Execute
 		nbc.SetSession(wsConn)
