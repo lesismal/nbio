@@ -2,4 +2,4 @@ module github.com/lesismal/nbio
 
 go 1.16
 
-require github.com/lesismal/llib v1.2.0
+require github.com/lesismal/llib v1.2.1
