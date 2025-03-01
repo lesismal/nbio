@@ -320,7 +320,10 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	nbhttpConn, isReadingByParser := conn.(*nbhttp.Conn)
 	if isReadingByParser {
 		underLayerConn = nbhttpConn.Conn
-		parser = nbhttpConn.Parser
+		// 使用类型断言将 ParserCloser 接口转换为 *nbhttp.Parser
+		if p, ok := nbhttpConn.Parser.(*nbhttp.Parser); ok {
+			parser = p
+		}
 	} else {
 		underLayerConn = conn
 	}

@@ -108,6 +108,12 @@ type Config struct {
 
 	// BodyAllocator sets the buffer allocator for write cache.
 	BodyAllocator mempool.Allocator
+
+	// UseAdaptiveBuffer 是否使用自适应缓冲区
+	UseAdaptiveBuffer bool
+
+	// AdaptiveBufferConfig 自适应缓冲区配置
+	AdaptiveBufferConfig AdaptiveBufferConfig
 }
 
 // Gopher keeps old type to compatible with new name Engine.
@@ -167,6 +173,9 @@ type Engine struct {
 	onStop func()
 
 	ioTaskPool *taskpool.IOTaskPool
+
+	// 自适应缓冲区
+	adaptiveBuffer *AdaptiveBuffer
 }
 
 // SetETAsyncRead .

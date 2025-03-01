@@ -222,6 +222,9 @@ type Config struct {
 	AsyncReadInPoller bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
 	IOExecute func(f func([]byte))
+
+	// UseFastParser 使用优化的HTTP解析器
+	UseFastParser bool
 }
 
 // Engine .
@@ -310,7 +313,7 @@ func (e *Engine) closeAllConns() {
 
 type Conn struct {
 	net.Conn
-	Parser    *Parser
+	Parser    ParserCloser
 	Trasfered bool
 }
 
@@ -698,7 +701,14 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	engine.mux.Unlock()
 	engine._onOpen(conn.Conn)
 	processor := NewServerProcessor()
-	parser := NewParser(conn, engine, processor, false, nbc.Execute)
+
+	var parser ParserCloser
+	if engine.UseFastParser {
+		parser = NewFastParser(conn, engine, processor, false, nbc.Execute)
+	} else {
+		parser = NewParser(conn, engine, processor, false, nbc.Execute)
+	}
+
 	// if engine.isOneshot {
 	// 	parser.Execute = SyncExecutor
 	// }
@@ -748,8 +758,13 @@ func (engine *Engine) AddConnNonTLSBlocking(conn *Conn, tlsConfig *tls.Config, d
 	engine.mux.Unlock()
 	engine._onOpen(conn)
 	processor := NewServerProcessor()
-	parser := NewParser(conn, engine, processor, false, SyncExecutor)
-	parser.Engine = engine
+
+	var parser ParserCloser
+	if engine.UseFastParser {
+		parser = NewFastParser(conn, engine, processor, false, SyncExecutor)
+	} else {
+		parser = NewParser(conn, engine, processor, false, SyncExecutor)
+	}
 	conn.Parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 	go engine.readConnBlocking(conn, parser, decrease)
@@ -799,12 +814,17 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	tlsConn := tls.NewConn(nbc, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	conn = &Conn{Conn: tlsConn}
 	processor := NewServerProcessor()
-	parser := NewParser(conn, engine, processor, false, nbc.Execute)
+
+	var parser ParserCloser
+	if engine.UseFastParser {
+		parser = NewFastParser(conn, engine, processor, false, nbc.Execute)
+	} else {
+		parser = NewParser(conn, engine, processor, false, nbc.Execute)
+	}
+
 	// if engine.isOneshot {
 	// 	parser.Execute = SyncExecutor
 	// }
-	parser.Conn = conn
-	parser.Engine = engine
 	conn.Parser = parser
 	nbc.SetSession(parser)
 
@@ -858,7 +878,14 @@ func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decr
 	tlsConn := tls.NewConn(underLayerConn, tlsConfig, isClient, isNonBlock, engine.TLSAllocator)
 	conn = &Conn{Conn: tlsConn}
 	processor := NewServerProcessor()
-	parser := NewParser(conn, engine, processor, false, SyncExecutor)
+
+	var parser ParserCloser
+	if engine.UseFastParser {
+		parser = NewFastParser(conn, engine, processor, false, SyncExecutor)
+	} else {
+		parser = NewParser(conn, engine, processor, false, SyncExecutor)
+	}
+
 	conn.Parser = parser
 	conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 	tlsConn.SetSession(parser)
@@ -866,7 +893,7 @@ func (engine *Engine) AddConnTLSBlocking(conn *Conn, tlsConfig *tls.Config, decr
 }
 
 //go:norace
-func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func()) {
+func (engine *Engine) readConnBlocking(conn *Conn, parser ParserCloser, decrease func()) {
 	var (
 		n   int
 		err error
@@ -903,21 +930,14 @@ func (engine *Engine) readConnBlocking(conn *Conn, parser *Parser, decrease func
 		}
 		parserCloser.Parse((*pbuf)[:n])
 		if conn.Trasfered {
-			parser.onClose = nil
-			parser.CloseAndClean(nil)
+			parserCloser.CloseAndClean(nil)
 			return
-		}
-		if parser != nil && parser.ParserCloser != nil {
-			parserCloser = parser.ParserCloser
-			parser.onClose = nil
-			parser.CloseAndClean(nil)
-			parser = nil
 		}
 	}
 }
 
 //go:norace
-func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *tls.Conn, parser *Parser, decrease func()) {
+func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *tls.Conn, parser ParserCloser, decrease func()) {
 	var (
 		err   error
 		nread int
@@ -966,15 +986,8 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 					return
 				}
 				if conn.Trasfered {
-					parser.onClose = nil
-					parser.CloseAndClean(nil)
+					parserCloser.CloseAndClean(nil)
 					return
-				}
-				if parser != nil && parser.ParserCloser != nil {
-					parserCloser = parser.ParserCloser
-					parser.onClose = nil
-					parser.CloseAndClean(nil)
-					parser = nil
 				}
 			}
 			if nread == 0 {

@@ -162,14 +162,38 @@ func NewEngine(conf Config) *Engine {
 		connsStd:  map[*Conn]struct{}{},
 	}
 
+	// 初始化自适应缓冲区
+	if conf.UseAdaptiveBuffer {
+		g.adaptiveBuffer = NewAdaptiveBuffer(conf.AdaptiveBufferConfig)
+	}
+
 	g.initHandlers()
 
-	g.OnReadBufferAlloc(func(c *Conn) []byte {
-		if c.ReadBuffer == nil {
-			c.ReadBuffer = make([]byte, g.ReadBufferSize)
-		}
-		return c.ReadBuffer
-	})
+	// 如果启用了自适应缓冲区，修改读缓冲区分配函数
+	if g.adaptiveBuffer != nil {
+		g.OnReadBufferAlloc(func(c *Conn) []byte {
+			buf := g.adaptiveBuffer.Get()
+			return *buf
+		})
+
+		g.OnReadBufferFree(func(c *Conn, buffer []byte) {
+			// 记录读取的字节数，用于自适应调整
+			if len(buffer) > 0 {
+				g.adaptiveBuffer.RecordRead(len(buffer))
+			}
+
+			// 将缓冲区包装为指针并归还到池中
+			buf := &buffer
+			g.adaptiveBuffer.Put(buf)
+		})
+	} else {
+		g.OnReadBufferAlloc(func(c *Conn) []byte {
+			if c.ReadBuffer == nil {
+				c.ReadBuffer = make([]byte, g.ReadBufferSize)
+			}
+			return c.ReadBuffer
+		})
+	}
 
 	return g
 }

@@ -84,7 +84,13 @@ func (g *Engine) Start() error {
 
 	// Start IO pollers.
 	for i := 0; i < g.NPoller; i++ {
-		g.pollers[i].ReadBuffer = make([]byte, g.ReadBufferSize)
+		// 使用自适应缓冲区或固定大小缓冲区
+		if g.adaptiveBuffer != nil {
+			buf := g.adaptiveBuffer.Get()
+			g.pollers[i].ReadBuffer = *buf
+		} else {
+			g.pollers[i].ReadBuffer = make([]byte, g.ReadBufferSize)
+		}
 		g.Add(1)
 		go g.pollers[i].start()
 	}
@@ -299,7 +305,31 @@ func NewEngine(conf Config) *Engine {
 		Timer:  timer.New(conf.Name),
 	}
 
+	// 初始化自适应缓冲区
+	if conf.UseAdaptiveBuffer {
+		g.adaptiveBuffer = NewAdaptiveBuffer(conf.AdaptiveBufferConfig)
+	}
+
 	g.initHandlers()
+
+	// 如果启用了自适应缓冲区，修改读缓冲区分配函数
+	if g.adaptiveBuffer != nil {
+		g.OnReadBufferAlloc(func(c *Conn) []byte {
+			buf := g.adaptiveBuffer.Get()
+			return *buf
+		})
+
+		g.OnReadBufferFree(func(c *Conn, buffer []byte) {
+			// 记录读取的字节数，用于自适应调整
+			if len(buffer) > 0 {
+				g.adaptiveBuffer.RecordRead(len(buffer))
+			}
+
+			// 将缓冲区包装为指针并归还到池中
+			buf := &buffer
+			g.adaptiveBuffer.Put(buf)
+		})
+	}
 
 	return g
 }

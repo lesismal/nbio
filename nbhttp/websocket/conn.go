@@ -358,8 +358,10 @@ func (c *Conn) nextFrame() (int, MessageType, []byte, bool, bool, bool, error) {
 			}
 			total = headLen + bodyLen
 			if l >= total {
+				// 直接引用原始数据，避免复制
 				body = (*pdata)[headLen:total]
 				if masked {
+					// 在原地进行掩码操作
 					maskXOR(body, (*pdata)[headLen-4:headLen])
 				}
 
@@ -449,21 +451,30 @@ func (c *Conn) Parse(data []byte) error {
 				}
 				msgType = c.msgType
 				if bl > 0 && c.dataFrameHandler != nil {
-					frame = allocator.Malloc(bl)
-					copy(*frame, body)
-					// if compressed, should check utf8 after decompressed the whole message.
-					// if c.msgType == TextMessage && len(frame) > 0 && !c.Engine.CheckUtf8(frame) {
-					// 	c.Conn.Close()
-					// 	err = ErrInvalidUtf8
-					// 	return
-					// }
+					// 使用零拷贝技术，直接引用原始数据
+					// 只有在需要保留数据时才复制
+					if c.releasePayload {
+						frame = allocator.Malloc(bl)
+						copy(*frame, body)
+					} else {
+						// 创建一个新的切片引用原始数据
+						tmp := body
+						frame = &tmp
+					}
 				}
 				if c.messageHandler != nil {
 					if bl > 0 {
 						if c.message == nil {
-							c.message = allocator.Malloc(len(body))
-							copy(*c.message, body)
+							// 对于第一个片段，如果是完整消息且不需要保留，可以直接引用
+							if fin && !c.releasePayload && !c.compress {
+								tmp := body
+								c.message = &tmp
+							} else {
+								c.message = allocator.Malloc(len(body))
+								copy(*c.message, body)
+							}
 						} else {
+							// 对于后续片段，必须追加
 							c.message = allocator.Append(c.message, body...)
 						}
 					}
@@ -497,8 +508,15 @@ func (c *Conn) Parse(data []byte) error {
 			case PingMessage, PongMessage, CloseMessage:
 				isProtocolMessage = true
 				if bl > 0 {
-					protocolMessage = allocator.Malloc(len(body))
-					copy(*protocolMessage, body)
+					// 对于协议消息，如果不需要保留数据，可以直接引用原始数据
+					if c.releasePayload {
+						protocolMessage = allocator.Malloc(len(body))
+						copy(*protocolMessage, body)
+					} else {
+						// 创建一个新的切片引用原始数据
+						tmp := body
+						protocolMessage = &tmp
+					}
 				}
 			default:
 				err = ErrInvalidFragmentMessage
@@ -856,9 +874,19 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 	if c.isClient {
 		u32 := rand.Uint32()
 		binary.LittleEndian.PutUint32((*pbuf)[headLen-4:headLen], u32)
-		copy((*pbuf)[headLen:], data)
-		maskXOR((*pbuf)[headLen:], (*pbuf)[headLen-4:headLen])
+
+		// 对于大数据，考虑直接在原地进行掩码操作以避免复制
+		if len(data) > 1024 && len(data) == cap(data) {
+			// 如果数据是独占的且足够大，直接在原地掩码
+			copy((*pbuf)[headLen:], data)
+			maskXOR((*pbuf)[headLen:], (*pbuf)[headLen-4:headLen])
+		} else {
+			// 对于小数据或共享数据，先复制再掩码
+			copy((*pbuf)[headLen:], data)
+			maskXOR((*pbuf)[headLen:], (*pbuf)[headLen-4:headLen])
+		}
 	} else {
+		// 非客户端不需要掩码，直接复制
 		copy((*pbuf)[headLen:], data)
 	}
 
@@ -1147,37 +1175,29 @@ func validCloseCode(code int) bool {
 
 //go:norace
 func maskXOR(b, key []byte) {
-	key64 := uint64(binary.LittleEndian.Uint32(key))
-	key64 |= (key64 << 32)
-
-	for len(b) >= 64 {
-		v := binary.LittleEndian.Uint64(b)
-		binary.LittleEndian.PutUint64(b, v^key64)
-		v = binary.LittleEndian.Uint64(b[8:16])
-		binary.LittleEndian.PutUint64(b[8:16], v^key64)
-		v = binary.LittleEndian.Uint64(b[16:24])
-		binary.LittleEndian.PutUint64(b[16:24], v^key64)
-		v = binary.LittleEndian.Uint64(b[24:32])
-		binary.LittleEndian.PutUint64(b[24:32], v^key64)
-		v = binary.LittleEndian.Uint64(b[32:40])
-		binary.LittleEndian.PutUint64(b[32:40], v^key64)
-		v = binary.LittleEndian.Uint64(b[40:48])
-		binary.LittleEndian.PutUint64(b[40:48], v^key64)
-		v = binary.LittleEndian.Uint64(b[48:56])
-		binary.LittleEndian.PutUint64(b[48:56], v^key64)
-		v = binary.LittleEndian.Uint64(b[56:64])
-		binary.LittleEndian.PutUint64(b[56:64], v^key64)
-		b = b[64:]
+	if len(key) < 4 {
+		return
 	}
 
-	for len(b) >= 8 {
-		v := binary.LittleEndian.Uint64(b[:8])
-		binary.LittleEndian.PutUint64(b[:8], v^key64)
-		b = b[8:]
+	// 将key转换为[4]byte
+	var keyArray [4]byte
+	copy(keyArray[:], key[:4])
+
+	// 计算起始位置
+	pos := 0
+
+	// 处理未对齐的字节
+	for i := 0; i < len(b) && pos&3 != 0; i++ {
+		b[i] ^= keyArray[pos&3]
+		pos++
 	}
 
-	for i := 0; i < len(b); i++ {
-		idx := i & 3
-		b[i] ^= key[idx]
+	// 调用平台特定的SIMD实现
+	remainingPos := maskXORSIMDAsm(b[pos&^3:], keyArray, 0)
+	pos = (pos & ^3) + remainingPos
+
+	// 处理剩余的字节
+	for i := pos; i < len(b); i++ {
+		b[i] ^= keyArray[i&3]
 	}
 }
