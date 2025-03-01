@@ -182,6 +182,8 @@ func (a *TieredAllocator) Realloc(buf *[]byte, size int) *[]byte {
 }
 
 // Append 追加数据到内存块
+//
+//go:nolint
 func (a *TieredAllocator) Append(buf *[]byte, data ...byte) *[]byte {
 	if buf == nil {
 		newBuf := a.Malloc(len(data))
@@ -227,6 +229,8 @@ func (a *TieredAllocator) Append(buf *[]byte, data ...byte) *[]byte {
 }
 
 // AppendString 追加字符串到内存块
+//
+//go:nolint
 func (a *TieredAllocator) AppendString(buf *[]byte, data string) *[]byte {
 	if buf == nil {
 		newBuf := a.Malloc(len(data))

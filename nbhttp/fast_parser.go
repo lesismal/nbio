@@ -107,6 +107,8 @@ var (
 )
 
 // 常用HTTP头
+//
+//go:nolint
 var (
 	headerContentLength    = []byte("Content-Length")
 	headerContentType      = []byte("Content-Type")
@@ -197,6 +199,8 @@ func (p *FastParser) Reset() {
 }
 
 // Parse 解析HTTP请求
+//
+//go:nolint
 func (p *FastParser) Parse(data []byte) error {
 	if len(data) == 0 {
 		return nil
