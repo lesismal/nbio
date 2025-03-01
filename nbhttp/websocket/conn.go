@@ -1183,21 +1183,18 @@ func maskXOR(b, key []byte) {
 	var keyArray [4]byte
 	copy(keyArray[:], key[:4])
 
-	// 计算起始位置
-	pos := 0
-
-	// 处理未对齐的字节
-	for i := 0; i < len(b) && pos&3 != 0; i++ {
-		b[i] ^= keyArray[pos&3]
-		pos++
+	// 直接使用通用实现，不使用SIMD优化
+	// 主循环 - 每次处理4个字节
+	n := len(b) / 4 * 4
+	for i := 0; i < n; i += 4 {
+		b[i+0] ^= keyArray[0]
+		b[i+1] ^= keyArray[1]
+		b[i+2] ^= keyArray[2]
+		b[i+3] ^= keyArray[3]
 	}
 
-	// 调用平台特定的SIMD实现
-	remainingPos := maskXORSIMDAsm(b[pos&^3:], keyArray, 0)
-	pos = (pos & ^3) + remainingPos
-
 	// 处理剩余的字节
-	for i := pos; i < len(b); i++ {
+	for i := n; i < len(b); i++ {
 		b[i] ^= keyArray[i&3]
 	}
 }

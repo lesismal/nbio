@@ -18,5 +18,5 @@ func maskXORSIMDAsm(b []byte, key [4]byte, pos int) int {
 		b[i+3] ^= key[3]
 	}
 
-	return 0
+	return n
 }

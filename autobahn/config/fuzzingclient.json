@@ -1,24 +1,22 @@
 {
-	"outdir": "./report",
-	"servers": [
-		{
-			"agent": "non-tls",
-			"url": "ws://localhost:9998/echo/message",
-			"options": {
-				"version": 18
-			}
-		},
-		{
-			"agent": "tls",
-			"url": "wss://localhost:9999/echo/message",
-			"options": {
-				"version": 18
-			}
-		}
-	],
-	"cases": [
-		"*"
-	],
-	"exclude-cases": ["1[1-4].*"],
-	"exclude-agent-cases": {}
+  "outdir": "./report",
+  "servers": [
+    {
+      "agent": "non-tls",
+      "url": "ws://localhost:9998/echo/message",
+      "options": {
+        "version": 18
+      }
+    },
+    {
+      "agent": "tls",
+      "url": "wss://localhost:9999/echo/message",
+      "options": {
+        "version": 18
+      }
+    }
+  ],
+  "cases": ["*"],
+  "exclude-cases": ["1[1-4].*"],
+  "exclude-agent-cases": {}
 }
