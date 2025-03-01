@@ -18,10 +18,10 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
-// FastParserState 表示FastParser的解析状态
+// FastParserState represents the parsing state of FastParser
 type FastParserState int
 
-// FastParser状态常量
+// FastParser state constants
 const (
 	fastStateMethodStart FastParserState = iota
 	fastStateMethod
@@ -44,58 +44,58 @@ const (
 	fastStateError
 )
 
-// FastParser 是一个高性能的HTTP解析器
-// 它使用状态机和零拷贝技术来提高解析效率
+// FastParser is a high-performance HTTP parser
+// It uses state machine and zero-copy techniques to improve parsing efficiency
 type FastParser struct {
-	// 解析状态
+	// Parsing state
 	state FastParserState
-	// 请求方法
+	// Request method
 	method []byte
-	// 请求路径
+	// Request path
 	path []byte
-	// 请求协议
+	// Request protocol
 	proto []byte
-	// 请求头
+	// Request headers
 	headers [][2][]byte
-	// 请求体
+	// Request body
 	body []byte
-	// 内容长度
+	// Content length
 	contentLength int
-	// 是否保持连接
+	// Whether to keep connection alive
 	keepAlive bool
-	// 是否分块传输
+	// Whether using chunked transfer
 	chunked bool
-	// 当前块大小
+	// Current chunk size
 	chunkSize int
-	// 当前块已读取大小
+	// Current chunk read size
 	chunkRead int
-	// 是否读取完成
+	// Whether reading is complete
 	complete bool
-	// 错误信息
+	// Error information
 	err error
-	// 解析开始时间
+	// Parsing start time
 	startTime time.Time
-	// 解析耗时
+	// Parsing duration
 	parseTime time.Duration
-	// 内存分配器
+	// Memory allocator
 	allocator mempool.Allocator
-	// 请求对象池
+	// Request object pool
 	requestPool sync.Pool
 
-	// ParserCloser接口所需字段
+	// Fields required by ParserCloser interface
 	conn      net.Conn
 	engine    *Engine
 	processor Processor
 	execute   func(f func()) bool
 
-	// 缓存的字节
+	// Cached bytes
 	bytesCached *[]byte
 
-	// 关闭回调
+	// Close callback
 	onClose func(p *Parser, err error)
 }
 
-// 常用HTTP方法
+// Common HTTP methods
 var (
 	methodGet     = []byte("GET")
 	methodPost    = []byte("POST")
@@ -106,7 +106,7 @@ var (
 	methodPatch   = []byte("PATCH")
 )
 
-// 常用HTTP头
+// Common HTTP headers
 //
 //go:nolint
 var (
@@ -121,27 +121,27 @@ var (
 	headerAcceptLanguage   = []byte("Accept-Language")
 )
 
-// 常用HTTP头值
+// Common HTTP header values
 var (
 	valueChunked   = []byte("chunked")
 	valueClose     = []byte("close")
 	valueKeepAlive = []byte("keep-alive")
 )
 
-// 常用HTTP协议版本
+// Common HTTP protocol versions
 var (
 	protoHTTP10 = []byte("HTTP/1.0")
 	protoHTTP11 = []byte("HTTP/1.1")
 	protoHTTP20 = []byte("HTTP/2.0")
 )
 
-// 常用分隔符
+// Common delimiters
 var (
 	crlf    = []byte("\r\n")
 	colonSp = []byte(": ")
 )
 
-// NewFastParser 创建一个新的高性能HTTP解析器
+// NewFastParser creates a new high-performance HTTP parser
 func NewFastParser(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) ParserCloser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
@@ -174,12 +174,12 @@ func NewFastParser(conn net.Conn, engine *Engine, processor Processor, isClient 
 	}
 }
 
-// UnderlayerConn 返回底层连接
+// UnderlayerConn returns the underlying connection
 func (p *FastParser) UnderlayerConn() net.Conn {
 	return p.conn
 }
 
-// Reset 重置解析器状态
+// Reset resets the parser state
 func (p *FastParser) Reset() {
 	p.state = fastStateMethodStart
 	p.method = nil
@@ -198,9 +198,9 @@ func (p *FastParser) Reset() {
 	p.parseTime = 0
 }
 
-// Parse 解析HTTP请求
+// Parse parses HTTP request
 //
-//go:nolint
+//nolint:golint
 func (p *FastParser) Parse(data []byte) error {
 	if len(data) == 0 {
 		return nil
@@ -229,7 +229,7 @@ func (p *FastParser) Parse(data []byte) error {
 
 		switch p.state {
 		case fastStateMethodStart:
-			// 跳过前导空白
+			// Skip leading whitespace
 			if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
 				continue
 			}
@@ -237,7 +237,7 @@ func (p *FastParser) Parse(data []byte) error {
 			p.state = fastStateMethod
 
 		case fastStateMethod:
-			// 读取方法直到空格
+			// Read method until space
 			if c == ' ' {
 				p.method = data[start:i]
 				p.processor.OnMethod(nil, string(p.method))
@@ -248,7 +248,7 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStatePathStart:
-			// 跳过空格
+			// Skip spaces
 			if c == ' ' {
 				continue
 			}
@@ -256,7 +256,7 @@ func (p *FastParser) Parse(data []byte) error {
 			p.state = fastStatePath
 
 		case fastStatePath:
-			// 读取路径直到空格
+			// Read path until space
 			if c == ' ' {
 				p.path = data[start:i]
 				p.processor.OnURL(nil, string(p.path))
@@ -264,7 +264,7 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateProtoStart:
-			// 跳过空格
+			// Skip spaces
 			if c == ' ' {
 				continue
 			}
@@ -272,7 +272,7 @@ func (p *FastParser) Parse(data []byte) error {
 			p.state = fastStateProto
 
 		case fastStateProto:
-			// 读取协议直到CRLF
+			// Read protocol until CRLF
 			if c == '\r' {
 				p.proto = data[start:i]
 				p.processor.OnProto(nil, string(p.proto))
@@ -286,11 +286,11 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateHeaderStart:
-			// 检查是否是头部结束
+			// Check if headers are finished
 			if c == '\r' {
 				if i+1 < len(data) && data[i+1] == '\n' {
 					i++
-					// 处理头部信息
+					// Process headers
 					p.processHeaders()
 					if p.contentLength > 0 {
 						p.state = fastStateBodyStart
@@ -304,7 +304,7 @@ func (p *FastParser) Parse(data []byte) error {
 					p.state = fastStateError
 				}
 			} else if c == '\n' {
-				// 处理头部信息
+				// Process headers
 				p.processHeaders()
 				if p.contentLength > 0 {
 					p.state = fastStateBodyStart
@@ -319,12 +319,12 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateHeaderName:
-			// 读取头部名称直到冒号
+			// Read header name until colon
 			if c == ':' {
 				name := data[start:i]
 				p.state = fastStateHeaderValueStart
 
-				// 添加新的头部
+				// Add new header
 				p.headers = append(p.headers, [2][]byte{name, nil})
 			} else if !isTokenChar(c) {
 				p.err = fmt.Errorf("invalid header name character: %q", c)
@@ -332,7 +332,7 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateHeaderValueStart:
-			// 跳过冒号后的空格
+			// Skip spaces after colon
 			if c == ' ' || c == '\t' {
 				continue
 			}
@@ -340,7 +340,7 @@ func (p *FastParser) Parse(data []byte) error {
 			p.state = fastStateHeaderValue
 
 		case fastStateHeaderValue:
-			// 读取头部值直到CRLF
+			// Read header value until CRLF
 			if c == '\r' {
 				value := data[start:i]
 				p.headers[len(p.headers)-1][1] = value
@@ -361,17 +361,17 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateBodyStart:
-			// 开始读取请求体
+			// Start reading request body
 			if p.contentLength > 0 {
 				remaining := len(data) - i
 				if remaining >= p.contentLength {
-					// 有足够的数据读取整个请求体
+					// Have enough data to read the entire request body
 					p.body = data[i : i+p.contentLength]
 					p.processor.OnBody(nil, p.body)
 					i += p.contentLength - 1 // -1是因为循环会自动加1
 					p.state = fastStateComplete
 				} else {
-					// 数据不足，需要更多数据
+					// Not enough data, need more
 					p.body = data[i:]
 					p.processor.OnBody(nil, p.body)
 					i = len(data) - 1 // 读取所有剩余数据
@@ -382,7 +382,7 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateChunkSizeStart:
-			// 跳过前导空白
+			// Skip leading whitespace
 			if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
 				continue
 			}
@@ -390,7 +390,7 @@ func (p *FastParser) Parse(data []byte) error {
 			p.state = fastStateChunkSize
 
 		case fastStateChunkSize:
-			// 读取块大小直到CRLF
+			// Read chunk size until CRLF
 			if c == '\r' || c == '\n' || c == ';' {
 				sizeHex := string(data[start:i])
 				size, err := strconv.ParseInt(sizeHex, 16, 32)
@@ -402,10 +402,10 @@ func (p *FastParser) Parse(data []byte) error {
 					p.chunkRead = 0
 
 					if p.chunkSize == 0 {
-						// 最后一个块
+						// Last chunk
 						p.state = fastStateComplete
 					} else {
-						// 跳过CRLF
+						// Skip CRLF
 						if c == '\r' {
 							if i+1 < len(data) && data[i+1] == '\n' {
 								i++
@@ -420,12 +420,12 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateChunkData:
-			// 读取块数据
+			// Read chunk data
 			remaining := len(data) - i
 			toRead := p.chunkSize - p.chunkRead
 
 			if remaining >= toRead {
-				// 有足够的数据读取整个块
+				// Have enough data to read the entire chunk
 				chunk := data[i : i+toRead]
 				p.processor.OnBody(nil, chunk)
 
@@ -433,7 +433,7 @@ func (p *FastParser) Parse(data []byte) error {
 				p.chunkRead = p.chunkSize
 				p.state = fastStateChunkDataEnd
 			} else {
-				// 数据不足，需要更多数据
+				// Not enough data, need more
 				chunk := data[i:]
 				p.processor.OnBody(nil, chunk)
 
@@ -443,7 +443,7 @@ func (p *FastParser) Parse(data []byte) error {
 			}
 
 		case fastStateChunkDataEnd:
-			// 跳过块数据后的CRLF
+			// Skip CRLF after chunk data
 			if c == '\r' {
 				if i+1 < len(data) && data[i+1] == '\n' {
 					i++
@@ -473,7 +473,7 @@ func (p *FastParser) Parse(data []byte) error {
 		return nil
 	}
 
-	// 保存未处理的数据
+	// Save unprocessed data
 	left := len(data) - start
 	if left > 0 {
 		if p.bytesCached == nil {
@@ -490,11 +490,11 @@ func (p *FastParser) Parse(data []byte) error {
 		p.bytesCached = nil
 	}
 
-	// 需要更多数据
+	// Need more data
 	return io.ErrUnexpectedEOF
 }
 
-// CloseAndClean 关闭解析器并清理资源
+// CloseAndClean closes the parser and cleans up resources
 func (p *FastParser) CloseAndClean(err error) {
 	if p.bytesCached != nil {
 		mempool.Free(p.bytesCached)
@@ -510,30 +510,30 @@ func (p *FastParser) CloseAndClean(err error) {
 	}
 }
 
-// processHeaders 处理解析到的头部信息
+// processHeaders processes parsed headers
 func (p *FastParser) processHeaders() {
 	for _, header := range p.headers {
 		name := header[0]
 		value := header[1]
 
-		// 转换为小写进行比较
+		// Convert to lowercase for comparison
 		nameLower := bytes.ToLower(name)
 
 		if bytes.Equal(nameLower, bytes.ToLower(headerContentLength)) {
-			// 解析Content-Length
+			// Parse Content-Length
 			cl, err := strconv.Atoi(string(value))
 			if err == nil && cl >= 0 {
 				p.contentLength = cl
 				p.processor.OnContentLength(nil, cl)
 			}
 		} else if bytes.Equal(nameLower, bytes.ToLower(headerTransferEncoding)) {
-			// 检查是否分块传输
+			// Check if using chunked transfer
 			valueLower := bytes.ToLower(value)
 			if bytes.Contains(valueLower, bytes.ToLower(valueChunked)) {
 				p.chunked = true
 			}
 		} else if bytes.Equal(nameLower, bytes.ToLower(headerConnection)) {
-			// 检查连接是否保持
+			// Check if connection should be kept alive
 			valueLower := bytes.ToLower(value)
 			if bytes.Contains(valueLower, bytes.ToLower(valueClose)) {
 				p.keepAlive = false
@@ -543,18 +543,18 @@ func (p *FastParser) processHeaders() {
 		}
 	}
 
-	// 如果是HTTP/1.1，默认保持连接
+	// If HTTP/1.1, keep connection alive by default
 	if bytes.Equal(p.proto, protoHTTP11) {
 		p.keepAlive = true
 	}
 }
 
-// isTokenChar 检查字符是否是有效的令牌字符
+// isTokenChar checks if a character is a valid token character
 func isTokenChar(c byte) bool {
 	return c > 31 && c < 127 && !isDelimiter(c)
 }
 
-// isDelimiter 检查字符是否是分隔符
+// isDelimiter checks if a character is a delimiter
 func isDelimiter(c byte) bool {
 	switch c {
 	case '(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/', '[', ']', '?', '=', '{', '}', ' ', '\t':
@@ -563,39 +563,39 @@ func isDelimiter(c byte) bool {
 	return false
 }
 
-// isWhitespace 检查字符是否是空白字符
+// isWhitespace checks if a character is a whitespace character
 func isWhitespace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\r' || c == '\n'
 }
 
-// isHexDigit 检查字符是否是十六进制数字
+// isHexDigit checks if a character is a hexadecimal digit
 func isHexDigit(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
-// 注册解析器
+// Register parser
 func init() {
-	// 注册FastParser作为可选的HTTP解析器
+	// Register FastParser as an optional HTTP parser
 	RegisterParserType("fast", NewFastParser)
 }
 
-// ParserFactory 是一个创建解析器的工厂函数类型
+// ParserFactory is a factory function type for creating parsers
 type ParserFactory func(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) ParserCloser
 
-// 全局解析器工厂映射
+// Global parser factory map
 var parserFactories = make(map[string]ParserFactory)
 
-// RegisterParserType 注册HTTP解析器类型
+// RegisterParserType registers an HTTP parser type
 func RegisterParserType(name string, factory ParserFactory) {
 	parserFactories[name] = factory
 }
 
-// GetParserType 获取HTTP解析器类型
+// GetParserType gets an HTTP parser type
 func GetParserType(name string) ParserFactory {
 	if factory, ok := parserFactories[name]; ok {
 		return factory
 	}
-	// 默认使用标准解析器
+	// Use standard parser by default
 	return func(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) ParserCloser {
 		return NewParser(conn, engine, processor, isClient, executor)
 	}

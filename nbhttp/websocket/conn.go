@@ -358,10 +358,10 @@ func (c *Conn) nextFrame() (int, MessageType, []byte, bool, bool, bool, error) {
 			}
 			total = headLen + bodyLen
 			if l >= total {
-				// 直接引用原始数据，避免复制
+				// Directly reference original data, avoid copying
 				body = (*pdata)[headLen:total]
 				if masked {
-					// 在原地进行掩码操作
+					// Perform masking in place
 					maskXOR(body, (*pdata)[headLen-4:headLen])
 				}
 
@@ -451,13 +451,13 @@ func (c *Conn) Parse(data []byte) error {
 				}
 				msgType = c.msgType
 				if bl > 0 && c.dataFrameHandler != nil {
-					// 使用零拷贝技术，直接引用原始数据
-					// 只有在需要保留数据时才复制
+					// Use zero-copy technique, directly reference original data
+					// Only copy when data needs to be preserved
 					if c.releasePayload {
 						frame = allocator.Malloc(bl)
 						copy(*frame, body)
 					} else {
-						// 创建一个新的切片引用原始数据
+						// Create a new slice referencing the original data
 						tmp := body
 						frame = &tmp
 					}
@@ -465,7 +465,7 @@ func (c *Conn) Parse(data []byte) error {
 				if c.messageHandler != nil {
 					if bl > 0 {
 						if c.message == nil {
-							// 对于第一个片段，如果是完整消息且不需要保留，可以直接引用
+							// For the first fragment, if it's a complete message and doesn't need to be preserved, can reference directly
 							if fin && !c.releasePayload && !c.compress {
 								tmp := body
 								c.message = &tmp
@@ -474,7 +474,7 @@ func (c *Conn) Parse(data []byte) error {
 								copy(*c.message, body)
 							}
 						} else {
-							// 对于后续片段，必须追加
+							// For subsequent fragments, must append
 							c.message = allocator.Append(c.message, body...)
 						}
 					}
@@ -508,12 +508,12 @@ func (c *Conn) Parse(data []byte) error {
 			case PingMessage, PongMessage, CloseMessage:
 				isProtocolMessage = true
 				if bl > 0 {
-					// 对于协议消息，如果不需要保留数据，可以直接引用原始数据
+					// For protocol messages, if data doesn't need to be preserved, can reference original data directly
 					if c.releasePayload {
 						protocolMessage = allocator.Malloc(len(body))
 						copy(*protocolMessage, body)
 					} else {
-						// 创建一个新的切片引用原始数据
+						// Create a new slice referencing the original data
 						tmp := body
 						protocolMessage = &tmp
 					}
@@ -875,18 +875,14 @@ func (c *Conn) writeFrame(messageType MessageType, sendOpcode, fin bool, data []
 		u32 := rand.Uint32()
 		binary.LittleEndian.PutUint32((*pbuf)[headLen-4:headLen], u32)
 
-		// 对于大数据，考虑直接在原地进行掩码操作以避免复制
 		if len(data) > 1024 && len(data) == cap(data) {
-			// 如果数据是独占的且足够大，直接在原地掩码
 			copy((*pbuf)[headLen:], data)
 			maskXOR((*pbuf)[headLen:], (*pbuf)[headLen-4:headLen])
 		} else {
-			// 对于小数据或共享数据，先复制再掩码
 			copy((*pbuf)[headLen:], data)
 			maskXOR((*pbuf)[headLen:], (*pbuf)[headLen-4:headLen])
 		}
 	} else {
-		// 非客户端不需要掩码，直接复制
 		copy((*pbuf)[headLen:], data)
 	}
 
@@ -1179,12 +1175,9 @@ func maskXOR(b, key []byte) {
 		return
 	}
 
-	// 将key转换为[4]byte
 	var keyArray [4]byte
 	copy(keyArray[:], key[:4])
 
-	// 直接使用通用实现，不使用SIMD优化
-	// 主循环 - 每次处理4个字节
 	n := len(b) / 4 * 4
 	for i := 0; i < n; i += 4 {
 		b[i+0] ^= keyArray[0]
@@ -1193,7 +1186,6 @@ func maskXOR(b, key []byte) {
 		b[i+3] ^= keyArray[3]
 	}
 
-	// 处理剩余的字节
 	for i := n; i < len(b); i++ {
 		b[i] ^= keyArray[i&3]
 	}

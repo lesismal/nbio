@@ -7,9 +7,9 @@
 
 package websocket
 
-// maskXORSIMDAsm 在非SIMD平台上的实现
+// maskXORSIMDAsm implementation for non-SIMD platforms
 func maskXORSIMDAsm(b []byte, key [4]byte, pos int) int {
-	// 主循环 - 每次处理4个字节
+	// Main loop - process 4 bytes at a time
 	n := len(b) / 4 * 4
 	for i := 0; i < n; i += 4 {
 		b[i+0] ^= key[0]

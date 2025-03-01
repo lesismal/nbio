@@ -80,16 +80,16 @@ func main() {
 
 	messageHandlerExecutePool := taskpool.New(100, 1000)
 	svrTLS := nbhttp.NewServer(nbhttp.Config{
-		Network:        "tcp4",                   // 明确使用IPv4
-		AddrsTLS:       []string{"0.0.0.0:9999"}, // 绑定到所有IPv4接口
+		Network:        "tcp4",                   // Explicitly use IPv4
+		AddrsTLS:       []string{"0.0.0.0:9999"}, // Bind to all IPv4 interfaces
 		TLSConfig:      tlsConfig,
 		ReadBufferSize: 1024 * 1024,
 		Handler:        mux,
 		ServerExecutor: messageHandlerExecutePool.Go,
 	})
 	svr := nbhttp.NewServer(nbhttp.Config{
-		Network:        "tcp4",                   // 明确使用IPv4
-		Addrs:          []string{"0.0.0.0:9998"}, // 绑定到所有IPv4接口
+		Network:        "tcp4",                   // Explicitly use IPv4
+		Addrs:          []string{"0.0.0.0:9998"}, // Bind to all IPv4 interfaces
 		ReadBufferSize: 1024 * 1024,
 		Handler:        mux,
 		ServerExecutor: messageHandlerExecutePool.Go,

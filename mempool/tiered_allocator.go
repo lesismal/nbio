@@ -9,50 +9,50 @@ import (
 	"sync/atomic"
 )
 
-// TierConfig 表示一个内存池层级的配置
+// TierConfig represents the configuration of a memory pool tier
 type TierConfig struct {
-	// 块大小
+	// Block size
 	BlockSize int
-	// 每个块组的块数量
+	// Number of blocks per chunk
 	BlocksPerChunk int
-	// 最大块组数量
+	// Maximum number of chunks
 	MaxChunks int
 }
 
-// Debugger 是内存分配器的调试接口
+// Debugger is a debugging interface for memory allocators
 type Debugger interface {
 	OnMalloc(buf *[]byte, size int)
 	OnFree(buf *[]byte)
 }
 
-// StdAllocatorDebugger 是一个标准的调试器实现
+// StdAllocatorDebugger is a standard debugger implementation
 type StdAllocatorDebugger struct{}
 
-// OnMalloc 在分配内存时调用
+// OnMalloc is called when memory is allocated
 func (d *StdAllocatorDebugger) OnMalloc(buf *[]byte, size int) {}
 
-// OnFree 在释放内存时调用
+// OnFree is called when memory is freed
 func (d *StdAllocatorDebugger) OnFree(buf *[]byte) {}
 
-// TieredAllocator 是一个分级内存池
-// 它使用多个不同大小的内存池来减少内存碎片
+// TieredAllocator is a tiered memory pool
+// It uses multiple memory pools of different sizes to reduce memory fragmentation
 type TieredAllocator struct {
-	// 层级配置
+	// Tier configurations
 	tiers []TierConfig
-	// 层级池
+	// Tier pools
 	pools []*sync.Pool
-	// 统计信息
+	// Statistics
 	hits        []int64
 	misses      []int64
 	allocations []int64
 	frees       []int64
-	// 调试器
+	// Debugger
 	debugger Debugger
 }
 
-// NewTieredAllocator 创建一个新的分级内存池
+// NewTieredAllocator creates a new tiered memory pool
 func NewTieredAllocator(sizes []int, maxSize int) *TieredAllocator {
-	// 创建层级配置
+	// Create tier configurations
 	tiers := make([]TierConfig, len(sizes))
 	for i, size := range sizes {
 		tiers[i] = TierConfig{
@@ -65,7 +65,7 @@ func NewTieredAllocator(sizes []int, maxSize int) *TieredAllocator {
 	return NewTieredAllocatorWithConfig(tiers, nil)
 }
 
-// NewTieredAllocatorWithConfig 使用配置创建一个新的分级内存池
+// NewTieredAllocatorWithConfig creates a new tiered memory pool with configuration
 func NewTieredAllocatorWithConfig(tiers []TierConfig, debugger Debugger) *TieredAllocator {
 	if debugger == nil {
 		debugger = &StdAllocatorDebugger{}
@@ -81,13 +81,13 @@ func NewTieredAllocatorWithConfig(tiers []TierConfig, debugger Debugger) *Tiered
 		debugger:    debugger,
 	}
 
-	// 初始化每个层级的内存池
+	// Initialize memory pool for each tier
 	for i, tier := range tiers {
 		blockSize := tier.BlockSize
 		index := i // 捕获变量
 		allocator.pools[i] = &sync.Pool{
 			New: func() interface{} {
-				// 创建一个新的内存块
+				// Create a new memory block
 				atomic.AddInt64(&allocator.misses[index], 1)
 				atomic.AddInt64(&allocator.allocations[index], 1)
 				buf := make([]byte, blockSize)
@@ -99,61 +99,61 @@ func NewTieredAllocatorWithConfig(tiers []TierConfig, debugger Debugger) *Tiered
 	return allocator
 }
 
-// Malloc 分配一个指定大小的内存块
+// Malloc allocates a memory block of specified size
 func (a *TieredAllocator) Malloc(size int) *[]byte {
-	// 找到合适的层级
+	// Find the appropriate tier
 	tierIndex := a.findTier(size)
 	if tierIndex < 0 {
-		// 如果没有合适的层级，直接分配
+		// If no appropriate tier, allocate directly
 		buf := make([]byte, size)
 		return &buf
 	}
 
-	// 从对应层级的池中获取内存块
+	// Get memory block from the corresponding tier pool
 	buf := a.pools[tierIndex].Get().(*[]byte)
 	atomic.AddInt64(&a.hits[tierIndex], 1)
 
-	// 调整大小
+	// Adjust size
 	if len(*buf) < size {
-		// 如果内存块太小，重新分配
+		// If memory block is too small, reallocate
 		*buf = make([]byte, a.tiers[tierIndex].BlockSize)
 	}
 
-	// 截断到请求的大小
+	// Truncate to requested size
 	*buf = (*buf)[:size]
 
-	// 调试信息
+	// Debug information
 	a.debugger.OnMalloc(buf, size)
 
 	return buf
 }
 
-// Free 释放一个内存块
+// Free releases a memory block
 func (a *TieredAllocator) Free(buf *[]byte) {
 	if buf == nil || *buf == nil {
 		return
 	}
 
-	// 调试信息
+	// Debug information
 	a.debugger.OnFree(buf)
 
-	// 找到合适的层级
+	// Find the appropriate tier
 	tierIndex := a.findTierByCapacity(cap(*buf))
 	if tierIndex < 0 {
-		// 如果没有合适的层级，直接丢弃
+		// If no appropriate tier, discard directly
 		*buf = nil
 		return
 	}
 
-	// 重置内存块
+	// Reset memory block
 	*buf = (*buf)[:cap(*buf)]
 
-	// 归还到对应层级的池中
+	// Return to the corresponding tier pool
 	a.pools[tierIndex].Put(buf)
 	atomic.AddInt64(&a.frees[tierIndex], 1)
 }
 
-// Realloc 重新分配一个内存块
+// Realloc reallocates a memory block
 func (a *TieredAllocator) Realloc(buf *[]byte, size int) *[]byte {
 	if buf == nil {
 		return a.Malloc(size)
@@ -164,26 +164,26 @@ func (a *TieredAllocator) Realloc(buf *[]byte, size int) *[]byte {
 	}
 
 	if cap(*buf) >= size {
-		// 如果现有容量足够，直接调整大小
+		// If existing capacity is sufficient, adjust size directly
 		*buf = (*buf)[:size]
 		return buf
 	}
 
-	// 分配新的内存块
+	// Allocate new memory block
 	newBuf := a.Malloc(size)
 
-	// 复制数据
+	// Copy data
 	copy(*newBuf, *buf)
 
-	// 释放旧的内存块
+	// Free old memory block
 	a.Free(buf)
 
 	return newBuf
 }
 
-// Append 追加数据到内存块
+// Append appends data to a memory block
 //
-//go:nolint
+//nolint:golint
 func (a *TieredAllocator) Append(buf *[]byte, data ...byte) *[]byte {
 	if buf == nil {
 		newBuf := a.Malloc(len(data))
@@ -197,40 +197,40 @@ func (a *TieredAllocator) Append(buf *[]byte, data ...byte) *[]byte {
 		return newBuf
 	}
 
-	// 计算新的大小
+	// Calculate new size
 	newSize := len(*buf) + len(data)
 
-	// 检查容量是否足够
+	// Check if capacity is sufficient
 	if cap(*buf) >= newSize {
-		// 如果容量足够，直接追加
+		// If capacity is sufficient, append directly
 		*buf = append(*buf, data...)
 		return buf
 	}
 
-	// 计算新的容量
+	// Calculate new capacity
 	newCap := cap(*buf) * 2
 	if newCap < newSize {
 		newCap = newSize
 	}
 
-	// 分配新的内存块
+	// Allocate new memory block
 	newBuf := a.Malloc(newCap)
 
-	// 复制原始数据
+	// Copy original data
 	copy(*newBuf, *buf)
 
-	// 追加新数据
+	// Append new data
 	*newBuf = append((*newBuf)[:len(*buf)], data...)
 
-	// 释放旧的内存块
+	// Free old memory block
 	a.Free(buf)
 
 	return newBuf
 }
 
-// AppendString 追加字符串到内存块
+// AppendString appends a string to a memory block
 //
-//go:nolint
+//nolint:golint
 func (a *TieredAllocator) AppendString(buf *[]byte, data string) *[]byte {
 	if buf == nil {
 		newBuf := a.Malloc(len(data))
@@ -244,38 +244,38 @@ func (a *TieredAllocator) AppendString(buf *[]byte, data string) *[]byte {
 		return newBuf
 	}
 
-	// 计算新的大小
+	// Calculate new size
 	newSize := len(*buf) + len(data)
 
-	// 检查容量是否足够
+	// Check if capacity is sufficient
 	if cap(*buf) >= newSize {
-		// 如果容量足够，直接追加
+		// If capacity is sufficient, append directly
 		*buf = append(*buf, data...)
 		return buf
 	}
 
-	// 计算新的容量
+	// Calculate new capacity
 	newCap := cap(*buf) * 2
 	if newCap < newSize {
 		newCap = newSize
 	}
 
-	// 分配新的内存块
+	// Allocate new memory block
 	newBuf := a.Malloc(newCap)
 
-	// 复制原始数据
+	// Copy original data
 	copy(*newBuf, *buf)
 
-	// 追加新数据
+	// Append new data
 	*newBuf = append((*newBuf)[:len(*buf)], data...)
 
-	// 释放旧的内存块
+	// Free old memory block
 	a.Free(buf)
 
 	return newBuf
 }
 
-// findTier 根据大小找到合适的层级
+// findTier finds the appropriate tier based on size
 func (a *TieredAllocator) findTier(size int) int {
 	for i, tier := range a.tiers {
 		if size <= tier.BlockSize {
@@ -285,7 +285,7 @@ func (a *TieredAllocator) findTier(size int) int {
 	return -1
 }
 
-// findTierByCapacity 根据容量找到合适的层级
+// findTierByCapacity finds the appropriate tier based on capacity
 func (a *TieredAllocator) findTierByCapacity(capacity int) int {
 	for i, tier := range a.tiers {
 		if capacity == tier.BlockSize {
@@ -295,7 +295,7 @@ func (a *TieredAllocator) findTierByCapacity(capacity int) int {
 	return -1
 }
 
-// GetStats 获取内存池的统计信息
+// GetStats gets memory pool statistics
 func (a *TieredAllocator) GetStats() map[string]interface{} {
 	stats := make(map[string]interface{})
 
@@ -339,18 +339,18 @@ func (a *TieredAllocator) GetStats() map[string]interface{} {
 	return stats
 }
 
-// 注册全局内存池
+// Register global memory pool
 var (
-	// 全局内存池映射
+	// Global memory pool map
 	allocators = make(map[string]Allocator)
 )
 
-// RegisterAllocator 注册一个内存池
+// RegisterAllocator registers a memory pool
 func RegisterAllocator(name string, allocator Allocator) {
 	allocators[name] = allocator
 }
 
-// GetAllocator 获取一个内存池
+// GetAllocator gets a memory pool
 func GetAllocator(name string) Allocator {
 	if allocator, ok := allocators[name]; ok {
 		return allocator
@@ -358,14 +358,14 @@ func GetAllocator(name string) Allocator {
 	return DefaultMemPool
 }
 
-// 注册为默认内存池
+// Register as default memory pool
 func init() {
-	// 创建默认的分级内存池配置
+	// Create default tiered memory pool configuration
 	sizes := []int{128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536}
 
-	// 创建分级内存池
+	// Create tiered memory pool
 	tieredAllocator := NewTieredAllocator(sizes, 1024*1024*1024)
 
-	// 注册为可选的内存池
+	// Register as optional memory pool
 	RegisterAllocator("tiered", tieredAllocator)
 }
