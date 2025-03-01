@@ -45,7 +45,3 @@ func AppendString(pbuf *[]byte, more string) *[]byte {
 func Free(pbuf *[]byte) {
 	DefaultMemPool.Free(pbuf)
 }
-
-// func Init(bufSize, freeSize int) {
-// 	DefaultMemPool = New(bufSize, freeSize)
-// }
