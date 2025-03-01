@@ -6,7 +6,6 @@ cd ./autobahn/server
 go build -o ../bin/autobahn_server
 cd - && cd ./autobahn/reporter
 go build -o ../bin/autobahn_reporter 
-
 cd -
 
 echo "pwd:"$(pwd)
