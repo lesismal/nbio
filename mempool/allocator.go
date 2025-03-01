@@ -1,7 +1,6 @@
 package mempool
 
 // DefaultMemPool .
-// 使用分级内存池作为默认内存池，提供更好的内存管理
 var DefaultMemPool Allocator = NewTieredAllocator(
 	[]int{64, 256, 1024, 4096, 16384, 65536, 262144, 1048576}, // 64B到1MB的分级
 	1024*1024*1024, // 1GB最大可复用大小

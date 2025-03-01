@@ -18,10 +18,10 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
-// FastParserState represents the parsing state of FastParser
+// FastParserState represents the parsing state of FastParser.
 type FastParserState int
 
-// FastParser state constants
+// FastParser state constants.
 const (
 	fastStateMethodStart FastParserState = iota
 	fastStateMethod
@@ -44,8 +44,8 @@ const (
 	fastStateError
 )
 
-// FastParser is a high-performance HTTP parser
-// It uses state machine and zero-copy techniques to improve parsing efficiency
+// FastParser is a high-performance HTTP parser.
+// It uses state machine and zero-copy techniques to improve parsing efficiency.
 type FastParser struct {
 	// Parsing state
 	state FastParserState
@@ -95,7 +95,7 @@ type FastParser struct {
 	onClose func(p *Parser, err error)
 }
 
-// Common HTTP methods
+//nolint:unused // Unused in this file, but exported for use in other files.
 var (
 	methodGet     = []byte("GET")
 	methodPost    = []byte("POST")
@@ -107,8 +107,8 @@ var (
 )
 
 // Common HTTP headers
-//
-//go:nolint
+
+//nolint:unused // Unused in this file, but exported for use in other files.
 var (
 	headerContentLength    = []byte("Content-Length")
 	headerContentType      = []byte("Content-Type")
@@ -121,27 +121,31 @@ var (
 	headerAcceptLanguage   = []byte("Accept-Language")
 )
 
-// Common HTTP header values
+// Common HTTP header values.
 var (
 	valueChunked   = []byte("chunked")
 	valueClose     = []byte("close")
 	valueKeepAlive = []byte("keep-alive")
 )
 
-// Common HTTP protocol versions
+// Common HTTP protocol versions.
+
+//nolint:unused // Unused in this file, but exported for use in other files.
 var (
 	protoHTTP10 = []byte("HTTP/1.0")
 	protoHTTP11 = []byte("HTTP/1.1")
 	protoHTTP20 = []byte("HTTP/2.0")
 )
 
-// Common delimiters
+// Common delimiters.
+
+//nolint:unused // Unused in this file, but exported for use in other files.
 var (
 	crlf    = []byte("\r\n")
 	colonSp = []byte(": ")
 )
 
-// NewFastParser creates a new high-performance HTTP parser
+// NewFastParser creates a new high-performance HTTP parser.
 func NewFastParser(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) ParserCloser {
 	if processor == nil {
 		processor = NewEmptyProcessor()
@@ -174,12 +178,12 @@ func NewFastParser(conn net.Conn, engine *Engine, processor Processor, isClient 
 	}
 }
 
-// UnderlayerConn returns the underlying connection
+// UnderlayerConn returns the underlying connection.
 func (p *FastParser) UnderlayerConn() net.Conn {
 	return p.conn
 }
 
-// Reset resets the parser state
+// Reset resets the parser state.
 func (p *FastParser) Reset() {
 	p.state = fastStateMethodStart
 	p.method = nil
@@ -200,7 +204,7 @@ func (p *FastParser) Reset() {
 
 // Parse parses HTTP request
 //
-//nolint:golint
+//nolint:golint // Ignore the error return value of mempool.Append
 func (p *FastParser) Parse(data []byte) error {
 	if len(data) == 0 {
 		return nil
@@ -228,6 +232,49 @@ func (p *FastParser) Parse(data []byte) error {
 		c := data[i]
 
 		switch p.state {
+		default:
+			p.err = fmt.Errorf("invalid state: %d", p.state)
+			p.state = fastStateError
+
+		case fastStateComplete:
+			// Request is complete, ignore remaining data
+			continue
+
+		case fastStateError:
+			// Error state, ignore remaining data
+			continue
+
+		case fastStateHeaderValueEnd:
+			// Skip CRLF after header value
+			if c == '\r' {
+				if i+1 < len(data) && data[i+1] == '\n' {
+					i++
+				}
+			} else if c == '\n' {
+				p.state = fastStateHeaderStart
+			} else {
+				p.err = fmt.Errorf("expected CR or LF, got: %q", c)
+				p.state = fastStateError
+			}
+
+		case fastStateBody:
+			// Read body until end
+			remaining := len(data) - i
+			if remaining >= p.contentLength {
+				// Have enough data to read the entire request body
+				p.body = data[i : i+p.contentLength]
+				p.processor.OnBody(nil, p.body)
+				i += p.contentLength - 1 // -1是因为循环会自动加1
+				p.state = fastStateComplete
+			} else {
+				// Not enough data, need more
+				p.body = data[i:]
+				p.processor.OnBody(nil, p.body)
+				i = len(data) - 1 // 读取所有剩余数据
+				_ = i
+				return io.ErrUnexpectedEOF
+			}
+
 		case fastStateMethodStart:
 			// Skip leading whitespace
 			if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
@@ -375,6 +422,7 @@ func (p *FastParser) Parse(data []byte) error {
 					p.body = data[i:]
 					p.processor.OnBody(nil, p.body)
 					i = len(data) - 1 // 读取所有剩余数据
+					_ = i
 					return io.ErrUnexpectedEOF
 				}
 			} else {
@@ -439,6 +487,7 @@ func (p *FastParser) Parse(data []byte) error {
 
 				p.chunkRead += remaining
 				i = len(data) - 1 // 读取所有剩余数据
+				_ = i
 				return io.ErrUnexpectedEOF
 			}
 
@@ -494,7 +543,7 @@ func (p *FastParser) Parse(data []byte) error {
 	return io.ErrUnexpectedEOF
 }
 
-// CloseAndClean closes the parser and cleans up resources
+// CloseAndClean closes the parser and cleans up resources.
 func (p *FastParser) CloseAndClean(err error) {
 	if p.bytesCached != nil {
 		mempool.Free(p.bytesCached)
@@ -510,7 +559,7 @@ func (p *FastParser) CloseAndClean(err error) {
 	}
 }
 
-// processHeaders processes parsed headers
+// processHeaders processes parsed headers.
 func (p *FastParser) processHeaders() {
 	for _, header := range p.headers {
 		name := header[0]
@@ -549,12 +598,12 @@ func (p *FastParser) processHeaders() {
 	}
 }
 
-// isTokenChar checks if a character is a valid token character
+// isTokenChar checks if a character is a valid token character.
 func isTokenChar(c byte) bool {
 	return c > 31 && c < 127 && !isDelimiter(c)
 }
 
-// isDelimiter checks if a character is a delimiter
+// isDelimiter checks if a character is a delimiter.
 func isDelimiter(c byte) bool {
 	switch c {
 	case '(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/', '[', ']', '?', '=', '{', '}', ' ', '\t':
@@ -563,34 +612,34 @@ func isDelimiter(c byte) bool {
 	return false
 }
 
-// isWhitespace checks if a character is a whitespace character
+// isWhitespace checks if a character is a whitespace character.
 func isWhitespace(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\r' || c == '\n'
 }
 
-// isHexDigit checks if a character is a hexadecimal digit
+// isHexDigit checks if a character is a hexadecimal digit.
 func isHexDigit(c byte) bool {
 	return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')
 }
 
-// Register parser
+// Register parser.
 func init() {
 	// Register FastParser as an optional HTTP parser
 	RegisterParserType("fast", NewFastParser)
 }
 
-// ParserFactory is a factory function type for creating parsers
+// ParserFactory is a factory function type for creating parsers.
 type ParserFactory func(conn net.Conn, engine *Engine, processor Processor, isClient bool, executor func(f func()) bool) ParserCloser
 
-// Global parser factory map
+// Global parser factory map.
 var parserFactories = make(map[string]ParserFactory)
 
-// RegisterParserType registers an HTTP parser type
+// RegisterParserType registers an HTTP parser type.
 func RegisterParserType(name string, factory ParserFactory) {
 	parserFactories[name] = factory
 }
 
-// GetParserType gets an HTTP parser type
+// GetParserType gets an HTTP parser type.
 func GetParserType(name string) ParserFactory {
 	if factory, ok := parserFactories[name]; ok {
 		return factory
