@@ -10,6 +10,8 @@ TEXT ·maskXORSIMDAsm(SB), NOSPLIT, $0
 
     // 加载key到XMM寄存器
     MOVQ key+24(FP), X0
+    // 创建一个全零的XMM寄存器用于PSHUFB
+    PXOR X15, X15
     PSHUFB X15, X0      // 将key复制到XMM0的所有字节
     MOVO X0, X1         // 复制key到X1
     MOVO X0, X2         // 复制key到X2
@@ -89,11 +91,17 @@ scalar:
     CMPQ BX, $0
     JE done
 
-    // 返回已处理的字节数
-    MOVQ SI, ret+48(FP)
-    RET
+    // 处理剩余的单个字节
+scalar_loop:
+    MOVB key+24(FP)(SI&3), AX  // 加载key[i&3]
+    XORB AX, (DI)              // b[i] ^= key[i&3]
+    INCQ DI                    // i++
+    INCQ SI                    // pos++
+    DECQ BX                    // len--
+    CMPQ BX, $0
+    JNE scalar_loop
 
 done:
-    // 返回0，表示所有字节都已处理
-    MOVQ $0, ret+48(FP)
+    // 返回已处理的字节数
+    MOVQ SI, ret+48(FP)
     RET

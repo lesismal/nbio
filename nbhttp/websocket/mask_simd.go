@@ -24,5 +24,6 @@ func maskXORSIMDAsm(b []byte, key [4]byte, pos int) int {
 		b[i+3] ^= key[3]
 	}
 
-	return 0
+	// 返回已处理的字节数，而不是0
+	return n
 }
