@@ -1,10 +1,15 @@
 #!/bin/bash
 
 mkdir -p ./autobahn/bin
-go build -o ./autobahn/bin/autobahn_server ./autobahn/server/
-go build -o ./autobahn/bin/autobahn_reporter ./autobahn/reporter/
 
-echo "pwd:" $(pwd)
+cd ./autobahn/server
+go build -o ../bin/autobahn_server
+cd - && cd ./autobahn/reporter
+go build -o ../bin/autobahn_reporter 
+
+cd -
+
+echo "pwd:"$(pwd)
 ./autobahn/bin/autobahn_server &
 
 rm -rf ${PWD}/autobahn/report
