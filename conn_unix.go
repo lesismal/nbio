@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"golang.org/x/net/ipv4"
 )
 
 // var (
@@ -281,6 +283,59 @@ func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 	// }
 
 	return dstConn, n, err
+}
+
+// ReadBatch .
+// Depracated .
+// It was used to customize users' reading implementation, but better to use
+// `ReadAndGetConn` instead, which can handle different types of connection and
+// returns the consistent connection instance for UDP.
+// Notice: non-blocking interface, should not be used as you use std.
+//
+//go:norace
+func (c *Conn) ReadBatch(ms []ipv4.Message, flags int) (int, error) {
+	return 0, ErrUnsupported
+}
+
+// ReadBatchAndGetConn handles recvmmsg for udp connection.
+// Notice: non-blocking interface, should not be used as you use std.
+//
+//go:norace
+func (c *Conn) ReadBatchAndGetConn(hs []mmsghdr, flags int) (net.Conn, int, error, bool) {
+	switch c.typ {
+	case ConnTypeTCP, ConnTypeUnix:
+		return nil, 0, nil, false
+	case ConnTypeUDPServer, ConnTypeUDPClientFromDial:
+		c.mux.Lock()
+		if c.closed {
+			c.mux.Unlock()
+			return c, 0, net.ErrClosed, true
+		}
+
+		dstConn, n, err := c.readUDPBatch(hs, flags)
+		c.mux.Unlock()
+
+		return dstConn, n, err, true
+	case ConnTypeUDPClientFromRead:
+		// no need to read for this type of connection,
+		// it's handled when reading ConnTypeUDPServer.
+	default:
+	}
+	return nil, 0, nil, false
+}
+
+// WriteBatch .
+// Depracated .
+// It was used to customize users' reading implementation, but better to use
+// `ReadAndGetConn` instead, which can handle different types of connection and
+// returns the consistent connection instance for UDP.
+// Notice: non-blocking interface, should not be used as you use std.
+//
+//go:norace
+func (c *Conn) WriteBatch(ms []ipv4.Message, flags int) (int, error) {
+	var nwrite int
+	var err error
+	return nwrite, err
 }
 
 //go:norace
