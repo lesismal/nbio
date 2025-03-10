@@ -113,8 +113,11 @@ type Config struct {
 	// ReadLimit represents the max size for parser reading, it's set to 64M by default.
 	ReadLimit int
 
-	// MaxHTTPBodySize represents the max size of HTTP body for parser reading.
-	MaxHTTPBodySize int
+	// MaxHTTPRequestBodySize represents the max size of HTTP request body for parser reading.
+	MaxHTTPRequestBodySize int
+
+	// MaxHTTPResponseBodySize represents the max size of HTTP response body for parser reading.
+	MaxHTTPResponseBodySize int
 
 	// ReadBufferSize represents buffer size for reading, it's set to 64k by default.
 	ReadBufferSize int

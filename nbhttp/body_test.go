@@ -9,28 +9,28 @@ import (
 	"github.com/lesismal/nbio/mempool"
 )
 
-func TestBodyReaderPool(t *testing.T) {
-	br := bodyReaderPool.Get().(*BodyReader)
+func TestHTTPBodyPool(t *testing.T) {
+	br := httpBodyPool.Get().(*HTTPBody)
 	buf := make([]byte, 10)
 	pbuf := &buf
 	br.buffers = append(br.buffers, pbuf)
-	*br = emptyBodyReader
-	bodyReaderPool.Put(br)
+	*br = emptyHTTPBody
+	httpBodyPool.Put(br)
 
 	for i := 0; i < 1000; i++ {
-		br2 := bodyReaderPool.Get().(*BodyReader)
+		br2 := httpBodyPool.Get().(*HTTPBody)
 		if br2.buffers != nil {
 			t.Fatal("len>0")
 		}
 		buf = make([]byte, 10)
 		pbuf = &buf
 		br2.buffers = append(br.buffers, pbuf)
-		*br2 = emptyBodyReader
-		bodyReaderPool.Put(br)
+		*br2 = emptyHTTPBody
+		httpBodyPool.Put(br)
 	}
 }
 
-func TestBodyReader(t *testing.T) {
+func TestHTTPBody(t *testing.T) {
 	engine := NewEngine(Config{
 		BodyAllocator: mempool.NewAligned(),
 	})
@@ -48,11 +48,11 @@ func TestBodyReader(t *testing.T) {
 	allBytes = append(allBytes, b2...)
 	allBytes = append(allBytes, b3...)
 
-	newBR := func() *BodyReader {
-		br := NewBodyReader(engine)
-		br.append(b1)
-		br.append(b2)
-		br.append(b3)
+	newBR := func() *HTTPBody {
+		br := NewHTTPBody(engine)
+		br.append(b1, 1000000)
+		br.append(b2, 1000000)
+		br.append(b3, 1000000)
 		return br
 	}
 

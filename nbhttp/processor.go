@@ -46,13 +46,13 @@ var (
 func releaseRequest(req *http.Request, retainHTTPBody bool) {
 	if req != nil {
 		if req.Body != nil {
-			if br, ok := req.Body.(*BodyReader); ok {
+			if br, ok := req.Body.(*HTTPBody); ok {
 				if retainHTTPBody {
 					// do not release the body
 				} else {
 					br.Close()
-					*br = emptyBodyReader
-					bodyReaderPool.Put(br)
+					*br = emptyHTTPBody
+					httpBodyPool.Put(br)
 				}
 			} else if !retainHTTPBody {
 				req.Body.Close()
@@ -67,11 +67,8 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 //go:norace
 func releaseResponse(res *Response) {
 	if res != nil {
-		if res.buffer != nil {
-			mempool.Free(res.buffer)
-		}
-		if res.bodyBuffer != nil {
-			mempool.Free(res.bodyBuffer)
+		if res.headBuffer != nil {
+			mempool.Free(res.headBuffer)
 		}
 		*res = emptyResponse
 		responsePool.Put(res)
@@ -82,10 +79,10 @@ func releaseResponse(res *Response) {
 func releaseClientResponse(res *http.Response) {
 	if res != nil {
 		if res.Body != nil {
-			br := res.Body.(*BodyReader)
+			br := res.Body.(*HTTPBody)
 			br.Close()
-			*br = emptyBodyReader
-			bodyReaderPool.Put(br)
+			*br = emptyHTTPBody
+			httpBodyPool.Put(br)
 		}
 		*res = emptyClientResponse
 		clientResponsePool.Put(res)
@@ -199,9 +196,9 @@ func (p *ServerProcessor) OnContentLength(parser *Parser, contentLength int) {
 //go:norace
 func (p *ServerProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.request.Body == nil {
-		p.request.Body = NewBodyReader(parser.Engine)
+		p.request.Body = NewHTTPBody(parser.Engine)
 	}
-	return p.request.Body.(*BodyReader).append(data)
+	return p.request.Body.(*HTTPBody).append(data, parser.Engine.MaxHTTPRequestBodySize)
 }
 
 // OnTrailerHeader .
@@ -269,7 +266,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	// }
 
 	if request.Body == nil {
-		request.Body = NewBodyReader(engine)
+		request.Body = NewHTTPBody(engine)
 	}
 
 	response := NewResponse(parser, request)
@@ -405,9 +402,9 @@ func (p *ClientProcessor) OnContentLength(parser *Parser, contentLength int) {
 //go:norace
 func (p *ClientProcessor) OnBody(parser *Parser, data []byte) error {
 	if p.response.Body == nil {
-		p.response.Body = NewBodyReader(parser.Engine)
+		p.response.Body = NewHTTPBody(parser.Engine)
 	}
-	return p.response.Body.(*BodyReader).append(data)
+	return p.response.Body.(*HTTPBody).append(data, parser.Engine.MaxHTTPRequestBodySize)
 }
 
 // OnTrailerHeader .

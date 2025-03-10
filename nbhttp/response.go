@@ -32,8 +32,8 @@ type Response struct {
 	trailer     map[string]string
 	trailerSize int
 
-	buffer       *[]byte
-	bodyBuffer   *[]byte
+	headBuffer   *[]byte
+	body         *HTTPBody
 	contentLen   int
 	bodyWritten  int
 	intFormatBuf [10]byte
@@ -101,19 +101,12 @@ func (res *Response) WriteString(s string) (int, error) {
 //
 //go:norace
 func (res *Response) Write(data []byte) (int, error) {
+	res.checkChunked()
+
 	l := len(data)
 	conn := res.Parser.Conn
 	if l == 0 || conn == nil {
 		return 0, nil
-	}
-
-	res.WriteHeader(http.StatusOK)
-	res.checkChunked()
-
-	res.hasBody = true
-
-	if res.chunked {
-		return res.writeChunk(conn, data, l)
 	}
 
 	cl, err := res.contentLength()
@@ -124,86 +117,13 @@ func (res *Response) Write(data []byte) (int, error) {
 		return 0, http.ErrContentLength
 	}
 
-	if cl > 0 {
-		res.eoncodeHead()
+	res.hasBody = true
 
-		pbuf := res.buffer
-		res.buffer = nil
-
-		// Header has been sent, no cached head buffer,
-		// append the data to body buffer.
-		if pbuf == nil {
-			goto APPEND_BODY
-		}
-
-		// If has header buffer and total size <  maxPacketSize,
-		// set the header buffer as the body buffer and process
-		// the new body data.
-		// Else, send header buffer first, then process the data.
-		if len(*pbuf)+len(data) < maxPacketSize {
-			res.bodyBuffer = pbuf
-			goto APPEND_BODY
-		} else {
-			_, err = conn.Write(*pbuf)
-			mempool.Free(pbuf)
-			if err != nil {
-				return 0, err
-			}
-		}
+	if res.body == nil {
+		res.body = NewHTTPBody(res.Parser.Engine)
 	}
-
-APPEND_BODY:
-	if res.bodyBuffer == nil {
-		// If "Content-Length" has been set,
-		// and no cached buffer,
-		// and the data size >= maxPacketSize,
-		// send the data directly.
-		if cl > 0 && len(data) >= maxPacketSize {
-			res.bodyWritten += l
-			return conn.Write(data)
-		}
-
-		// Prepare a new buffer for caching the data.
-		res.bodyBuffer = mempool.Malloc(l)
-		*res.bodyBuffer = (*res.bodyBuffer)[0:0]
-	} else if cl > 0 && len(*res.bodyBuffer)+len(data) > maxPacketSize {
-		// If "Content-Length" has been set,
-		// has cached buffer, and
-		// the data total size >= maxPacketSize,
-		// send the cached buffer first.
-		if len(*res.bodyBuffer) > 0 {
-			_, err = conn.Write(*res.bodyBuffer)
-			*res.bodyBuffer = (*res.bodyBuffer)[0:0]
-			if err != nil {
-				mempool.Free(res.bodyBuffer)
-				res.bodyBuffer = nil
-				return 0, err
-			}
-		}
-
-		// If the new data size >= maxPacketSize,
-		// send the new data directly.
-		if len(data) >= maxPacketSize {
-			res.bodyWritten += l
-			mempool.Free(res.bodyBuffer)
-			res.bodyBuffer = nil
-			return conn.Write(data)
-		}
-	}
-
-	// Append the data to the body buffer cache.
+	res.body.append(data, res.Parser.Engine.MaxHTTPResponseBodySize)
 	res.bodyWritten += l
-	res.bodyBuffer = mempool.Append(res.bodyBuffer, data...)
-	if len(*res.bodyBuffer) >= maxPacketSize {
-		l, err = conn.Write(*res.bodyBuffer)
-		if err != nil {
-			mempool.Free(res.bodyBuffer)
-			res.bodyBuffer = nil
-		} else {
-			*res.bodyBuffer = (*res.bodyBuffer)[0:0]
-		}
-		return l, err
-	}
 
 	return l, nil
 }
@@ -214,8 +134,8 @@ APPEND_BODY:
 func (res *Response) writeChunk(conn net.Conn, data []byte, l int) (int, error) {
 	res.eoncodeHead()
 
-	var pbuf = res.buffer
-	res.buffer = nil
+	var pbuf = res.headBuffer
+	res.headBuffer = nil
 	var lenStr = res.formatInt(l, 16)
 	var totalSize = len(lenStr) + len(data) + 4
 
@@ -233,7 +153,7 @@ func (res *Response) writeChunk(conn net.Conn, data []byte, l int) (int, error) 
 		pbuf = mempool.AppendString(pbuf, "\r\n")
 		pbuf = mempool.Append(pbuf, data...)
 		pbuf = mempool.AppendString(pbuf, "\r\n")
-		res.buffer = pbuf
+		res.headBuffer = pbuf
 		return l, nil
 	}
 
@@ -264,7 +184,7 @@ func (res *Response) writeChunk(conn net.Conn, data []byte, l int) (int, error) 
 	pbuf = mempool.Append(pbuf, data...)
 	pbuf = mempool.AppendString(pbuf, "\r\n")
 	if len(*pbuf) < maxPacketSize {
-		res.buffer = pbuf
+		res.headBuffer = pbuf
 		return l, nil
 	}
 	_, err = conn.Write(*pbuf)
@@ -301,9 +221,9 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 
 	res.hasBody = true
 	res.eoncodeHead()
-	_, err = c.Write(*res.buffer)
-	mempool.Free(res.buffer)
-	res.buffer = nil
+	_, err = c.Write(*res.headBuffer)
+	mempool.Free(res.headBuffer)
+	res.headBuffer = nil
 	if err != nil {
 		return 0, err
 	}
@@ -399,23 +319,34 @@ func (res *Response) eoncodeHead() {
 		const contentType = "Content-Type: text/plain; charset=utf-8\r\n"
 		pdata = mempool.AppendString(pdata, contentType)
 	}
-	if !res.chunked && len(res.header[contentLengthHeader]) == 0 {
-		const contentLenthPrefix = "Content-Length: "
-		if !res.hasBody {
-			pdata = mempool.AppendString(pdata, contentLenthPrefix)
-			pdata = mempool.Append(pdata, '0', '\r', '\n')
-		} else {
-			pdata = mempool.AppendString(pdata, contentLenthPrefix)
-			l := 0
-			if res.bodyBuffer != nil {
-				l = len(*res.bodyBuffer)
-			}
-			if l > 0 {
-				s := strconv.FormatInt(int64(l), 10)
-				pdata = mempool.AppendString(pdata, s)
-				pdata = mempool.Append(pdata, '\r', '\n')
-			} else {
+	if !res.chunked {
+		if len(res.header[contentLengthHeader]) == 0 {
+			const contentLenthPrefix = "Content-Length: "
+			if !res.hasBody {
+				pdata = mempool.AppendString(pdata, contentLenthPrefix)
 				pdata = mempool.Append(pdata, '0', '\r', '\n')
+			} else {
+				bl := res.bodyWritten
+				pdata = mempool.AppendString(pdata, contentLenthPrefix)
+				if bl > 0 {
+					s := strconv.FormatInt(int64(bl), 10)
+					pdata = mempool.AppendString(pdata, s)
+					pdata = mempool.Append(pdata, '\r', '\n')
+				} else {
+					pdata = mempool.Append(pdata, '0', '\r', '\n')
+				}
+			}
+		} else {
+			cl, _ := res.contentLength()
+			if cl != res.bodyWritten {
+				delete(res.header, contentLengthHeader)
+				bl := res.bodyWritten
+				if bl > 0 {
+					s := strconv.FormatInt(int64(bl), 10)
+					res.header.Set(contentLengthHeader, s)
+				} else {
+					res.header.Set(contentLengthHeader, "0")
+				}
 			}
 		}
 	}
@@ -466,51 +397,59 @@ func (res *Response) eoncodeHead() {
 	}
 
 	pdata = mempool.Append(pdata, '\r', '\n')
-	res.buffer = pdata
+	res.headBuffer = pdata
 }
 
 //go:norace
 func (res *Response) flush(conn io.Writer) error {
 	var err error
 
+	res.WriteHeader(http.StatusOK)
+	res.checkChunked()
+
+	// if res.chunked {
+	// 	// return res.writeChunk(conn, data, l)
+	// } else {
+	// }
+
 	if !res.chunked {
-		if res.buffer != nil {
-			if res.bodyBuffer != nil && len(*res.bodyBuffer) > 0 {
-				if len(*res.buffer)+len(*res.bodyBuffer) > maxPacketSize {
-					_, err = conn.Write(*res.buffer)
-					mempool.Free(res.buffer)
-					res.buffer = nil
+		if res.headBuffer != nil {
+			if res.bodyBuffers != nil && len(*res.bodyBuffers) > 0 {
+				if len(*res.headBuffer)+len(*res.bodyBuffers) > maxPacketSize {
+					_, err = conn.Write(*res.headBuffer)
+					mempool.Free(res.headBuffer)
+					res.headBuffer = nil
 					if err != nil {
-						mempool.Free(res.bodyBuffer)
-						res.bodyBuffer = nil
+						mempool.Free(res.bodyBuffers)
+						res.bodyBuffers = nil
 						return err
 					}
-					res.buffer = res.bodyBuffer
-					res.bodyBuffer = nil
+					res.headBuffer = res.bodyBuffers
+					res.bodyBuffers = nil
 				} else {
-					res.buffer = mempool.Append(res.buffer, (*res.bodyBuffer)...)
-					mempool.Free(res.bodyBuffer)
-					res.bodyBuffer = nil
+					res.headBuffer = mempool.Append(res.headBuffer, (*res.bodyBuffers)...)
+					mempool.Free(res.bodyBuffers)
+					res.bodyBuffers = nil
 				}
 			}
-			_, err = conn.Write(*res.buffer)
-			mempool.Free(res.buffer)
-			res.buffer = nil
+			_, err = conn.Write(*res.headBuffer)
+			mempool.Free(res.headBuffer)
+			res.headBuffer = nil
 			if err != nil {
 				return err
 			}
 		}
-		if res.bodyBuffer != nil && len(*res.bodyBuffer) > 0 {
-			_, err = conn.Write(*res.bodyBuffer)
-			mempool.Free(res.bodyBuffer)
-			res.bodyBuffer = nil
+		if res.bodyBuffers != nil && len(*res.bodyBuffers) > 0 {
+			_, err = conn.Write(*res.bodyBuffers)
+			mempool.Free(res.bodyBuffers)
+			res.bodyBuffers = nil
 		}
 
 		return err
 	}
 
-	pdata := res.buffer
-	res.buffer = nil
+	pdata := res.headBuffer
+	res.headBuffer = nil
 	if len(res.trailer) == 0 {
 		if pdata == nil {
 			pdata = mempool.Malloc(0)

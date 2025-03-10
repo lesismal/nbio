@@ -10,16 +10,16 @@ import (
 )
 
 var (
-	emptyBodyReader = BodyReader{}
-	bodyReaderPool  = sync.Pool{
+	emptyHTTPBody = HTTPBody{}
+	httpBodyPool  = sync.Pool{
 		New: func() interface{} {
-			return &BodyReader{}
+			return &HTTPBody{}
 		},
 	}
 )
 
-// BodyReader implements io.ReadCloser and is to be used as HTTP body.
-type BodyReader struct {
+// HTTPBody implements io.ReadCloser and is to be used as HTTP body.
+type HTTPBody struct {
 	index   int       // first buffer read index
 	left    int       // num of byte left
 	buffers []*[]byte // buffers that storage HTTP body
@@ -30,7 +30,7 @@ type BodyReader struct {
 // Read reads body bytes to p, returns the num of bytes read and error.
 //
 //go:norace
-func (br *BodyReader) Read(p []byte) (int, error) {
+func (br *HTTPBody) Read(p []byte) (int, error) {
 	need := len(p)
 	if br.left <= 0 {
 		return 0, io.EOF
@@ -56,7 +56,7 @@ func (br *BodyReader) Read(p []byte) (int, error) {
 // Close frees buffers and resets itself to empty value.
 //
 //go:norace
-func (br *BodyReader) Close() error {
+func (br *HTTPBody) Close() error {
 	if br.closed {
 		return nil
 	}
@@ -66,39 +66,39 @@ func (br *BodyReader) Close() error {
 			br.engine.BodyAllocator.Free(b)
 		}
 	}
-	// *br = emptyBodyReader
-	// bodyReaderPool.Put(br)
+	// *br = emptyHTTPBody
+	// httpBodyPool.Put(br)
 	return nil
 }
 
 // Index returns current head buffer's reading index.
 //
 //go:norace
-func (br *BodyReader) Index() int {
+func (br *HTTPBody) Index() int {
 	return br.index
 }
 
 // Left returns how many bytes are left for reading.
 //
 //go:norace
-func (br *BodyReader) Left() int {
+func (br *HTTPBody) Left() int {
 	return br.left
 }
 
 // Buffers returns the underlayer buffers that store the HTTP Body.
 //
 //go:norace
-func (br *BodyReader) Buffers() []*[]byte {
+func (br *HTTPBody) Buffers() []*[]byte {
 	return br.buffers
 }
 
-// RawBodyBuffers returns a reference of BodyReader's current buffers.
+// RawBodyBuffers returns a reference of HTTPBody's current buffers.
 // The buffers returned will be closed(released automatically when closed)
 // HTTP Handler is called, users should not free the buffers and should
 // not hold it any longer after the HTTP Handler is called.
 //
 //go:norace
-func (br *BodyReader) RawBodyBuffers() [][]byte {
+func (br *HTTPBody) RawBodyBuffers() [][]byte {
 	buffers := make([][]byte, len(br.buffers))
 	for i, pbuf := range br.buffers {
 		if i == 0 {
@@ -113,19 +113,19 @@ func (br *BodyReader) RawBodyBuffers() [][]byte {
 // Engine returns Engine that creates this HTTP Body.
 //
 //go:norace
-func (br *BodyReader) Engine() *Engine {
+func (br *HTTPBody) Engine() *Engine {
 	return br.engine
 }
 
 // append appends data to buffers.
 //
 //go:norace
-func (br *BodyReader) append(data []byte) error {
+func (br *HTTPBody) append(data []byte, maxLen int) error {
 	if len(data) == 0 {
 		return nil
 	}
 
-	if br.engine.MaxHTTPBodySize > 0 && len(data)+br.left > br.engine.MaxHTTPBodySize {
+	if maxLen > 0 && len(data)+br.left > maxLen {
 		return ErrTooLong
 	}
 
@@ -158,11 +158,11 @@ func (br *BodyReader) append(data []byte) error {
 	return nil
 }
 
-// NewBodyReader creates a BodyReader.
+// NewBody creates a HTTPBody.
 //
 //go:norace
-func NewBodyReader(engine *Engine) *BodyReader {
-	br := bodyReaderPool.Get().(*BodyReader)
+func NewHTTPBody(engine *Engine) *HTTPBody {
+	br := httpBodyPool.Get().(*HTTPBody)
 	br.engine = engine
 	return br
 }
