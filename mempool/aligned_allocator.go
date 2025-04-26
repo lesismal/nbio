@@ -12,10 +12,10 @@ var (
 
 const (
 	minAlignedBufferSizeBits = 5
-	maxAlignedBufferSizeBits = 16
+	maxAlignedBufferSizeBits = 15
 	minAlignedBufferSize     = 1 << minAlignedBufferSizeBits                           // 32
 	minAlignedBufferSizeMask = minAlignedBufferSize - 1                                // 31
-	maxAlignedBufferSize     = (1 << maxAlignedBufferSizeBits) - 1                     // 64k
+	maxAlignedBufferSize     = (1 << maxAlignedBufferSizeBits)                         // 64k
 	alignedPoolBucketNum     = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1 // 12
 )
 
