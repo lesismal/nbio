@@ -15,7 +15,7 @@ const (
 	maxAlignedBufferSizeBits = 15
 	minAlignedBufferSize     = 1 << minAlignedBufferSizeBits                           // 32
 	minAlignedBufferSizeMask = minAlignedBufferSize - 1                                // 31
-	maxAlignedBufferSize     = 1 << maxAlignedBufferSizeBits                           // 64k
+	maxAlignedBufferSize     = 1 << maxAlignedBufferSizeBits                           // 32k
 	alignedPoolBucketNum     = maxAlignedBufferSizeBits - minAlignedBufferSizeBits + 1 // 12
 )
 
