@@ -157,6 +157,9 @@ type Config struct {
 	// MaxConnReadTimesPerEventLoop represents max read times in one poller loop for one fd.
 	MaxConnReadTimesPerEventLoop int
 
+	// OnAcceptError is called when accept error.
+	OnAcceptError func(err error)
+
 	// Handler sets HTTP handler for Engine.
 	Handler http.Handler
 
@@ -236,9 +239,10 @@ type Engine struct {
 	listenerMux *lmux.ListenerMux
 	listeners   []net.Listener
 
-	_onOpen  func(c net.Conn)
-	_onClose func(c net.Conn, err error)
-	_onStop  func()
+	_onAcceptError func(err error)
+	_onOpen        func(c net.Conn)
+	_onClose       func(c net.Conn, err error)
+	_onStop        func()
 
 	mux         sync.Mutex
 	conns       map[connValue]struct{}
@@ -255,6 +259,14 @@ type Engine struct {
 	ExecuteClient func(f func())
 
 	// isOneshot bool
+}
+
+// OnAcceptError is called when accept error.
+//
+//go:norace
+func (e *Engine) OnAcceptError(h func(err error)) {
+	e._onAcceptError = h
+	e.Engine.OnAcceptError(h)
 }
 
 // OnOpen registers callback for new connection.
@@ -335,7 +347,9 @@ func (e *Engine) listen(ln net.Listener, tlsConfig *tls.Config, addConn func(*Co
 					if !e.shutdown {
 						logging.Error("Accept failed: %v, exit...", err)
 					}
-					break
+					if e._onAcceptError != nil {
+						e._onAcceptError(err)
+					}
 				}
 			}
 		}

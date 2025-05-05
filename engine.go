@@ -141,6 +141,9 @@ type Engine struct {
 	listeners []*poller
 	pollers   []*poller
 
+	// onAcceptError is called when accept error.
+	onAcceptError func(err error)
+
 	// onUDPListen for udp listener created.
 	onUDPListen func(c *Conn)
 	// callback for new connection connected.
@@ -284,6 +287,13 @@ func (g *Engine) addDialer(c *Conn) (*Conn, error) {
 		return nil, err
 	}
 	return c, nil
+}
+
+// OnAcceptError is called when accept error.
+//
+//go:norace
+func (g *Engine) OnAcceptError(h func(err error)) {
+	g.onAcceptError = h
 }
 
 // OnOpen registers callback for new connection.

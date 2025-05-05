@@ -206,7 +206,9 @@ func (p *poller) acceptorLoop() {
 						err,
 					)
 				}
-				break
+				if p.g.onAcceptError != nil {
+					p.g.onAcceptError(err)
+				}
 			}
 		}
 	}

@@ -84,15 +84,15 @@ func (lm *ListenerMux) Start() {
 					if ok := errors.As(err, &ne); ok && ne.Timeout() {
 						logging.Error("Accept failed: timeout error, retrying...")
 						time.Sleep(time.Second / 20)
-						continue
 					} else {
 						if !lm.shutdown {
 							logging.Error("Accept failed: %v, exit...", err)
 						}
 						listenerA.chEvent <- event{err: err, conn: c}
 						listenerB.chEvent <- event{err: err, conn: c}
-						return
+						// return
 					}
+					continue
 				}
 				if atomic.AddInt32(&lm.onlineA, 1) <= lm.maxOnlineA {
 					listenerA.chEvent <- event{err: nil, conn: c}

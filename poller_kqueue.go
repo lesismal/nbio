@@ -278,7 +278,9 @@ func (p *poller) acceptorLoop() {
 				if !p.shutdown {
 					logging.Error("NBIO[%v][%v_%v] Accept failed: %v, exit...", p.g.Name, p.pollType, p.index, err)
 				}
-				break
+				if p.g.onAcceptError != nil {
+					p.g.onAcceptError(err)
+				}
 			}
 		}
 	}
