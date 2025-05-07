@@ -184,6 +184,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 			if p.g.onRead == nil {
 				for {
 					buffer := p.g.borrow(c)
+					bufLen := len(buffer)
 					rc, n, err := c.ReadAndGetConn(buffer)
 					if n > 0 {
 						p.g.onData(rc, buffer[:n])
@@ -201,7 +202,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 						}
 						c.closeWithError(err)
 					}
-					if n < len(buffer) {
+					if n < bufLen {
 						break
 					}
 				}

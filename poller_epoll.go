@@ -276,6 +276,7 @@ func (p *poller) readWriteLoop() {
 							} else {
 								for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
 									buffer := g.borrow(c)
+									bufLen := len(buffer)
 									rc, n, err := c.ReadAndGetConn(buffer)
 									if n > 0 {
 										g.onData(rc, buffer[:n])
@@ -291,7 +292,7 @@ func (p *poller) readWriteLoop() {
 										c.closeWithError(err)
 										break
 									}
-									if n < len(buffer) {
+									if n < bufLen {
 										break
 									}
 								}
