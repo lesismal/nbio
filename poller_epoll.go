@@ -245,11 +245,8 @@ func (p *poller) readWriteLoop() {
 		}
 
 		if n <= 0 {
-			msec = -1
-			// runtime.Gosched()
 			continue
 		}
-		msec = 20
 
 		for _, ev := range events[:n] {
 			fd := int(ev.Fd)
