@@ -110,7 +110,8 @@ func (c *Conn) readTCP(b []byte) (int, error) {
 		g.onRead(c)
 		return nread, nil
 	} else if nread > 0 {
-		g.onData(c, b[:nread])
+		b = b[:nread]
+		g.onDataPtr(c, &b)
 	}
 	return nread, err
 }
@@ -152,7 +153,8 @@ func (c *Conn) readUDP(b []byte) (int, error) {
 		g.onRead(dstConn)
 		return nread, nil
 	} else if nread > 0 {
-		g.onData(dstConn, b[:nread])
+		buf := b[:nread]
+		g.onDataPtr(dstConn, &buf)
 	}
 
 	return nread, err

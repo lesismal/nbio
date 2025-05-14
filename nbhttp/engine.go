@@ -224,7 +224,7 @@ type Config struct {
 	//        false is by defalt.
 	AsyncReadInPoller bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
-	IOExecute func(f func([]byte))
+	IOExecute func(f func(*[]byte))
 }
 
 // Engine .

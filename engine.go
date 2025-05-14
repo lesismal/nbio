@@ -104,7 +104,7 @@ type Config struct {
 	// false: epoll goroutine handles both the reading events and the reading.
 	AsyncReadInPoller bool
 	// IOExecute is used to handle the aysnc reading, users can customize it.
-	IOExecute func(f func([]byte))
+	IOExecute func(f func(*[]byte))
 
 	// BodyAllocator sets the buffer allocator for write cache.
 	BodyAllocator mempool.Allocator
@@ -153,13 +153,13 @@ type Engine struct {
 	// callback for reading event.
 	onRead func(c *Conn)
 	// callback for coming data.
-	onData func(c *Conn, data []byte)
+	onDataPtr func(c *Conn, pdata *[]byte)
 	// callback for writing data size caculation.
 	onWrittenSize func(c *Conn, b []byte, n int)
 	// callback for allocationg the reading buffer.
-	onReadBufferAlloc func(c *Conn) []byte
+	onReadBufferAlloc func(c *Conn) *[]byte
 	// callback for freeing the reading buffer.
-	onReadBufferFree func(c *Conn, buffer []byte)
+	onReadBufferFree func(c *Conn, pbuf *[]byte)
 
 	// depreacated.
 	// beforeRead  func(c *Conn)
@@ -348,7 +348,19 @@ func (g *Engine) OnData(h func(c *Conn, data []byte)) {
 	if h == nil {
 		panic("invalid handler: nil")
 	}
-	g.onData = h
+	g.onDataPtr = func(c *Conn, pdata *[]byte) {
+		h(c, *pdata)
+	}
+}
+
+// OnDataPtr registers callback for data ptr.
+//
+//go:norace
+func (g *Engine) OnDataPtr(h func(c *Conn, pdata *[]byte)) {
+	if h == nil {
+		panic("invalid handler: nil")
+	}
+	g.onDataPtr = h
 }
 
 // OnWrittenSize registers callback for written size.
@@ -366,7 +378,7 @@ func (g *Engine) OnWrittenSize(h func(c *Conn, b []byte, n int)) {
 // OnReadBufferAlloc registers callback for memory allocating.
 //
 //go:norace
-func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
+func (g *Engine) OnReadBufferAlloc(h func(c *Conn) *[]byte) {
 	if h == nil {
 		panic("invalid handler: nil")
 	}
@@ -376,7 +388,7 @@ func (g *Engine) OnReadBufferAlloc(h func(c *Conn) []byte) {
 // OnReadBufferFree registers callback for memory release.
 //
 //go:norace
-func (g *Engine) OnReadBufferFree(h func(c *Conn, b []byte)) {
+func (g *Engine) OnReadBufferFree(h func(c *Conn, pbuf *[]byte)) {
 	if h == nil {
 		panic("invalid handler: nil")
 	}
@@ -438,6 +450,13 @@ func (g *Engine) PollerBuffer(c *Conn) []byte {
 	return c.p.ReadBuffer
 }
 
+// PollerBufferPtr returns Poller's buffer by Conn, can be used on linux/bsd.
+//
+//go:norace
+func (g *Engine) PollerBufferPtr(c *Conn) *[]byte {
+	return &c.p.ReadBuffer
+}
+
 //go:norace
 func (g *Engine) initHandlers() {
 	g.wgConn.Add(1)
@@ -451,8 +470,8 @@ func (g *Engine) initHandlers() {
 	// 	return nil, err
 	// })
 	g.OnData(func(c *Conn, data []byte) {})
-	g.OnReadBufferAlloc(g.PollerBuffer)
-	g.OnReadBufferFree(func(c *Conn, buffer []byte) {})
+	g.OnReadBufferAlloc(g.PollerBufferPtr)
+	g.OnReadBufferFree(func(c *Conn, pbuf *[]byte) {})
 	// g.OnWriteBufferRelease(func(c *Conn, buffer []byte) {})
 	// g.BeforeRead(func(c *Conn) {})
 	// g.AfterRead(func(c *Conn) {})
@@ -476,11 +495,11 @@ func (g *Engine) initHandlers() {
 }
 
 //go:norace
-func (g *Engine) borrow(c *Conn) []byte {
+func (g *Engine) borrow(c *Conn) *[]byte {
 	return g.onReadBufferAlloc(c)
 }
 
 //go:norace
-func (g *Engine) payback(c *Conn, buffer []byte) {
-	g.onReadBufferFree(c, buffer)
+func (g *Engine) payback(c *Conn, pbuf *[]byte) {
+	g.onReadBufferFree(c, pbuf)
 }

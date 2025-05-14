@@ -183,13 +183,14 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 		if ev.Filter == syscall.EVFILT_READ {
 			if p.g.onRead == nil {
 				for {
-					buffer := p.g.borrow(c)
-					bufLen := len(buffer)
-					rc, n, err := c.ReadAndGetConn(buffer)
+					pbuf := p.g.borrow(c)
+					bufLen := len(*pbuf)
+					rc, n, err := c.ReadAndGetConn(pbuf)
 					if n > 0 {
-						p.g.onData(rc, buffer[:n])
+						*pbuf = (*pbuf)[:n]
+						p.g.onDataPtr(rc, pbuf)
 					}
-					p.g.payback(c, buffer)
+					p.g.payback(c, pbuf)
 					if errors.Is(err, syscall.EINTR) {
 						continue
 					}

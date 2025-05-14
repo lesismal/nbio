@@ -164,11 +164,11 @@ func NewEngine(conf Config) *Engine {
 
 	g.initHandlers()
 
-	g.OnReadBufferAlloc(func(c *Conn) []byte {
+	g.OnReadBufferAlloc(func(c *Conn) *[]byte {
 		if c.ReadBuffer == nil {
 			c.ReadBuffer = make([]byte, g.ReadBufferSize)
 		}
-		return c.ReadBuffer
+		return &c.ReadBuffer
 	})
 
 	return g

@@ -162,11 +162,12 @@ func (c *Conn) AsyncRead() {
 	// If is EPOLLONESHOT, run the read job directly, because the reading event wouldn't
 	// be re-dispatched before this reading event has been handled and set again.
 	if g.isOneshot {
-		g.IOExecute(func(buffer []byte) {
+		g.IOExecute(func(pbuf *[]byte) {
 			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
-				rc, n, err := c.ReadAndGetConn(buffer)
+				rc, n, err := c.ReadAndGetConn(pbuf)
 				if n > 0 {
-					g.onData(rc, buffer[:n])
+					*pbuf = (*pbuf)[:n]
+					g.onDataPtr(rc, pbuf)
 				}
 				if errors.Is(err, syscall.EINTR) {
 					continue
@@ -178,7 +179,7 @@ func (c *Conn) AsyncRead() {
 					c.closeWithError(err)
 					return
 				}
-				if n < len(buffer) {
+				if n < len(*pbuf) {
 					break
 				}
 			}
@@ -199,13 +200,14 @@ func (c *Conn) AsyncRead() {
 		return
 	}
 
-	g.IOExecute(func(buffer []byte) {
+	g.IOExecute(func(pBuf *[]byte) {
 		for {
 			// try to read all the data available.
 			for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
-				rc, n, err := c.ReadAndGetConn(buffer)
+				rc, n, err := c.ReadAndGetConn(pBuf)
 				if n > 0 {
-					g.onData(rc, buffer[:n])
+					*pBuf = (*pBuf)[:n]
+					g.onDataPtr(rc, pBuf)
 				}
 				if errors.Is(err, syscall.EINTR) {
 					continue
@@ -217,7 +219,7 @@ func (c *Conn) AsyncRead() {
 					c.closeWithError(err)
 					return
 				}
-				if n < len(buffer) {
+				if n < len(*pBuf) {
 					break
 				}
 			}
@@ -264,7 +266,7 @@ func (c *Conn) Read(b []byte) (int, error) {
 // Notice: non-blocking interface, should not be used as you use std.
 //
 //go:norace
-func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
+func (c *Conn) ReadAndGetConn(pdata *[]byte) (*Conn, int, error) {
 	// When the connection is closed and the fd is reused on Unix,
 	// new connection maybe hold the same fd.
 	// Use lock to prevent data confusion.
@@ -274,7 +276,7 @@ func (c *Conn) ReadAndGetConn(b []byte) (*Conn, int, error) {
 		return c, 0, net.ErrClosed
 	}
 
-	dstConn, n, err := c.doRead(b)
+	dstConn, n, err := c.doRead(*pdata)
 	c.mux.Unlock()
 	// if err == nil {
 	// 	c.p.g.afterRead(c)
