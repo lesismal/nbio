@@ -272,13 +272,14 @@ func (p *poller) readWriteLoop() {
 								c.AsyncRead()
 							} else {
 								for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
-									buffer := g.borrow(c)
-									bufLen := len(buffer)
-									rc, n, err := c.ReadAndGetConn(buffer)
+									pbuf := g.borrow(c)
+									bufLen := len(*pbuf)
+									rc, n, err := c.ReadAndGetConn(pbuf)
 									if n > 0 {
-										g.onData(rc, buffer[:n])
+										*pbuf = (*pbuf)[:n]
+										g.onDataPtr(rc, pbuf)
 									}
-									g.payback(c, buffer)
+									g.payback(c, pbuf)
 									if errors.Is(err, syscall.EINTR) {
 										continue
 									}

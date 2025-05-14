@@ -501,5 +501,6 @@ func (g *Engine) borrow(c *Conn) *[]byte {
 
 //go:norace
 func (g *Engine) payback(c *Conn, pbuf *[]byte) {
+	*pbuf = (*pbuf)[:cap(*pbuf)]
 	g.onReadBufferFree(c, pbuf)
 }
