@@ -139,12 +139,11 @@ func TestEcho(t *testing.T) {
 		}
 	})
 
-	g.OnReadBufferAlloc(func(c *Conn) []byte {
-		return make([]byte, 1024)
+	g.OnReadBufferAlloc(func(c *Conn) *[]byte {
+		b := make([]byte, 1024)
+		return &b
 	})
-	g.OnReadBufferFree(func(c *Conn, b []byte) {
-
-	})
+	g.OnReadBufferFree(func(c *Conn, pbuf *[]byte) {})
 
 	one := func(n int) {
 		c, err := Dial("tcp", addr)

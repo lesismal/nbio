@@ -72,7 +72,7 @@ func BenchmarkIOTaskPool(b *testing.B) {
 		wg := sync.WaitGroup{}
 		wg.Add(testLoopNum)
 		for j := 0; j < testLoopNum; j++ {
-			p.Go(func(buf []byte) {
+			p.Go(func(pbuf *[]byte) {
 				if sleepTime > 0 {
 					time.Sleep(sleepTime)
 				}

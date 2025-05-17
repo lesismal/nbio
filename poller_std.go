@@ -59,9 +59,9 @@ func (p *poller) accept() error {
 //go:norace
 func (p *poller) readConn(c *Conn) {
 	for {
-		buffer := p.g.borrow(c)
-		_, err := c.read(buffer)
-		p.g.payback(c, buffer)
+		pbuf := p.g.borrow(c)
+		_, err := c.read(*pbuf)
+		p.g.payback(c, pbuf)
 		if err != nil {
 			c.Close()
 			return
