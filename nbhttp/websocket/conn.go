@@ -179,14 +179,14 @@ func (c *Conn) handleDataFrame(opcode MessageType, fin bool, pbody *[]byte) {
 			defer c.Engine.BodyAllocator.Free(pbody)
 		}
 		c.Engine.SyncCall(func() {
-			h(c, opcode, fin, *pbody)
+			h(c, opcode, fin, pbody)
 		})
 	} else {
 		if !c.Execute(func() {
 			if c.releasePayload {
 				defer c.Engine.BodyAllocator.Free(pbody)
 			}
-			h(c, opcode, fin, *pbody)
+			h(c, opcode, fin, pbody)
 		}) {
 			if c.releasePayload {
 				defer c.Engine.BodyAllocator.Free(pbody)
@@ -204,14 +204,14 @@ func (c *Conn) handleMessage(opcode MessageType, pbody *[]byte) {
 			defer c.Engine.BodyAllocator.Free(pbody)
 		}
 		c.Engine.SyncCall(func() {
-			c.handleWsMessage(opcode, *pbody)
+			c.handleWsMessage(opcode, pbody)
 		})
 	} else {
 		if !c.Execute(func() {
 			if c.releasePayload {
 				defer c.Engine.BodyAllocator.Free(pbody)
 			}
-			c.handleWsMessage(opcode, *pbody)
+			c.handleWsMessage(opcode, pbody)
 		}) {
 			if c.releasePayload {
 				defer c.Engine.BodyAllocator.Free(pbody)
@@ -226,19 +226,27 @@ func (c *Conn) handleProtocolMessage(opcode MessageType, pbody *[]byte) {
 }
 
 //go:norace
-func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
+func (c *Conn) handleWsMessage(opcode MessageType, pData *[]byte) {
 	const errInvalidUtf8Text = "invalid UTF-8 bytes"
 
 	if c.KeepaliveTime > 0 {
 		defer c.SetReadDeadline(time.Now().Add(c.KeepaliveTime))
 	}
 
+	dataToString := func() string {
+		s := ""
+		if pData != nil {
+			s = string(*pData)
+		}
+		return s
+	}
+
 	switch opcode {
 	case BinaryMessage:
-		c.messageHandler(c, opcode, data)
+		c.messageHandler(c, opcode, pData)
 		return
 	case TextMessage:
-		if !c.Engine.CheckUtf8(data) {
+		if pData != nil && !c.Engine.CheckUtf8(*pData) {
 			protoErrorData := make([]byte, 2+len(errInvalidUtf8Text))
 			binary.BigEndian.PutUint16(protoErrorData, 1002)
 			copy(protoErrorData[2:], errInvalidUtf8Text)
@@ -246,21 +254,21 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 			c.WriteMessage(CloseMessage, protoErrorData)
 			goto ErrExit
 		}
-		c.messageHandler(c, opcode, data)
+		c.messageHandler(c, opcode, pData)
 		return
 	case PingMessage:
-		c.pingMessageHandler(c, string(data))
+		c.pingMessageHandler(c, dataToString())
 		return
 	case PongMessage:
-		c.pongMessageHandler(c, string(data))
+		c.pongMessageHandler(c, dataToString())
 		return
 	case CloseMessage:
 		var code int
 		var reason string
-		if len(data) == 0 {
+		if pData == nil || len(*pData) == 0 {
 			code = 1005 // no status
-		} else if len(data) >= 2 {
-			code = int(binary.BigEndian.Uint16(data[:2]))
+		} else if pData != nil && len(*pData) >= 2 {
+			code = int(binary.BigEndian.Uint16((*pData)[:2]))
 			if !validCloseCode(code) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
@@ -268,7 +276,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 				c.WriteMessage(CloseMessage, protoErrorCode)
 				goto ErrExit
 			}
-			if !c.Engine.CheckUtf8(data[2:]) {
+			if !c.Engine.CheckUtf8((*pData)[2:]) {
 				protoErrorData := make([]byte, 2+len(errInvalidUtf8Text))
 				binary.BigEndian.PutUint16(protoErrorData, 1002)
 				copy(protoErrorData[2:], errInvalidUtf8Text)
@@ -276,7 +284,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, data []byte) {
 				c.WriteMessage(CloseMessage, protoErrorData)
 				goto ErrExit
 			}
-			reason = string(data[2:])
+			reason = string((*pData)[2:])
 		} else {
 			code = 1002 // protocol_error
 		}
@@ -549,9 +557,24 @@ func (c *Conn) Parse(data []byte) error {
 //
 //go:norace
 func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
-	c.messageHandler = func(c *Conn, messageType MessageType, message []byte) {
+	c.messageHandler = func(c *Conn, messageType MessageType, messagePtr *[]byte) {
 		if !c.closed && h != nil {
-			h(c, messageType, message)
+			if messagePtr != nil {
+				h(c, messageType, *messagePtr)
+			} else {
+				h(c, messageType, nil)
+			}
+		}
+	}
+}
+
+// OnMessagePtr .
+//
+//go:norace
+func (c *Conn) OnMessagePtr(h func(*Conn, MessageType, *[]byte)) {
+	c.messageHandler = func(c *Conn, messageType MessageType, messagePtr *[]byte) {
+		if !c.closed && h != nil {
+			h(c, messageType, messagePtr)
 		}
 	}
 }
@@ -560,9 +583,24 @@ func (c *Conn) OnMessage(h func(*Conn, MessageType, []byte)) {
 //
 //go:norace
 func (c *Conn) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
-	c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, frame []byte) {
+	c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, framePtr *[]byte) {
 		if !c.closed && h != nil {
-			h(c, messageType, fin, frame)
+			if framePtr != nil {
+				h(c, messageType, fin, *framePtr)
+			} else {
+				h(c, messageType, fin, nil)
+			}
+		}
+	}
+}
+
+// OnDataFramePtr .
+//
+//go:norace
+func (c *Conn) OnDataFramePtr(h func(*Conn, MessageType, bool, *[]byte)) {
+	c.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, framePtr *[]byte) {
+		if !c.closed && h != nil {
+			h(c, messageType, fin, framePtr)
 		}
 	}
 }
