@@ -67,8 +67,8 @@ type commonFields struct {
 	closeMessageHandler func(c *Conn, code int, text string)
 
 	openHandler      func(*Conn)
-	messageHandler   func(c *Conn, messageType MessageType, data []byte)
-	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, data []byte)
+	messageHandler   func(c *Conn, messageType MessageType, messagePtr *[]byte)
+	dataFrameHandler func(c *Conn, messageType MessageType, fin bool, framePtr *[]byte)
 }
 
 type Options = Upgrader
@@ -241,11 +241,24 @@ func (u *Upgrader) OnOpen(h func(*Conn)) {
 //
 //go:norace
 func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
-	if h != nil {
-		u.messageHandler = func(c *Conn, messageType MessageType, message []byte) {
-			if !c.closed {
-				h(c, messageType, message)
+	u.messageHandler = func(c *Conn, messageType MessageType, messagePtr *[]byte) {
+		if !c.closed && h != nil {
+			if messagePtr != nil {
+				h(c, messageType, *messagePtr)
+			} else {
+				h(c, messageType, nil)
 			}
+		}
+	}
+}
+
+// OnMessage .
+//
+//go:norace
+func (u *Upgrader) OnMessagePtr(h func(*Conn, MessageType, *[]byte)) {
+	u.messageHandler = func(c *Conn, messageType MessageType, messagePtr *[]byte) {
+		if !c.closed && h != nil {
+			h(c, messageType, messagePtr)
 		}
 	}
 }
@@ -254,11 +267,24 @@ func (u *Upgrader) OnMessage(h func(*Conn, MessageType, []byte)) {
 //
 //go:norace
 func (u *Upgrader) OnDataFrame(h func(*Conn, MessageType, bool, []byte)) {
-	if h != nil {
-		u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, frame []byte) {
-			if !c.closed {
-				h(c, messageType, fin, frame)
+	u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, framePtr *[]byte) {
+		if !c.closed && h != nil {
+			if framePtr != nil {
+				h(c, messageType, fin, *framePtr)
+			} else {
+				h(c, messageType, fin, nil)
 			}
+		}
+	}
+}
+
+// OnDataFramePtr .
+//
+//go:norace
+func (u *Upgrader) OnDataFramePtr(h func(*Conn, MessageType, bool, *[]byte)) {
+	u.dataFrameHandler = func(c *Conn, messageType MessageType, fin bool, framePtr *[]byte) {
+		if !c.closed && h != nil {
+			h(c, messageType, fin, framePtr)
 		}
 	}
 }
