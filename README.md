@@ -86,11 +86,11 @@ func main() {
 		MaxWriteBufferSize: 6 * 1024 * 1024,
 	})
 
-	// hanlde new connection
+	// handle new connection
 	engine.OnOpen(func(c *nbio.Conn) {
 		log.Println("OnOpen:", c.RemoteAddr().String())
 	})
-	// hanlde connection closed
+	// handle connection closed
 	engine.OnClose(func(c *nbio.Conn, err error) {
 		log.Println("OnClose:", c.RemoteAddr().String(), err)
 	})
