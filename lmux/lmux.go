@@ -114,9 +114,9 @@ func (lm *ListenerMux) Stop() {
 	}
 	lm.shutdown = true
 	for l, ab := range lm.listeners {
-		l.Close()
-		ab.a.Close()
-		ab.b.Close()
+		_ = l.Close()
+		_ = ab.a.Close()
+		_ = ab.b.Close()
 	}
 	close(lm.chClose)
 }

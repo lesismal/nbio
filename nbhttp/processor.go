@@ -50,12 +50,12 @@ func releaseRequest(req *http.Request, retainHTTPBody bool) {
 				if retainHTTPBody {
 					// do not release the body
 				} else {
-					br.Close()
+					_ = br.Close()
 					*br = emptyBodyReader
 					bodyReaderPool.Put(br)
 				}
 			} else if !retainHTTPBody {
-				req.Body.Close()
+				_ = req.Body.Close()
 			}
 		}
 		// fast gc for fields
@@ -83,7 +83,7 @@ func releaseClientResponse(res *http.Response) {
 	if res != nil {
 		if res.Body != nil {
 			br := res.Body.(*BodyReader)
-			br.Close()
+			_ = br.Close()
 			*br = emptyBodyReader
 			bodyReaderPool.Put(br)
 		}
@@ -229,7 +229,7 @@ func (p *ServerProcessor) OnComplete(parser *Parser) {
 	conn := parser.Conn
 	request.RemoteAddr = conn.RemoteAddr().String()
 	if parser.Engine.WriteTimeout > 0 {
-		conn.SetWriteDeadline(time.Now().Add(engine.WriteTimeout))
+		_ = conn.SetWriteDeadline(time.Now().Add(engine.WriteTimeout))
 	}
 
 	if request.URL.Host == "" {
@@ -296,16 +296,16 @@ func (p *ServerProcessor) flushResponse(parser *Parser, res *Response) {
 			res.checkChunked()
 			res.eoncodeHead()
 			if err := res.flush(conn); err != nil {
-				conn.Close()
+				_ = conn.Close()
 				releaseRequest(req, engine.RetainHTTPBody)
 				releaseResponse(res)
 				return
 			}
 			if req.Close {
 				// the data may still in the send queue
-				conn.Close()
+				_ = conn.Close()
 			} else if parser.ParserCloser == nil {
-				conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+				_ = conn.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
 			}
 		}
 		releaseRequest(req, engine.RetainHTTPBody)

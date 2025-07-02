@@ -128,7 +128,7 @@ func (c *Conn) Close() error {
 		return nil
 	}
 	if c.IsAsyncWrite() {
-		c.Engine.AfterFunc(c.BlockingModAsyncCloseDelay, func() { c.Conn.Close() })
+		c.Engine.AfterFunc(c.BlockingModAsyncCloseDelay, func() { _ = c.Conn.Close() })
 		return nil
 	}
 	return c.Conn.Close()
@@ -139,7 +139,7 @@ func (c *Conn) Close() error {
 //go:norace
 func (c *Conn) CloseWithError(err error) {
 	c.SetCloseError(err)
-	c.Close()
+	_ = c.Close()
 }
 
 // SetCloseError .
@@ -230,7 +230,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, pData *[]byte) {
 	const errInvalidUtf8Text = "invalid UTF-8 bytes"
 
 	if c.KeepaliveTime > 0 {
-		defer c.SetReadDeadline(time.Now().Add(c.KeepaliveTime))
+		defer func() { _ = c.SetReadDeadline(time.Now().Add(c.KeepaliveTime)) }()
 	}
 
 	dataToString := func() string {
@@ -251,7 +251,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, pData *[]byte) {
 			binary.BigEndian.PutUint16(protoErrorData, 1002)
 			copy(protoErrorData[2:], errInvalidUtf8Text)
 			c.SetCloseError(ErrInvalidUtf8)
-			c.WriteMessage(CloseMessage, protoErrorData)
+			_ = c.WriteMessage(CloseMessage, protoErrorData)
 			goto ErrExit
 		}
 		c.messageHandler(c, opcode, pData)
@@ -273,7 +273,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, pData *[]byte) {
 				protoErrorCode := make([]byte, 2)
 				binary.BigEndian.PutUint16(protoErrorCode, 1002)
 				c.SetCloseError(ErrInvalidCloseCode)
-				c.WriteMessage(CloseMessage, protoErrorCode)
+				_ = c.WriteMessage(CloseMessage, protoErrorCode)
 				goto ErrExit
 			}
 			if !c.Engine.CheckUtf8((*pData)[2:]) {
@@ -281,7 +281,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, pData *[]byte) {
 				binary.BigEndian.PutUint16(protoErrorData, 1002)
 				copy(protoErrorData[2:], errInvalidUtf8Text)
 				c.SetCloseError(ErrInvalidUtf8)
-				c.WriteMessage(CloseMessage, protoErrorData)
+				_ = c.WriteMessage(CloseMessage, protoErrorData)
 				goto ErrExit
 			}
 			reason = string((*pData)[2:])
@@ -304,7 +304,7 @@ func (c *Conn) handleWsMessage(opcode MessageType, pData *[]byte) {
 	}
 
 ErrExit:
-	c.Close()
+	_ = c.Close()
 }
 
 //go:norace
@@ -489,7 +489,7 @@ func (c *Conn) Parse(data []byte) error {
 							pb, err = c.readAll(rc, len(*message)*2)
 							allocator.Free(message)
 							message = pb
-							rc.Close()
+							_ = rc.Close()
 							if err != nil {
 								releaseBuf()
 								return
@@ -525,7 +525,7 @@ func (c *Conn) Parse(data []byte) error {
 
 		if err != nil {
 			if errors.Is(err, ErrMessageTooLarge) || errors.Is(err, ErrControlMessageTooBig) {
-				c.WriteClose(1009, err.Error())
+				_ = c.WriteClose(1009, err.Error())
 			}
 			return err
 		}
@@ -654,7 +654,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		w := &writeBuffer{
 			allocator: c.Engine.BodyAllocator,
 		}
-		defer w.Close()
+		defer func() { _ = w.Close() }()
 
 		var cw io.WriteCloser
 		if c.WebsocketCompressor != nil {
@@ -666,7 +666,7 @@ func (c *Conn) WriteMessage(messageType MessageType, data []byte) error {
 		if err != nil {
 			compress = false
 		} else {
-			cw.Close()
+			_ = cw.Close()
 			if w.pbuf != nil {
 				data = *w.pbuf
 			}
@@ -824,7 +824,7 @@ func (c *Conn) CloseAndClean(err error) {
 	}
 
 	if c.Conn != nil {
-		c.Conn.Close()
+		_ = c.Conn.Close()
 	}
 
 	if c.bytesCached != nil {
@@ -1061,7 +1061,7 @@ func (c *Conn) HandleRead(bufSize int) {
 	}()
 
 	for {
-		n, err = c.Conn.Read(buf)
+		n, err = c.Read(buf)
 		if err != nil {
 			break
 		}

@@ -50,14 +50,14 @@ func (g *Engine) Start() error {
 			addr, err := net.ResolveUDPAddr(g.Network, addrStr)
 			if err != nil {
 				for j := 0; j < i; j++ {
-					udpListeners[j].Close()
+					_ = udpListeners[j].Close()
 				}
 				return err
 			}
 			ln, err := g.ListenUDP("udp", addr)
 			if err != nil {
 				for j := 0; j < i; j++ {
-					udpListeners[j].Close()
+					_ = udpListeners[j].Close()
 				}
 				return err
 			}
@@ -108,7 +108,7 @@ func (g *Engine) Start() error {
 			}
 
 			for j := 0; j < len(udpListeners); j++ {
-				udpListeners[j].Close()
+				_ = udpListeners[j].Close()
 			}
 
 			return err
@@ -157,7 +157,7 @@ func (engine *Engine) DialAsync(network, addr string, onConnected func(*Conn, er
 func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Duration, onConnected func(*Conn, error)) error {
 	h := func(c *Conn, err error) {
 		if err == nil {
-			c.SetWriteDeadline(time.Time{})
+			_ = c.SetWriteDeadline(time.Time{})
 		}
 		onConnected(c, err)
 	}
@@ -171,7 +171,7 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 	}
 	err = syscall.SetNonblock(fd, true)
 	if err != nil {
-		syscall.Close(fd)
+		_ = syscall.Close(fd)
 		return err
 	}
 	err = syscall.Connect(fd, dialaddr)
@@ -180,7 +180,7 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 		if errors.Is(err, syscall.EINPROGRESS) {
 			inprogress = true
 		} else {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 			return err
 		}
 	}
@@ -214,7 +214,7 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 		var iface *net.Interface
 		iface, err = net.InterfaceByIndex(int(vt.ZoneId))
 		if err != nil {
-			syscall.Close(fd)
+			_ = syscall.Close(fd)
 			return err
 		}
 		switch connType {
@@ -253,7 +253,7 @@ func (engine *Engine) DialAsyncTimeout(network, addr string, timeout time.Durati
 			h(c, nil)
 		})
 	} else if timeout > 0 {
-		c.setDeadline(&c.wTimer, ErrDialTimeout, time.Now().Add(timeout))
+		_ = c.setDeadline(&c.wTimer, ErrDialTimeout, time.Now().Add(timeout))
 	}
 
 	return nil

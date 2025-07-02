@@ -111,7 +111,7 @@ func (c *ClientConn) closeWithErrorWithoutLock(err error) {
 			delete(c.Engine.dialerConns, key)
 			c.Engine.mux.Unlock()
 		}
-		c.conn.Close()
+		_ = c.conn.Close()
 		c.conn = nil
 	}
 	if c.onClose != nil {
@@ -138,13 +138,13 @@ func (c *ClientConn) onResponse(res *http.Response, err error) {
 					c.closeWithErrorWithoutLock(ErrClientTimeout)
 				}
 			} else {
-				c.conn.SetReadDeadline(deadline)
+				_ = c.conn.SetReadDeadline(deadline)
 			}
 		} else {
 			if c.IdleConnTimeout > 0 {
-				c.conn.SetReadDeadline(time.Now().Add(c.IdleConnTimeout))
+				_ = c.conn.SetReadDeadline(time.Now().Add(c.IdleConnTimeout))
 			} else {
-				c.conn.SetReadDeadline(time.Time{})
+				_ = c.conn.SetReadDeadline(time.Time{})
 			}
 		}
 		if len(c.handlers) == 0 {
@@ -190,7 +190,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 
 	sendRequest := func() {
 		if c.Engine.WriteTimeout > 0 {
-			c.conn.SetWriteDeadline(time.Now().Add(c.Engine.WriteTimeout))
+			_ = c.conn.SetWriteDeadline(time.Now().Add(c.Engine.WriteTimeout))
 		}
 		err := req.Write(c.conn)
 		if err != nil {
@@ -201,7 +201,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 
 	if c.conn != nil {
 		if confTimeout > 0 && len(c.handlers) == 1 {
-			c.conn.SetReadDeadline(deadline)
+			_ = c.conn.SetReadDeadline(deadline)
 		}
 		sendRequest()
 	} else {
@@ -240,7 +240,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			netDial = func(network, addr string) (net.Conn, error) {
 				conn, err := dialer(network, addr)
 				if err == nil {
-					conn.SetReadDeadline(deadline)
+					_ = conn.SetReadDeadline(deadline)
 				}
 				return conn, err
 			}
@@ -291,7 +291,7 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 			nbc.SetSession(parser)
 
 			nbc.OnData(engine.DataHandler)
-			engine.AddConn(nbc)
+			_, _ = engine.AddConn(nbc)
 		case "https":
 			tlsConfig := c.TLSClientConfig
 			if tlsConfig == nil {

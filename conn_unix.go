@@ -83,7 +83,7 @@ func (c *Conn) releaseToWrite(t *toWrite) {
 		c.p.g.BodyAllocator.Free(t.buf)
 	}
 	if t.fd > 0 {
-		syscall.Close(t.fd)
+		_ = syscall.Close(t.fd)
 	}
 	// *t = emptyToWrite
 	// poolToWrite.Put(t)
@@ -176,7 +176,7 @@ func (c *Conn) AsyncRead() {
 					break
 				}
 				if err != nil {
-					c.closeWithError(err)
+					_ = c.closeWithError(err)
 					return
 				}
 				if n < len(*pbuf) {
@@ -216,7 +216,7 @@ func (c *Conn) AsyncRead() {
 					break
 				}
 				if err != nil {
-					c.closeWithError(err)
+					_ = c.closeWithError(err)
 					return
 				}
 				if n < len(*pBuf) {
@@ -327,7 +327,7 @@ func (c *Conn) readUDP(b []byte) (*Conn, int, error) {
 		// that has the same local addr and remote addr.
 		uc, ok := c.connUDP.getConn(c.p, c.fd, rAddr)
 		if g.UDPReadTimeout > 0 {
-			uc.SetReadDeadline(time.Now().Add(g.UDPReadTimeout))
+			_ = uc.SetReadDeadline(time.Now().Add(g.UDPReadTimeout))
 		}
 		if !ok {
 			g.onOpen(uc)
@@ -360,7 +360,7 @@ func (c *Conn) Write(b []byte) (int, error) {
 		!errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
-		c.closeWithErrorWithoutLock(err)
+		_ = c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 
@@ -406,7 +406,7 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 		!errors.Is(err, syscall.EAGAIN) {
 		c.closed = true
 		c.mux.Unlock()
-		c.closeWithErrorWithoutLock(err)
+		_ = c.closeWithErrorWithoutLock(err)
 		return n, err
 	}
 	if len(c.writeList) == 0 {
@@ -488,14 +488,14 @@ func (c *Conn) SetDeadline(t time.Time) error {
 			g := c.p.g
 			if c.rTimer == nil {
 				c.rTimer = g.AfterFunc(time.Until(t), func() {
-					c.closeWithError(errReadTimeout)
+					_ = c.closeWithError(errReadTimeout)
 				})
 			} else {
 				c.rTimer.Reset(time.Until(t))
 			}
 			if c.wTimer == nil {
 				c.wTimer = g.AfterFunc(time.Until(t), func() {
-					c.closeWithError(errWriteTimeout)
+					_ = c.closeWithError(errWriteTimeout)
 				})
 			} else {
 				c.wTimer.Reset(time.Until(t))
@@ -525,7 +525,7 @@ func (c *Conn) setDeadline(timer **time.Timer, errClose error, t time.Time) erro
 	if !t.IsZero() {
 		if *timer == nil {
 			*timer = c.p.g.AfterFunc(time.Until(t), func() {
-				c.closeWithError(errClose)
+				_ = c.closeWithError(errClose)
 			})
 		} else {
 			(*timer).Reset(time.Until(t))
@@ -941,7 +941,7 @@ func (c *Conn) flush() error {
 		}
 		if err != nil {
 			c.closed = true
-			c.closeWithErrorWithoutLock(err)
+			_ = c.closeWithErrorWithoutLock(err)
 			return err
 		}
 	}
@@ -1065,9 +1065,9 @@ func (u *udpConn) Close() error {
 	} else {
 		// This connection is a UDP server or dialer, need to close itself
 		// and close all children if this is a server.
-		syscall.Close(u.parent.fd)
+		_ = syscall.Close(u.parent.fd)
 		for _, c := range u.conns {
-			c.Close()
+			_ = c.Close()
 		}
 		u.conns = nil
 	}

@@ -40,9 +40,9 @@ func TestBodyReader(t *testing.T) {
 		b2 = make([]byte, 1132)
 		b3 = make([]byte, 11111)
 	)
-	rand.Read(b1)
-	rand.Read(b2)
-	rand.Read(b3)
+	_, _ = rand.Read(b1)
+	_, _ = rand.Read(b2)
+	_, _ = rand.Read(b3)
 
 	allBytes := append(b0, b1...)
 	allBytes = append(allBytes, b2...)
@@ -50,9 +50,9 @@ func TestBodyReader(t *testing.T) {
 
 	newBR := func() *BodyReader {
 		br := NewBodyReader(engine)
-		br.append(b1)
-		br.append(b2)
-		br.append(b3)
+		_ = br.append(b1)
+		_ = br.append(b2)
+		_ = br.append(b3)
 		return br
 	}
 
@@ -64,7 +64,7 @@ func TestBodyReader(t *testing.T) {
 	if !bytes.Equal(allBytes, body1) {
 		t.Fatalf("!bytes.Equal(allBytes, body1)")
 	}
-	br1.Close()
+	_ = br1.Close()
 
 	br2 := newBR()
 	body2 := make([]byte, len(allBytes))
@@ -77,5 +77,5 @@ func TestBodyReader(t *testing.T) {
 	if !bytes.Equal(allBytes, body2) {
 		t.Fatalf("!bytes.Equal(allBytes, body2)")
 	}
-	br2.Close()
+	_ = br2.Close()
 }

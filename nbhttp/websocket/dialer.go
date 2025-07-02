@@ -176,7 +176,7 @@ func (d *Dialer) DialContext(ctx context.Context, urlStr string, requestHeader h
 				case errCh <- e:
 				case <-ctx.Done():
 					if conn != nil {
-						conn.Close()
+						_ = conn.Close()
 					}
 				}
 			} else {

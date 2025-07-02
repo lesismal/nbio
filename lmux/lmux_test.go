@@ -68,7 +68,7 @@ func TestListenerMux(t *testing.T) {
 	}
 	closeConns := func() {
 		for _, v := range conns {
-			v.Close()
+			_ = v.Close()
 		}
 	}
 	dialN(totalConn, addr1)

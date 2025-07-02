@@ -103,7 +103,7 @@ func (c *Conn) Sendfile(f *os.File, remain int64) (int64, error) {
 		}
 		if err != nil {
 			c.closed = true
-			c.closeWithErrorWithoutLock(err)
+			_ = c.closeWithErrorWithoutLock(err)
 			return 0, err
 		}
 	}

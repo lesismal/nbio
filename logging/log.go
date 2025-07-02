@@ -76,7 +76,7 @@ func (l *logger) SetLevel(lvl int) {
 	case LevelAll, LevelDebug, LevelInfo, LevelWarn, LevelError, LevelNone:
 		l.level = lvl
 	default:
-		fmt.Fprintf(Output, "invalid log level: %v", lvl)
+		_, _ = fmt.Fprintf(Output, "invalid log level: %v", lvl)
 	}
 }
 
@@ -85,7 +85,7 @@ func (l *logger) SetLevel(lvl int) {
 //go:norace
 func (l *logger) Debug(format string, v ...interface{}) {
 	if LevelDebug >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format+"\n", v...)
+		_, _ = fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [DBG] "+format+"\n", v...)
 	}
 }
 
@@ -94,7 +94,7 @@ func (l *logger) Debug(format string, v ...interface{}) {
 //go:norace
 func (l *logger) Info(format string, v ...interface{}) {
 	if LevelInfo >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format+"\n", v...)
+		_, _ = fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [INF] "+format+"\n", v...)
 	}
 }
 
@@ -103,7 +103,7 @@ func (l *logger) Info(format string, v ...interface{}) {
 //go:norace
 func (l *logger) Warn(format string, v ...interface{}) {
 	if LevelWarn >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format+"\n", v...)
+		_, _ = fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [WRN] "+format+"\n", v...)
 	}
 }
 
@@ -112,7 +112,7 @@ func (l *logger) Warn(format string, v ...interface{}) {
 //go:norace
 func (l *logger) Error(format string, v ...interface{}) {
 	if LevelError >= l.level {
-		fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format+"\n", v...)
+		_, _ = fmt.Fprintf(Output, time.Now().Format(TimeFormat)+" [ERR] "+format+"\n", v...)
 	}
 }
 

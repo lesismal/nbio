@@ -53,7 +53,7 @@ func dupStdConn(conn net.Conn) (*Conn, error) {
 	lAddr := conn.LocalAddr()
 	rAddr := conn.RemoteAddr()
 
-	conn.Close()
+	_ = conn.Close()
 
 	// err = syscall.SetNonblock(newFd, true)
 	// if err != nil {

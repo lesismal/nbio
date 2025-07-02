@@ -39,7 +39,7 @@ func init() {
 	g.OnOpen(func(c *Conn) {
 		wsess := &writtenSizeSession{}
 		c.SetSession(wsess)
-		c.SetReadDeadline(time.Now().Add(time.Second * 10))
+		_ = c.SetReadDeadline(time.Now().Add(time.Second * 10))
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		var wsess *writtenSizeSession
@@ -65,7 +65,7 @@ func init() {
 				log.Panicf("close file failed: %v", err)
 			}
 		} else {
-			c.Write(append([]byte{}, data...))
+			_, _ = c.Write(append([]byte{}, data...))
 		}
 	})
 
@@ -120,13 +120,13 @@ func TestEcho(t *testing.T) {
 		if c.Session() != 1 {
 			log.Panicf("invalid session: %v", c.Session())
 		}
-		c.SetLinger(1, 0)
-		c.SetNoDelay(true)
-		c.SetKeepAlive(true)
-		c.SetKeepAlivePeriod(time.Second * 60)
-		c.SetDeadline(time.Now().Add(time.Second * 10))
-		c.SetReadBuffer(1024 * 4)
-		c.SetWriteBuffer(1024 * 4)
+		_ = c.SetLinger(1, 0)
+		_ = c.SetNoDelay(true)
+		_ = c.SetKeepAlive(true)
+		_ = c.SetKeepAlivePeriod(time.Second * 60)
+		_ = c.SetDeadline(time.Now().Add(time.Second * 10))
+		_ = c.SetReadBuffer(1024 * 4)
+		_ = c.SetWriteBuffer(1024 * 4)
 		log.Printf("connected, local addr: %v, remote addr: %v", c.LocalAddr(), c.RemoteAddr())
 	})
 	// g.BeforeWrite(func(c *Conn) {
@@ -150,11 +150,11 @@ func TestEcho(t *testing.T) {
 		if err != nil {
 			log.Panicf("Dial failed: %v", err)
 		}
-		g.AddConn(c)
+		_, _ = g.AddConn(c)
 		if n%2 == 0 {
-			c.Writev([][]byte{make([]byte, msgSize)})
+			_, _ = c.Writev([][]byte{make([]byte, msgSize)})
 		} else {
-			c.Write(make([]byte, msgSize))
+			_, _ = c.Write(make([]byte, msgSize))
 		}
 	}
 
@@ -208,7 +208,7 @@ func TestTimeout(t *testing.T) {
 		c.IsUDP()
 		c.IsUnix()
 		begin = time.Now()
-		c.SetReadDeadline(begin.Add(timeout))
+		_ = c.SetReadDeadline(begin.Add(timeout))
 	})
 	g.OnClose(func(c *Conn, err error) {
 		to := time.Since(begin)
@@ -223,7 +223,7 @@ func TestTimeout(t *testing.T) {
 		if err != nil {
 			log.Panicf("Dial failed: %v", err)
 		}
-		g.AddConn(c)
+		_, _ = g.AddConn(c)
 	}
 	one()
 
@@ -237,9 +237,9 @@ func TestFuzz(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			if idx%2 == 0 {
-				Dial("tcp4", addr)
+				_, _ = Dial("tcp4", addr)
 			} else {
-				Dial("tcp4", addr)
+				_, _ = Dial("tcp4", addr)
 			}
 		}(i)
 	}
@@ -264,9 +264,9 @@ func TestFuzz(t *testing.T) {
 	c, err := Dial("tcp", addr)
 	if err == nil {
 		log.Printf("Dial tcp4: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
-		g.AddConn(c)
-		c.SetWriteDeadline(time.Now().Add(time.Second))
-		c.Write([]byte{1})
+		_, _ = g.AddConn(c)
+		_ = c.SetWriteDeadline(time.Now().Add(time.Second))
+		_, _ = c.Write([]byte{1})
 
 		time.Sleep(time.Second / 10)
 
@@ -274,12 +274,12 @@ func TestFuzz(t *testing.T) {
 		bs = append(bs, []byte{2})
 		bs = append(bs, []byte{3})
 		bs = append(bs, []byte{4})
-		c.Writev(bs)
+		_, _ = c.Writev(bs)
 
 		time.Sleep(time.Second / 10)
 
-		c.Close()
-		c.Write([]byte{1})
+		_ = c.Close()
+		_, _ = c.Write([]byte{1})
 	} else {
 		log.Panicf("Dial tcp4: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestFuzz(t *testing.T) {
 		Network: "tcp4",
 		Addrs:   []string{"127.0.0.1:8889", "127.0.0.1:8889"},
 	})
-	gErr.Start()
+	_ = gErr.Start()
 }
 
 func TestUDP(t *testing.T) {
@@ -297,7 +297,7 @@ func TestUDP(t *testing.T) {
 	chTimeout := make(chan *Conn, 1)
 	g.OnOpen(func(c *Conn) {
 		log.Printf("onOpen: %v, %v", c.LocalAddr().String(), c.RemoteAddr().String())
-		c.SetReadDeadline(time.Now().Add(timeout))
+		_ = c.SetReadDeadline(time.Now().Add(timeout))
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		log.Println("onData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
@@ -348,7 +348,7 @@ func TestUDP(t *testing.T) {
 	if err != nil {
 		log.Fatalf("write udp failed: %v, %v", n, err)
 	}
-	defer connTimeout.Close()
+	defer func() { _ = connTimeout.Close() }()
 	begin := time.Now()
 	select {
 	case c := <-chTimeout:
@@ -372,7 +372,7 @@ func TestUDP(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			conn := newClientConn()
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 			for j := 0; j < msgPerClient; j++ {
 				str := fmt.Sprintf("message-%d", clientNum*idx+j)
 				wbuf := []byte(str)
@@ -404,17 +404,17 @@ func TestUDP(t *testing.T) {
 		c.IsUDP()
 		c.IsUnix()
 		log.Println("onOpen:", c.LocalAddr().String(), c.RemoteAddr().String())
-		c.SetReadDeadline(time.Now().Add(timeout))
+		_ = c.SetReadDeadline(time.Now().Add(timeout))
 	})
 	g.OnData(func(c *Conn, data []byte) {
 		log.Println("OnData:", c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
 		if string(data) == fromClientStr {
-			c.Write([]byte(fromServerStr))
+			_, _ = c.Write([]byte(fromServerStr))
 		} else {
 			if atomic.AddInt32(&cntFromServer, 1) == 3 {
-				c.Close()
+				_ = c.Close()
 			} else {
-				c.Write([]byte(fromClientStr))
+				_, _ = c.Write([]byte(fromClientStr))
 			}
 		}
 	})
@@ -429,9 +429,9 @@ func TestUDP(t *testing.T) {
 			close(done)
 		}
 	})
-	nbc.Write([]byte(fromClientStr))
+	_, _ = nbc.Write([]byte(fromClientStr))
 	<-done
-	lisConn.Close()
+	_ = lisConn.Close()
 	time.Sleep(timeout * 2)
 }
 
@@ -471,7 +471,7 @@ func testDialAsync(t *testing.T, network, addr string) {
 	engineAsync.OnData(func(c *Conn, data []byte) {
 		cnt++
 		if cnt == 1 {
-			c.Write(data)
+			_, _ = c.Write(data)
 			log.Printf("TestDialAsync[%v, %v] Server OnData: %v, %v, %v", network, addr, c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
 		} else {
 			log.Printf("TestDialAsync[%v, %v] Client OnData: %v, %v, %v", network, addr, c.LocalAddr().String(), c.RemoteAddr().String(), string(data))
@@ -518,7 +518,7 @@ func TestUnix(t *testing.T) {
 	}
 
 	unixAddr := "./test.unix"
-	defer os.Remove(unixAddr)
+	defer func() { _ = os.Remove(unixAddr) }()
 	g := NewEngine(Config{
 		Network: "unix",
 		Addrs:   []string{unixAddr},
@@ -544,7 +544,7 @@ func TestUnix(t *testing.T) {
 			}
 		}
 		if c == connCli && string(data) == "world" {
-			c.Close()
+			_ = c.Close()
 		}
 	})
 	chClose := make(chan *Conn, 2)
@@ -563,7 +563,7 @@ func TestUnix(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unix Dial: %v, %v, %v", c.LocalAddr(), c.RemoteAddr(), err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	time.Sleep(time.Second / 10)
 	buf := []byte("hello")
 	connCli, err = g.AddConn(c)
@@ -580,5 +580,5 @@ func TestUnix(t *testing.T) {
 
 func TestStop(t *testing.T) {
 	engine.Stop()
-	os.Remove(testfile)
+	_ = os.Remove(testfile)
 }

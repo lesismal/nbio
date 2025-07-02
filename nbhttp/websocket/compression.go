@@ -30,7 +30,7 @@ func isValidCompressionLevel(level int) bool {
 //go:norace
 func decompressReader(r io.Reader) io.ReadCloser {
 	fr, _ := flateReaderPool.Get().(io.ReadCloser)
-	fr.(flate.Resetter).Reset(r, nil)
+	_ = fr.(flate.Resetter).Reset(r, nil)
 	return &flateReadWrapper{fr}
 }
 
@@ -48,7 +48,7 @@ func (r *flateReadWrapper) Read(p []byte) (int, error) {
 		// Preemptively place the reader back in the pool. This helps with
 		// scenarios where the application does not call NextReader() soon after
 		// this final read.
-		r.Close()
+		_ = r.Close()
 	}
 	return n, err
 }

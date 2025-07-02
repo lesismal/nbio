@@ -88,11 +88,11 @@ func addNorace(path string, info os.FileInfo) {
 		panic(err)
 	}
 	s := string(data)
-	s = strings.Replace(s, "\nfunc", "\n//go:norace\nfunc", -1)
+	s = strings.ReplaceAll(s, "\nfunc", "\n//go:norace\nfunc")
 	tag := "//go:norace\n"
 	tag2 := tag + tag
 	for strings.Contains(s, tag2) {
-		s = strings.Replace(s, tag2, tag, -1)
+		s = strings.ReplaceAll(s, tag2, tag)
 	}
 	data = []byte(s)
 

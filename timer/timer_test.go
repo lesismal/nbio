@@ -81,9 +81,10 @@ func testTimerNormalExecMany(tg *Timer, timeout time.Duration) {
 	ch4 := make(chan int, 5)
 	for i := 0; i < 5; i++ {
 		n := i + 1
-		if n == 3 {
+		switch n {
+		case 3:
 			n = 5
-		} else if n == 5 {
+		case 5:
 			n = 3
 		}
 

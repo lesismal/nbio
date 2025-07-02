@@ -296,20 +296,20 @@ func (hpd *httpProxyDialer) Dial(network string, addr string) (net.Conn, error) 
 	}
 
 	if errWrite := connectReq.Write(conn); errWrite != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, errWrite
 	}
 
 	br := bufio.NewReader(conn)
 	resp, err := http.ReadResponse(br, connectReq)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		conn.Close()
+		_ = conn.Close()
 		f := strings.SplitN(resp.Status, " ", 2)
 		return nil, errors.New(f[1])
 	}
@@ -381,7 +381,7 @@ func (s *proxySocks5) Dial(network, addr string) (net.Conn, error) {
 		return nil, err
 	}
 	if err := s.connect(conn, addr); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 	return conn, nil

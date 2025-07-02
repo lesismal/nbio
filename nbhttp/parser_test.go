@@ -106,7 +106,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 	parser := newParser(isClient)
 	defer func() {
 		if parser.Conn != nil {
-			parser.Conn.Close()
+			_ = parser.Conn.Close()
 		}
 	}()
 	err := parser.Parse(data)
@@ -133,7 +133,7 @@ func testParser(t *testing.T, isClient bool, data []byte) error {
 		nRequest++
 	})
 	conn := newConn()
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	processor := NewServerProcessor()
 	if isClient {
 		processor = NewClientProcessor(nil, func(*http.Response, error) {
@@ -198,8 +198,8 @@ func newConn() net.Conn {
 			continue
 		}
 		go func() {
-			defer ln.Close()
-			ln.Accept()
+			defer func() { _ = ln.Close() }()
+			_, _ = ln.Accept()
 		}()
 		conn, err = net.Dial("tcp", addr)
 		if err != nil {
@@ -268,7 +268,7 @@ func BenchmarkServerProcessor(b *testing.B) {
 		Handler: mux,
 	})
 	parser := NewParser(newConn(), engine, processor, isClient, nil)
-	defer parser.Conn.Close()
+	defer func() { _ = parser.Conn.Close() }()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

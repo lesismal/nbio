@@ -76,12 +76,12 @@ func WrapData(h func(c *nbio.Conn, tlsConn *Conn, data []byte), args ...interfac
 	return func(c *nbio.Conn, data []byte) {
 		if session := c.Session(); session != nil {
 			if tlsConn, ok := session.(*Conn); ok {
-				tlsConn.Append(data)
+				_, _ = tlsConn.Append(data)
 				buffer := getBuffer()
 				for {
 					n, err := tlsConn.Read(buffer)
 					if err != nil {
-						c.Close()
+						_ = c.Close()
 						return
 					}
 					if h != nil && n > 0 {

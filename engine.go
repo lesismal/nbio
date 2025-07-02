@@ -213,7 +213,7 @@ func (g *Engine) Stop() {
 		if c != nil {
 			cc := c
 			g.Async(func() {
-				cc.Close()
+				_ = cc.Close()
 			})
 		}
 	}
@@ -221,7 +221,7 @@ func (g *Engine) Stop() {
 		if c != nil {
 			cc := c
 			g.Async(func() {
-				cc.Close()
+				_ = cc.Close()
 			})
 		}
 	}

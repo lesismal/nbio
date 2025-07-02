@@ -136,18 +136,18 @@ func main() {
 				if !hdrWritten {
 					hdrWritten = true
 					n, _ := fmt.Fprintf(os.Stderr, "AGENT %q\n", server)
-					fmt.Fprintf(tw, "%s\n", strings.Repeat("=", n-1))
+					_, _ = fmt.Fprintf(tw, "%s\n", strings.Repeat("=", n-1))
 				}
-				fmt.Fprintf(tw, "%s\t%s\t%s\n", server, id, c.Behavior)
+				_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\n", server, id, c.Behavior)
 			}
 			if bad {
-				fmt.Fprintf(tw, "\tdesc:\t%s\n", r.Description)
-				fmt.Fprintf(tw, "\texp: \t%s\n", r.Expectation)
-				fmt.Fprintf(tw, "\tact: \t%s\n", r.Result)
+				_, _ = fmt.Fprintf(tw, "\tdesc:\t%s\n", r.Description)
+				_, _ = fmt.Fprintf(tw, "\texp: \t%s\n", r.Expectation)
+				_, _ = fmt.Fprintf(tw, "\tact: \t%s\n", r.Result)
 			}
 		}
 		if hdrWritten {
-			fmt.Fprint(tw, "\n")
+			_, _ = fmt.Fprint(tw, "\n")
 		}
 		var status string
 		if srvFailed {
@@ -156,27 +156,27 @@ func main() {
 			status = statusOK
 		}
 		n, _ := fmt.Fprintf(tw, "AGENT %q SUMMARY (%s)\n", server, status)
-		fmt.Fprintf(tw, "%s\n", strings.Repeat("=", n-1))
+		_, _ = fmt.Fprintf(tw, "%s\n", strings.Repeat("=", n-1))
 
-		fmt.Fprintf(tw, "TOTAL:\t%d\n", counter.Total)
-		fmt.Fprintf(tw, "%s:\t%d\n", statusOK, counter.OK)
-		fmt.Fprintf(tw, "%s:\t%d\n", statusInformational, counter.Informational)
-		fmt.Fprintf(tw, "%s:\t%d\n", statusUnimplemented, counter.Unimplemented)
-		fmt.Fprintf(tw, "%s:\t%d\n", statusNonStrict, counter.NonStrict)
-		fmt.Fprintf(tw, "%s:\t%d\n", statusUnclean, counter.Unclean)
-		fmt.Fprintf(tw, "%s:\t%d\n", statusFailed, counter.Failed)
-		fmt.Fprint(tw, "\n")
-		tw.Flush()
+		_, _ = fmt.Fprintf(tw, "TOTAL:\t%d\n", counter.Total)
+		_, _ = fmt.Fprintf(tw, "%s:\t%d\n", statusOK, counter.OK)
+		_, _ = fmt.Fprintf(tw, "%s:\t%d\n", statusInformational, counter.Informational)
+		_, _ = fmt.Fprintf(tw, "%s:\t%d\n", statusUnimplemented, counter.Unimplemented)
+		_, _ = fmt.Fprintf(tw, "%s:\t%d\n", statusNonStrict, counter.NonStrict)
+		_, _ = fmt.Fprintf(tw, "%s:\t%d\n", statusUnclean, counter.Unclean)
+		_, _ = fmt.Fprintf(tw, "%s:\t%d\n", statusFailed, counter.Failed)
+		_, _ = fmt.Fprint(tw, "\n")
+		_ = tw.Flush()
 	}
 	var rc int
 	if failed {
 		rc = 1
-		fmt.Fprintf(tw, "\n\nTEST %s\n\n", statusFailed)
+		_, _ = fmt.Fprintf(tw, "\n\nTEST %s\n\n", statusFailed)
 	} else {
-		fmt.Fprintf(tw, "\n\nTEST %s\n\n", statusOK)
+		_, _ = fmt.Fprintf(tw, "\n\nTEST %s\n\n", statusOK)
 	}
 
-	tw.Flush()
+	_ = tw.Flush()
 	os.Exit(rc)
 }
 
@@ -205,7 +205,7 @@ func decodeFile(path string, x interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	d := json.NewDecoder(f)
 	return d.Decode(x)

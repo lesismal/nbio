@@ -23,7 +23,7 @@ func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 		u.OnDataFrame(func(c *websocket.Conn, messageType websocket.MessageType, fin bool, data []byte) {
 			err := c.WriteFrame(messageType, isFirst, fin, data)
 			if err != nil {
-				c.Close()
+				_ = c.Close()
 				return
 			}
 			if fin {
@@ -34,7 +34,7 @@ func newUpgrader(isDataFrame bool) *websocket.Upgrader {
 		})
 	} else {
 		u.OnMessage(func(c *websocket.Conn, messageType websocket.MessageType, data []byte) {
-			c.WriteMessage(messageType, data)
+			_ = c.WriteMessage(messageType, data)
 		})
 	}
 
@@ -48,7 +48,7 @@ func onWebsocketFrame(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	conn.SetDeadline(time.Time{})
+	_ = conn.SetDeadline(time.Time{})
 }
 
 //go:norace
@@ -58,7 +58,7 @@ func onWebsocketMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	conn.SetDeadline(time.Time{})
+	_ = conn.SetDeadline(time.Time{})
 }
 
 //go:norace

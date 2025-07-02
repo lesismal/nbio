@@ -165,20 +165,20 @@ func NewUpgrader() *Upgrader {
 		err := c.WriteMessage(PongMessage, []byte(data))
 		if err != nil {
 			logging.Debug("failed to send pong %v", err)
-			c.Close()
+			_ = c.Close()
 			return
 		}
 	}
 	u.pongMessageHandler = func(*Conn, string) {}
 	u.closeMessageHandler = func(c *Conn, code int, text string) {
 		if code == 1005 {
-			c.WriteMessage(CloseMessage, nil)
+			_ = c.WriteMessage(CloseMessage, nil)
 			return
 		}
 		pbuf := u.Engine.BodyAllocator.Malloc(len(text) + 2)
 		binary.BigEndian.PutUint16((*pbuf)[:2], uint16(code))
 		copy((*pbuf)[2:], text)
-		c.WriteMessage(CloseMessage, (*pbuf))
+		_ = c.WriteMessage(CloseMessage, (*pbuf))
 		u.Engine.BodyAllocator.Free(pbuf)
 	}
 
@@ -411,14 +411,14 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 						_, nread, errRead = vt.AppendAndRead(readed, buffer)
 						readed = nil
 						if errRead != nil {
-							c.CloseWithError(err)
+							_ = c.CloseWithError(err)
 							return
 						}
 						if nread > 0 {
 							errRead = wsc.Parse(buffer[:nread])
 							if err != nil {
 								logging.Debug("websocket Conn Parse failed: %v", errRead)
-								c.CloseWithError(errRead)
+								_ = c.CloseWithError(errRead)
 								return
 							}
 						}
@@ -496,7 +496,7 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 				errRead := wsc.Parse(data)
 				if errRead != nil {
 					logging.Debug("websocket Conn Parse failed: %v", errRead)
-					c.CloseWithError(errRead)
+					_ = c.CloseWithError(errRead)
 					return
 				}
 			})
@@ -539,9 +539,9 @@ func (u *Upgrader) Upgrade(w http.ResponseWriter, r *http.Request, responseHeade
 	}
 
 	if u.KeepaliveTime > 0 {
-		conn.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
+		_ = conn.SetReadDeadline(time.Now().Add(u.KeepaliveTime))
 	} else {
-		conn.SetReadDeadline(time.Time{})
+		_ = conn.SetReadDeadline(time.Time{})
 	}
 
 	if wsc.openHandler != nil {
@@ -680,13 +680,13 @@ func (u *Upgrader) commResponse(conn net.Conn, responseHeader http.Header, chall
 	pbuf = allocator.AppendString(pbuf, "\r\n")
 
 	if u.HandshakeTimeout > 0 {
-		conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
+		_ = conn.SetWriteDeadline(time.Now().Add(u.HandshakeTimeout))
 	}
 
 	_, err := conn.Write(*pbuf)
 	allocator.Free(pbuf)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
