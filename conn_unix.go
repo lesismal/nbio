@@ -681,7 +681,7 @@ func (c *Conn) SetLinger(onoff int32, linger int32) error {
 func (c *Conn) modWrite() {
 	if !c.closed && !c.isWAdded {
 		c.isWAdded = true
-		c.p.modWrite(c.fd)
+		_ = c.p.modWrite(c.fd)
 	}
 }
 
@@ -692,7 +692,7 @@ func (c *Conn) resetRead() {
 	if !c.closed && c.isWAdded {
 		c.isWAdded = false
 		p := c.p
-		p.resetRead(c.fd)
+		_ = p.resetRead(c.fd)
 	}
 }
 

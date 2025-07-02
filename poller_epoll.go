@@ -77,7 +77,7 @@ func (p *poller) addConn(c *Conn) error {
 			fd,
 			len(p.g.connsUnix),
 		)
-		c.closeWithError(err)
+		_ = c.closeWithError(err)
 		return err
 	}
 	c.p = p
@@ -90,7 +90,7 @@ func (p *poller) addConn(c *Conn) error {
 	err := p.addRead(fd)
 	if err != nil {
 		p.g.connsUnix[fd] = nil
-		c.closeWithError(err)
+		_ = c.closeWithError(err)
 	}
 	return err
 }
@@ -105,7 +105,7 @@ func (p *poller) addDialer(c *Conn) error {
 			fd,
 			len(p.g.connsUnix),
 		)
-		c.closeWithError(err)
+		_ = c.closeWithError(err)
 		return err
 	}
 	c.p = p
@@ -154,8 +154,8 @@ func (p *poller) start() {
 		p.acceptorLoop()
 	} else {
 		defer func() {
-			syscall.Close(p.epfd)
-			syscall.Close(p.evtfd)
+			_ = syscall.Close(p.epfd)
+			_ = syscall.Close(p.evtfd)
 		}()
 		p.readWriteLoop()
 	}
@@ -175,7 +175,7 @@ func (p *poller) acceptorLoop() {
 			var c *Conn
 			c, err = NBConn(conn)
 			if err != nil {
-				conn.Close()
+				_ = conn.Close()
 				continue
 			}
 			err = p.g.pollers[c.Hash()%len(p.g.pollers)].addConn(c)
@@ -258,7 +258,7 @@ func (p *poller) readWriteLoop() {
 				if c != nil {
 					if ev.Events&epollEventsWrite != 0 {
 						if c.onConnected == nil {
-							c.flush()
+							_ = c.flush()
 						} else {
 							c.onConnected(c, nil)
 							c.onConnected = nil
@@ -318,13 +318,13 @@ func (p *poller) stop() {
 	logging.Debug("NBIO[%v][%v_%v] stop...", p.g.Name, p.pollType, p.index)
 	p.shutdown = true
 	if p.listener != nil {
-		p.listener.Close()
+		_ = p.listener.Close()
 		if p.unixSockAddr != "" {
-			os.Remove(p.unixSockAddr)
+			_ = os.Remove(p.unixSockAddr)
 		}
 	} else {
 		n := uint64(1)
-		syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
+		_, _ = syscall.Write(p.evtfd, (*(*[8]byte)(unsafe.Pointer(&n)))[:])
 	}
 }
 
@@ -473,7 +473,7 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 
 	r0, _, e0 := syscall.Syscall(syscall.SYS_EVENTFD2, 0, syscall.O_NONBLOCK, 0)
 	if e0 != 0 {
-		syscall.Close(fd)
+		_ = syscall.Close(fd)
 		return nil, e0
 	}
 
@@ -507,9 +507,9 @@ func (c *Conn) ResetPollerEvent() {
 	fd := c.fd
 	if g.isOneshot && !c.closed {
 		if len(c.writeList) == 0 {
-			p.resetRead(fd)
+			_ = p.resetRead(fd)
 		} else {
-			p.modWrite(fd)
+			_ = p.modWrite(fd)
 		}
 	}
 }

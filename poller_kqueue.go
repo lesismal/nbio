@@ -125,8 +125,9 @@ func (p *poller) deleteConn(c *Conn) {
 }
 
 //go:norace
-func (p *poller) trigger() {
-	_, _ = syscall.Kevent(p.kfd, []syscall.Kevent_t{{Ident: 0, Filter: syscall.EVFILT_USER, Fflags: syscall.NOTE_TRIGGER}}, nil, nil)
+func (p *poller) trigger() error {
+	_, err := syscall.Kevent(p.kfd, []syscall.Kevent_t{{Ident: 0, Filter: syscall.EVFILT_USER, Fflags: syscall.NOTE_TRIGGER}}, nil, nil)
+	return err
 }
 
 //go:norace
@@ -139,19 +140,19 @@ func (p *poller) addRead(fd int) {
 }
 
 //go:norace
-func (p *poller) resetRead(fd int) {
+func (p *poller) resetRead(fd int) error {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_DELETE, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
-	p.trigger()
+	return p.trigger()
 }
 
 //go:norace
-func (p *poller) modWrite(fd int) {
+func (p *poller) modWrite(fd int) error {
 	p.mux.Lock()
 	p.eventList = append(p.eventList, syscall.Kevent_t{Ident: uint64(fd), Flags: syscall.EV_ADD, Filter: syscall.EVFILT_WRITE})
 	p.mux.Unlock()
-	p.trigger()
+	return p.trigger()
 }
 
 //go:norace
