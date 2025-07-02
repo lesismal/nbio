@@ -114,7 +114,7 @@ func (p *poller) addDialer(c *Conn) error {
 	err := p.addReadWrite(fd)
 	if err != nil {
 		p.g.connsUnix[fd] = nil
-		c.closeWithError(err)
+		_ = c.closeWithError(err)
 	}
 	return err
 }
@@ -287,7 +287,7 @@ func (p *poller) readWriteLoop() {
 										break
 									}
 									if err != nil {
-										c.closeWithError(err)
+										_ = c.closeWithError(err)
 										break
 									}
 									if n < bufLen {
@@ -304,7 +304,7 @@ func (p *poller) readWriteLoop() {
 					}
 
 					if ev.Events&epollEventsError != 0 {
-						c.closeWithError(io.EOF)
+						_ = c.closeWithError(io.EOF)
 						continue
 					}
 				}
@@ -483,8 +483,8 @@ func newPoller(g *Engine, isListener bool, index int) (*poller, error) {
 		},
 	)
 	if err != nil {
-		syscall.Close(fd)
-		syscall.Close(int(r0))
+		_ = syscall.Close(fd)
+		_ = syscall.Close(int(r0))
 		return nil, err
 	}
 
