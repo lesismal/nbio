@@ -373,7 +373,7 @@ UPGRADER:
 			case '\n':
 				return ErrInvalidCharInHeader
 			default:
-				if isAlpha(c) {
+				if isToken(c) {
 					start = i
 					p.nextState(stateHeaderKey)
 					p.headerExists = true
