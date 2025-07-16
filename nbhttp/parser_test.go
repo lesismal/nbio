@@ -43,6 +43,19 @@ func TestServerParserChunks(t *testing.T) {
 	}
 }
 
+func TestServerParserHeaderToken(t *testing.T) {
+	data := []byte("POST / HTTP/1.1\r\n123456789: value \r\n\r\n")
+	err := testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
+	data = []byte("POST / HTTP/1.1\r\n!#$%&'*+-.^_`|~: value \r\n\r\n")
+	err = testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
+}
+
 func TestServerParserTrailer(t *testing.T) {
 	data := []byte("POST / HTTP/1.1\r\nHost : localhost:1235\r\n User-Agent  : Go-http-client/1.1   \r\nTransfer-Encoding: chunked\r\nTrailer: Md5,Size\r\nAccept-Encoding: gzip  \r\n\r\n4\r\nbody\r\n0\r\n  Md5  : 841a2d689ad86bd1611447453c22c6fc \r\n Size  : 4  \r\n\r\n")
 	err := testParser(t, false, data)
