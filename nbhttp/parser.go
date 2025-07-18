@@ -577,7 +577,7 @@ UPGRADER:
 			}
 			return ErrLFExpected
 		case stateBodyTrailerHeaderKeyBefore:
-			if isAlpha(c) {
+			if isToken(c) {
 				start = i
 				p.nextState(stateBodyTrailerHeaderKey)
 				continue

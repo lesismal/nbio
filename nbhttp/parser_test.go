@@ -67,6 +67,11 @@ func TestServerParserTrailer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("test failed: %v", err)
 	}
+	data = []byte("POST / HTTP/1.1\r\nHost: localhost:1235\r\nUser-Agent: Go-http-client/1.1\r\nTransfer-Encoding: chunked\r\nTrailer: 123456789,!#$%&'*+-.^_`|~\r\nAccept-Encoding: gzip  \r\n\r\n0\r\n123456789: value \r\n !#$%&'*+-.^_`|~: value \r\n\r\n")
+	err = testParser(t, false, data)
+	if err != nil {
+		t.Fatalf("test failed: %v", err)
+	}
 }
 
 func TestClientParserContentLength(t *testing.T) {
