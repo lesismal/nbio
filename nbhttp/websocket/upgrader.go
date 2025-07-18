@@ -30,7 +30,7 @@ var (
 	DefaultBlockingModAsyncWrite = true
 
 	// DefaultBlockingModHandleRead .
-	DefaultBlockingModHandleRead = true
+	DefaultBlockingModHandleRead = false
 
 	// DefaultBlockingModTransferConnToPoller .
 	DefaultBlockingModTransferConnToPoller = false
@@ -103,12 +103,11 @@ type Upgrader struct {
 	BlockingModAsyncWrite bool
 
 	// BlockingModHandleRead represents whether start a goroutine to handle reading automatically during `Upgrade``:
-	// true: use dynamic goroutine to handle writing.
-	// false: write buffer to the conn directely.
-	//
+	// true: start a new goroutine to handle reading.
+	// false: use the current goroutine to handle reading.
 	//
 	// Notice:
-	// If we start a goroutine to handle read during `Upgrade`, we may receive a new websocket message
+	// If we start a goroutine to handle read during `Upgrade`, we may receive a new websocket message.
 	// before we have left the http.Handler for the `Websocket Handshake`.
 	// Then if we have the logic of `websocket.Conn.SetSession` in the http.Handler, it's possible that when we receive
 	// and are handling a websocket message and call `websocket.Conn.Session()`, we get nil.
