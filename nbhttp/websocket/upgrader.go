@@ -30,7 +30,7 @@ var (
 	DefaultBlockingModAsyncWrite = true
 
 	// DefaultBlockingModHandleRead .
-	DefaultBlockingModHandleRead = false
+	DefaultBlockingModHandleRead = true
 
 	// DefaultBlockingModTransferConnToPoller .
 	DefaultBlockingModTransferConnToPoller = false
