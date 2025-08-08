@@ -345,6 +345,54 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 	return io.Copy(c, r)
 }
 
+// Push implements the http.Pusher interface.
+// It is not supported by nbhttp, so it always returns an error.
+//
+//go:norace
+func (res *Response) Push(target string, opts *http.PushOptions) error {
+	return errors.New("http: server push not supported")
+}
+
+// Flush implements http.Flusher. It sends any buffered data to the client.
+//
+//go:norace
+func (res *Response) Flush() {
+	if res.hijacked {
+		return
+	}
+	if res.Parser == nil || res.Parser.Conn == nil {
+		return
+	}
+
+	res.WriteHeader(http.StatusOK)
+	res.checkChunked()
+	res.eoncodeHead()
+
+	conn := res.Parser.Conn
+
+	if res.buffer != nil && len(*res.buffer) > 0 {
+		_, err := conn.Write(*res.buffer)
+		if err != nil {
+			logging.Error("Response.Flush: buffer write failed: %v", err)
+			mempool.Free(res.buffer)
+			res.buffer = nil
+		} else {
+			*res.buffer = (*res.buffer)[:0]
+		}
+	}
+
+	if res.bodyBuffer != nil && len(*res.bodyBuffer) > 0 {
+		_, err := conn.Write(*res.bodyBuffer)
+		if err != nil {
+			logging.Error("Response.Flush: bodyBuffer write failed: %v", err)
+			mempool.Free(res.bodyBuffer)
+			res.bodyBuffer = nil
+		} else {
+			*res.bodyBuffer = (*res.bodyBuffer)[:0]
+		}
+	}
+}
+
 // checkChunked .
 //
 //go:norace
@@ -352,24 +400,32 @@ func (res *Response) checkChunked() {
 	if res.chunkChecked {
 		return
 	}
-
 	res.chunkChecked = true
 
-	if res.request.ProtoAtLeast(1, 1) {
-		for _, v := range res.header[transferEncodingHeader] {
-			if v == "chunked" {
-				res.chunked = true
-			}
-		}
-		if !res.chunked {
-			if len(res.header[trailerHeader]) > 0 {
-				res.chunked = true
-				hs := res.header[transferEncodingHeader]
-				res.header[transferEncodingHeader] = append(hs, "chunked")
-			}
+	// 1. See if chunking is already set
+	for _, v := range res.header[transferEncodingHeader] {
+		if v == "chunked" {
+			res.chunked = true
+			delete(res.header, contentLengthHeader)
+			return
 		}
 	}
+
+	// 2. See if we should fall back to chunking
+	if res.request.ProtoAtLeast(1, 1) && res.header.Get(contentLengthHeader) == "" {
+		// Don't chunk for responses that are forbidden from having a body
+		if res.statusCode != http.StatusNoContent && res.statusCode != http.StatusNotModified {
+			res.chunked = true
+		}
+	}
+
+	// 3. See if we need to chunk for trailers
+	if !res.chunked && len(res.header[trailerHeader]) > 0 {
+		res.chunked = true
+	}
+
 	if res.chunked {
+		res.header.Set(transferEncodingHeader, "chunked")
 		delete(res.header, contentLengthHeader)
 	}
 }
