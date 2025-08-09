@@ -319,10 +319,10 @@ Thanks Everyone:
 - [yicixin](https://github.com/yicixin)
 - [youzhixiaomutou](https://github.com/youzhixiaomutou)
 - [zbh255](https://github.com/zbh255)
+- [DevNewbie1826](https://github.com/DevNewbie1826)
 - [IceflowRE](https://github.com/IceflowRE)
 - [Jourmey](https://github.com/Jourmey)
 - [YanKawaYu](https://github.com/YanKawaYu)
-
 
 ## Star History
 
