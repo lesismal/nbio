@@ -107,6 +107,8 @@ func TestEcho(t *testing.T) {
 	var clientNum = 2
 	var msgSize = 1024
 	var total int64 = 0
+	var writeSuccessCount int32
+	var totalBytesWritten int32
 
 	g := NewEngine(Config{})
 	err := g.Start()
@@ -116,6 +118,11 @@ func TestEcho(t *testing.T) {
 	defer g.Stop()
 
 	g.OnOpen(func(c *Conn) {
+		c.OnWriteSuccess(func(conn *Conn, data []byte) {
+			atomic.AddInt32(&writeSuccessCount, 1)
+			atomic.AddInt32(&totalBytesWritten, int32(len(data)))
+		})
+
 		c.SetSession(1)
 		if c.Session() != 1 {
 			log.Panicf("invalid session: %v", c.Session())
@@ -167,6 +174,18 @@ func TestEcho(t *testing.T) {
 	}
 
 	<-done
+
+	finalWriteCount := atomic.LoadInt32(&writeSuccessCount)
+	finalBytesWritten := atomic.LoadInt32(&totalBytesWritten)
+	expectedWrites := int32(clientNum) // Each client sends one message
+	if finalWriteCount != expectedWrites {
+		t.Errorf("Expected %d write success callbacks, got %d", expectedWrites, finalWriteCount)
+	}
+
+	expectedBytes := int32(clientNum * msgSize)
+	if finalBytesWritten != expectedBytes {
+		t.Errorf("Expected %d bytes written, got %d", expectedBytes, finalBytesWritten)
+	}
 }
 
 func TestSendfile(t *testing.T) {

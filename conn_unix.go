@@ -144,6 +144,8 @@ type Conn struct {
 	dataHandler func(c *Conn, data []byte)
 
 	onConnected func(c *Conn, err error)
+
+	onWriteSuccess func(conn *Conn, data []byte)
 }
 
 // Hash returns a hash code of this connection.
@@ -716,6 +718,11 @@ func (c *Conn) write(b []byte) (int, error) {
 		if n < 0 {
 			n = 0
 		}
+
+		if n > 0 && c.onWriteSuccess != nil {
+			c.onWriteSuccess(c, b[:n])
+		}
+
 		left := len(b) - n
 		if left > 0 && c.typ == ConnTypeTCP {
 			c.newToWriteBuf(b[n:])
@@ -751,6 +758,26 @@ func (c *Conn) writev(in [][]byte) (int, error) {
 	if nwrite > 0 {
 		n := nwrite
 		onWrittenSize := c.p.g.onWrittenSize
+
+		if c.onWriteSuccess != nil {
+			totalProcessed := 0
+			for i := 0; i < len(in) && totalProcessed < nwrite; i++ {
+				b := in[i]
+				if totalProcessed+len(b) <= nwrite {
+					// Entire buffer was written
+					c.onWriteSuccess(c, b)
+					totalProcessed += len(b)
+				} else {
+					// Partial buffer was written
+					remaining := nwrite - totalProcessed
+					if remaining > 0 {
+						c.onWriteSuccess(c, b[:remaining])
+					}
+					break
+				}
+			}
+		}
+
 		if n < size {
 			for i := 0; i < len(in) && n > 0; i++ {
 				b := in[i]
@@ -889,6 +916,9 @@ func (c *Conn) flush() error {
 		if n > 0 {
 			if c.p.g.onWrittenSize != nil {
 				c.p.g.onWrittenSize(c, buf[:n], n)
+			}
+			if c.onWriteSuccess != nil {
+				c.onWriteSuccess(c, buf[:n])
 			}
 			c.left -= n
 			head.offset += int64(n)

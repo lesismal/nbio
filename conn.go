@@ -259,3 +259,10 @@ func (c *Conn) execute(job func()) {
 		}
 	})
 }
+
+// OnWriteSuccess registers callback for successfully written data
+//
+//go:norace
+func (c *Conn) OnWriteSuccess(h func(conn *Conn, data []byte)) {
+	c.onWriteSuccess = h
+}

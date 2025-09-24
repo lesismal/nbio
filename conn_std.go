@@ -48,6 +48,8 @@ type Conn struct {
 	dataHandler func(c *Conn, data []byte)
 
 	onConnected func(c *Conn, err error)
+
+	onWriteSuccess func(c *Conn, data []byte)
 }
 
 // Hash returns a hashcode.
@@ -176,8 +178,13 @@ func (c *Conn) Write(b []byte) (int, error) {
 		n, err = c.writeUDPClientFromRead(b)
 	default:
 	}
-	if c.p.g.onWrittenSize != nil && n > 0 {
-		c.p.g.onWrittenSize(c, b[:n], n)
+	if n > 0 {
+		if c.p.g.onWrittenSize != nil {
+			c.p.g.onWrittenSize(c, b[:n], n)
+		}
+		if c.onWriteSuccess != nil {
+			c.onWriteSuccess(c, b[:n])
+		}
 	}
 	return n, err
 }
@@ -233,15 +240,29 @@ func (c *Conn) Writev(in [][]byte) (int, error) {
 			}
 			c.Close()
 		}
-		if c.p.g.onWrittenSize != nil && nwrite > 0 {
-			total := int(nwrite)
-			for i := 0; total > 0; i++ {
-				if total <= len(in[i]) {
-					c.p.g.onWrittenSize(c, in[i][:total], total)
-					total = 0
-				} else {
-					c.p.g.onWrittenSize(c, in[i], len(in[i]))
-					total -= len(in[i])
+		if nwrite > 0 {
+			if c.p.g.onWrittenSize != nil {
+				total := int(nwrite)
+				for i := 0; total > 0; i++ {
+					if total <= len(in[i]) {
+						c.p.g.onWrittenSize(c, in[i][:total], total)
+						total = 0
+					} else {
+						c.p.g.onWrittenSize(c, in[i], len(in[i]))
+						total -= len(in[i])
+					}
+				}
+			}
+			if c.onWriteSuccess != nil {
+				total := int(nwrite)
+				for i := 0; total > 0; i++ {
+					if total <= len(in[i]) {
+						c.onWriteSuccess(c, in[i][:total])
+						total = 0
+					} else {
+						c.onWriteSuccess(c, in[i])
+						total -= len(in[i])
+					}
 				}
 			}
 		}
