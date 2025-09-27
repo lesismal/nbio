@@ -9,10 +9,13 @@ import (
 	"net"
 	"net/http"
 	"net/textproto"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
+	"github.com/lesismal/nbio/logging"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -145,7 +148,18 @@ func parseAndValidateChunkSize(originalStr string) (int, error) {
 //go:norace
 func (p *Parser) Parse(data []byte) error {
 	p.mux.Lock()
-	defer p.mux.Unlock()
+	defer func() {
+		p.mux.Unlock()
+		if err := recover(); err != nil {
+			const size = 64 << 10
+			buf := make([]byte, size)
+			buf = buf[:runtime.Stack(buf, false)]
+			logging.Error("HTTP Parse failed: %v\n%v\n",
+				err,
+				*(*string)(unsafe.Pointer(&buf)),
+			)
+		}
+	}()
 
 	if p.state == stateClose {
 		return net.ErrClosed
