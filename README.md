@@ -37,7 +37,7 @@ Therefore, the scenarios where nbio can demonstrate its advantages are very limi
 
 ### For WebSocket in regular connection scenarios
 
-I recommend: https://github.com/lxzan/gws
+- I recommend: https://github.com/lxzan/gws
 
 While gorilla/websocket is mature and stable, its default ReadMessage performance is poor, and it requires additional encapsulation for reading and writing to avoid consistency issues, concurrent timing problems, and the issue where a single connection's write blocking in broadcast scenarios causes other connections to wait.
 
@@ -51,8 +51,8 @@ However, as mentioned above, nbio has no advantage in regular connection scenari
 nbio's functionality is somewhat complex. 
 
 If anyone is just interested in exploring the epoll wrapper part, I recommend the followin libs:
-https://github.com/urpc/uio
-https://github.com/antlabs/pulse
+- https://github.com/urpc/uio
+- https://github.com/antlabs/pulse
 
 
 ## Contents
