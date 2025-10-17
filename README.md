@@ -37,20 +37,22 @@ Therefore, the scenarios where nbio can demonstrate its advantages are very limi
 
 ### For WebSocket in regular connection scenarios
 
-- I recommend: https://github.com/lxzan/gws
+I recommend: 
+- https://github.com/lxzan/gws
+- https://github.com/antlabs/quickws
 
 While gorilla/websocket is mature and stable, its default ReadMessage performance is poor, and it requires additional encapsulation for reading and writing to avoid consistency issues, concurrent timing problems, and the issue where a single connection's write blocking in broadcast scenarios causes other connections to wait.
 
-Both nbio and [gws](https://github.com/lxzan/gws) provide better out-of-the-box designs, which spare users the trouble of doing more encapsulation work on gorilla/websocket.
+nbio, [gws](https://github.com/lxzan/gws) and [quickws](https://github.com/antlabs/quickws) all provide better out-of-the-box designs, which spare users the trouble of doing more encapsulation work on gorilla/websocket.
 
-However, as mentioned above, nbio has no advantage in regular connection scenarios, and it supports more features with more complex compatibility code. Its performance in regular connection scenarios is inferior to [gws](https://github.com/lxzan/gws), so I recommend [gws](https://github.com/lxzan/gws).
+However, as mentioned above, nbio has no advantage in regular connection scenarios, and it supports more features with more complex compatibility code. Its performance in regular connection scenarios is inferior to [gws](https://github.com/lxzan/gws) and [quickws](https://github.com/antlabs/quickws), so I recommend [gws](https://github.com/lxzan/gws) and [quickws](https://github.com/antlabs/quickws).
 
 
 ### Some other well-implemented epoll libs
 
 nbio's functionality is somewhat complex. 
 
-If anyone is just interested in exploring the epoll wrapper part, I recommend the followin libs:
+If anyone is just interested in exploring the epoll wrapper part, I recommend:
 - https://github.com/urpc/uio
 - https://github.com/antlabs/pulse
 
