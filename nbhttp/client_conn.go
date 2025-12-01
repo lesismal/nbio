@@ -216,9 +216,16 @@ func (c *ClientConn) Do(req *http.Request, handler func(res *http.Response, conn
 
 		strs := strings.Split(req.URL.Host, ":")
 		host := strs[0]
-		port := req.URL.Scheme
+		port := "80"
 		if len(strs) >= 2 {
 			port = strs[1]
+		} else {
+			switch req.URL.Scheme {
+			case "http":
+				port = "80"
+			case "https":
+				port = "443"
+			}
 		}
 		addr := host + ":" + port
 
