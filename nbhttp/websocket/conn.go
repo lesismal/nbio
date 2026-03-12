@@ -342,6 +342,9 @@ func (c *Conn) nextFrame() (int, MessageType, []byte, bool, bool, bool, error) {
 		case 127:
 			if len(*pdata) >= 10 {
 				bodyLen = int64(binary.BigEndian.Uint64((*pdata)[2:10]))
+				if bodyLen < 0 {
+					return 0, 0, nil, false, false, false, ErrInvalidFragmentMessage
+				}
 				headLen = 10
 			}
 		default:
@@ -385,7 +388,7 @@ func (c *Conn) nextFrame() (int, MessageType, []byte, bool, bool, bool, error) {
 // Read .
 //
 //go:norace
-func (c *Conn) Parse(data []byte) error {
+func (c *Conn) Parse(data []byte) (retErr error) {
 	if len(data) == 0 {
 		return nil
 	}
@@ -405,6 +408,13 @@ func (c *Conn) Parse(data []byte) error {
 				err,
 				*(*string)(unsafe.Pointer(&buf)),
 			)
+			c.mux.Lock()
+			if c.bytesCached != nil {
+				c.Engine.BodyAllocator.Free(c.bytesCached)
+				c.bytesCached = nil
+			}
+			c.mux.Unlock()
+			retErr = fmt.Errorf("websocket: parse error: %v", err)
 		}
 	}()
 
@@ -528,6 +538,13 @@ func (c *Conn) Parse(data []byte) error {
 			}
 
 			l := len(*c.bytesCached)
+			if totalFrameSize <= 0 || totalFrameSize > l {
+				releaseBuf()
+				c.Engine.BodyAllocator.Free(c.bytesCached)
+				c.bytesCached = nil
+				err = fmt.Errorf("websocket: invalid frame consumed size %d, cached %d", totalFrameSize, l)
+				return
+			}
 			if l == totalFrameSize {
 				c.Engine.BodyAllocator.Free(c.bytesCached)
 				c.bytesCached = nil
