@@ -10,9 +10,6 @@ on:
       - master
       - dev
 
-env:
-  GO111MODULE: off
-
 jobs:
   Build-Windows:
     name: Build-Windows
@@ -33,7 +30,6 @@ jobs:
         run: |
           printf "$(go version)\n"
           printf "\n\ngo environment:\n\n"
-          go get -u github.com/lesismal/nbio/...
           go env
           echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
       - name: go test

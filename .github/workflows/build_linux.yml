@@ -10,9 +10,6 @@ on:
       - master
       - dev
 
-env:
-  GO111MODULE: off
-
 jobs:
   Build-Linux:
     name: Build-Linux
@@ -33,7 +30,6 @@ jobs:
         run: |
           printf "$(go version)\n"
           printf "\n\ngo environment:\n\n"
-          go get -u github.com/lesismal/nbio
           ulimit -n 30000
           go env
           echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
