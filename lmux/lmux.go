@@ -90,7 +90,9 @@ func (lm *ListenerMux) Start() {
 						}
 						listenerA.chEvent <- event{err: err, conn: c}
 						listenerB.chEvent <- event{err: err, conn: c}
-						// return
+						
+						// Exit the loop after a non recoverable error
+						return
 					}
 					continue
 				}
