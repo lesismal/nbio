@@ -19,16 +19,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: [1.18.x]
+        go: [1.22.x]
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os}}
     steps:
       - name: install golang
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go }}
       - name: checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: go env
         run: |
           printf "$(go version)\n"
