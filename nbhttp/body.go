@@ -31,13 +31,36 @@ type BodyReader struct {
 //
 //go:norace
 func (br *BodyReader) Read(p []byte) (int, error) {
+	// Close() may run while a handler (e.g. json.Decoder) is still reading.
+	if br.closed {
+		return 0, io.EOF
+	}
 	need := len(p)
 	if br.left <= 0 {
 		return 0, io.EOF
 	}
 	ncopy := 0
 	for ncopy < need && br.left > 0 {
+		if len(br.buffers) == 0 {
+			// left tracks bytes not yet copied out; buffers holds the backing
+			// slices. When they diverge (pool reuse, Close during Read, or
+			// zero-length head buffers), indexing buffers[0] panics.
+			br.left = 0
+			if ncopy > 0 {
+				return ncopy, nil
+			}
+			return 0, io.EOF
+		}
 		pbuf := br.buffers[0]
+		if br.index >= len(*pbuf) {
+			// Drop exhausted head buffers without decrementing left; those
+			// bytes were already accounted for when the buffer was consumed.
+			br.engine.BodyAllocator.Free(pbuf)
+			br.buffers[0] = nil
+			br.buffers = br.buffers[1:]
+			br.index = 0
+			continue
+		}
 		nc := copy(p[ncopy:], (*pbuf)[br.index:])
 		if nc+br.index >= len(*pbuf) {
 			br.engine.BodyAllocator.Free(pbuf)
@@ -66,6 +89,11 @@ func (br *BodyReader) Close() error {
 			br.engine.BodyAllocator.Free(b)
 		}
 	}
+	// Previously only freed backing memory; left/index/buffers were left
+	// stale, so a concurrent or subsequent Read could panic on buffers[0].
+	br.buffers = nil
+	br.left = 0
+	br.index = 0
 	// *br = emptyBodyReader
 	// bodyReaderPool.Put(br)
 	return nil
@@ -163,6 +191,12 @@ func (br *BodyReader) append(data []byte) error {
 //go:norace
 func NewBodyReader(engine *Engine) *BodyReader {
 	br := bodyReaderPool.Get().(*BodyReader)
+	// Reset all fields on pool Get so stale left/buffers
+	// from a previous request don't leak through.
+	br.index = 0
+	br.left = 0
+	br.buffers = nil
+	br.closed = false
 	br.engine = engine
 	return br
 }
