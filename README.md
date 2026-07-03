@@ -340,6 +340,7 @@ func main() {
 Thanks Everyone:
 - [acgreek](https://github.com/acgreek)
 - [acsecureworks](https://github.com/acsecureworks)
+- [amendaboluo](https://github.com/amendaboluo)
 - [arunsathiya](https://github.com/arunsathiya)
 - [byene0923](https://github.com/byene0923)
 - [guonaihong](https://github.com/guonaihong)
@@ -348,6 +349,7 @@ Thanks Everyone:
 - [manjun21](https://github.com/manjun21)
 - [maxkidd](https://github.com/maxkidd)
 - [om26er](https://github.com/om26er)
+- [radixdev](https://github.com/radixdev)
 - [rfyiamcool](https://github.com/rfyiamcool)
 - [sunny352](https://github.com/sunny352)
 - [sunvim](https://github.com/sunvim)
