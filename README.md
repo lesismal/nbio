@@ -365,4 +365,4 @@ Thanks Everyone:
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=lesismal/nbio&type=Date)](https://star-history.com/#lesismal/nbio&Date)
+[![Star History Chart](https://star-history.dera.page/svg?repos=lesismal/nbio&type=Date)](https://star-history.dera.page/#lesismal/nbio&Date)
