@@ -123,7 +123,6 @@ func (p *poller) start() {
 
 	if p.isListener {
 		var err error
-		p.shutdown = false
 		for !p.shutdown {
 			err = p.accept()
 			if err != nil {
