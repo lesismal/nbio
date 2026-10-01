@@ -168,7 +168,6 @@ func (p *poller) acceptorLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	p.shutdown = false
 	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
@@ -229,7 +228,6 @@ func (p *poller) readWriteLoop() {
 	}
 
 	g := p.g
-	p.shutdown = false
 	isOneshot := g.isOneshot
 	asyncReadEnabled := g.AsyncReadInPoller && (g.EpollMod == EPOLLET)
 	for !p.shutdown {

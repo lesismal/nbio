@@ -261,7 +261,6 @@ func (p *poller) acceptorLoop() {
 		defer runtime.UnlockOSThread()
 	}
 
-	p.shutdown = false
 	for !p.shutdown {
 		conn, err := p.listener.Accept()
 		if err == nil {
@@ -299,7 +298,6 @@ func (p *poller) readWriteLoop() {
 	events := make([]syscall.Kevent_t, 1024)
 	var changes []syscall.Kevent_t
 
-	p.shutdown = false
 	for !p.shutdown {
 		p.mux.Lock()
 		changes = p.eventList
