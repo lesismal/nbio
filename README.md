@@ -23,6 +23,27 @@
 [16]: https://godoc.org/github.com/lesismal/nbio
 
 
+## 📢 New Project: [fib](https://github.com/lesismal/fib)
+
+I recently built a new Go networking library, [fib (Fast In Balance)](https://github.com/lesismal/fib), together with Claude. It is the successor to nbio: it keeps nbio's strength for massive numbers of connections and removes its weaknesses, so **nbio is now in maintenance mode and will see little further development. If you are interested, please try fib.**
+
+fib is an event-driven networking library covering TCP, UDP and Unix sockets, TLS, HTTP/1.x, HTTP/2, HTTP/3 over QUIC, and WebSocket. A few event loops wait for I/O readiness and a shared worker pool does the work, so an idle connection costs no goroutine. Where fib is stronger than nbio:
+
+- **Faster than the standard library, not slower.** nbio loses to the standard library with ordinary numbers of connections (see [Recommendation](#recommendation) below). In the GitHub Actions benchmarks, fib gets 2.3× net/http's HTTP/1 echo throughput (6.9× pipelined) on a tenth of the memory, 3.7× its HTTP/2 throughput (13× multiplexed), 3.4–5.4× quic-go's HTTP/3 throughput, 2.9× crypto/tls in TLS 1.3 pipelining, and the highest WebSocket echo throughput of the 17 servers tested. It is level with or close to C, C++ and Rust servers such as uSockets, workflow, axum, h2, quiche and rustls.
+- **The standard `net/http` programming model.** HTTP handlers take a standard `*http.Request` and an `http.ResponseWriter`, so `net/http` handlers, `http.ServeMux`, `http.FileServer`, chi, gorilla/mux and gin run on fib unchanged, over HTTP/1.x, HTTP/2 and HTTP/3.
+- **More protocols.** h2 and h2c, server push, and HTTP/3 + QUIC + QPACK written from scratch (no quic-go dependency), plus WebSocket over HTTP/1.1, HTTP/2 (RFC 8441) and HTTP/3 (RFC 9220). Conformance is checked in CI with h2spec, Autobahn, quic-go interop and fuzzers.
+- **A better engine.** Edge-triggered epoll on Linux, kqueue on macOS and IOCP on Windows; per-connection scheduling on any idle worker, so load spreads by real work rather than by fd count; write backpressure with per-connection watermarks and a server-wide budget; an adaptive worker pool and a size-classed buffer pool.
+- **Batteries included.** Async clients for every protocol, a zero-allocation chi-style router, and middleware (compress, cors, csrf, etag, limiter, logger, pprof, recover, requestid, responsetime).
+
+Documentation:
+
+- [README](https://github.com/lesismal/fib#readme) | [简体中文](https://github.com/lesismal/fib/blob/main/README.zh-CN.md)
+- [Introducing fib](https://github.com/lesismal/fib/blob/main/docs/blog/introducing-fib.md) | [简体中文](https://github.com/lesismal/fib/blob/main/docs/blog/introducing-fib.zh-CN.md)
+- [Architecture](https://github.com/lesismal/fib/blob/main/docs/architecture.html), [Protocol flows](https://github.com/lesismal/fib/blob/main/docs/flows.html)
+- [HTTP/1.x](https://github.com/lesismal/fib/blob/main/docs/http1.md), [HTTP/2](https://github.com/lesismal/fib/blob/main/docs/http2.md), [HTTP/3](https://github.com/lesismal/fib/blob/main/docs/http3.md)
+- [中文使用指南](https://github.com/lesismal/fib/blob/main/docs/guide.zh-CN.md)
+
+
 ## Recommendation
 
 Based on years of development and testing of nbio, I have drawn some conclusions:
