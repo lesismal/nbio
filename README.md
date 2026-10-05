@@ -363,6 +363,7 @@ Thanks Everyone:
 - [acsecureworks](https://github.com/acsecureworks)
 - [amendaboluo](https://github.com/amendaboluo)
 - [arunsathiya](https://github.com/arunsathiya)
+- [bensynapse](https://github.com/bensynapse)
 - [byene0923](https://github.com/byene0923)
 - [guonaihong](https://github.com/guonaihong)
 - [isletnet](https://github.com/isletnet)
