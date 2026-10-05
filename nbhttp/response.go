@@ -309,15 +309,17 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 	}
 
 	if !res.Parser.Engine.DisableSendfile {
+		sendfileReader := r
+		var remain int64
 		lr, ok := r.(*io.LimitedReader)
 		if ok {
-			n, r = lr.N, lr.R
-			if n <= 0 {
+			remain, sendfileReader = lr.N, lr.R
+			if remain <= 0 {
 				return 0, nil
 			}
 		}
 
-		f, ok := r.(*os.File)
+		f, ok := sendfileReader.(*os.File)
 		if ok {
 			rc := c
 			if hc, ok := c.(*Conn); ok {
@@ -336,7 +338,10 @@ func (res *Response) ReadFrom(r io.Reader) (n int64, err error) {
 
 			}
 			if ok {
-				ns, err := nc.Sendfile(f, lr.N)
+				ns, err := nc.Sendfile(f, remain)
+				if lr != nil {
+					lr.N -= ns
+				}
 				return ns, err
 			}
 		}
