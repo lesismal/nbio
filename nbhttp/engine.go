@@ -127,7 +127,7 @@ type Config struct {
 	// MaxWebsocketFramePayloadSize represents max payload size of websocket frame.
 	MaxWebsocketFramePayloadSize int
 
-	// MessageHandlerPoolSize represents max http server's task pool goroutine num, it's set to runtime.NumCPU() * 256 by default.
+	// MessageHandlerPoolSize represents max http server's task pool goroutine num, it's set to runtime.GOMAXPROCS(0) * 1024 by default.
 	MessageHandlerPoolSize int
 
 	// MessageHandlerTaskIdleTime represents idle time for task pool's goroutine, it's set to 60s by default.
@@ -483,10 +483,7 @@ func (e *Engine) SetETAsyncRead() {
 //go:norace
 func (e *Engine) SetLTSyncRead() {
 	if e.NPoller <= 0 {
-		e.NPoller = runtime.NumCPU() / 4
-		if e.NPoller == 0 {
-			e.NPoller = 1
-		}
+		e.NPoller = defaultNPoller()
 	}
 	e.EpollMod = nbio.EPOLLLT
 	e.AsyncReadInPoller = false
@@ -998,6 +995,19 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 	}
 }
 
+// defaultNPoller returns the default poller count: GOMAXPROCS/4, minimum 1.
+// GOMAXPROCS is used rather than runtime.NumCPU() because it follows the
+// container's CPU limit (Go 1.25+) or an explicit GOMAXPROCS setting, while
+// NumCPU reports every core on the host.
+//
+//go:norace
+func defaultNPoller() int {
+	if n := runtime.GOMAXPROCS(0) / 4; n > 0 {
+		return n
+	}
+	return 1
+}
+
 // NewEngine .
 //
 //go:norace
@@ -1009,11 +1019,8 @@ func NewEngine(conf Config) *Engine {
 		conf.MaxLoad = DefaultMaxLoad
 	}
 	if conf.NPoller <= 0 {
-		conf.NPoller = runtime.NumCPU() / 4
+		conf.NPoller = defaultNPoller()
 		if conf.AsyncReadInPoller && conf.EpollMod == nbio.EPOLLET {
-			conf.NPoller = 1
-		}
-		if conf.NPoller == 0 {
 			conf.NPoller = 1
 		}
 	}
@@ -1065,7 +1072,7 @@ func NewEngine(conf Config) *Engine {
 	var messageHandlerExecutePool *taskpool.TaskPool
 	if serverExecutor == nil {
 		if conf.MessageHandlerPoolSize <= 0 {
-			conf.MessageHandlerPoolSize = runtime.NumCPU() * 1024
+			conf.MessageHandlerPoolSize = runtime.GOMAXPROCS(0) * 1024
 		}
 		nativeSize := conf.MessageHandlerPoolSize - 1
 		messageHandlerExecutePool = taskpool.New(nativeSize, 1024*64)
@@ -1090,7 +1097,7 @@ func NewEngine(conf Config) *Engine {
 	}
 	if clientExecutor == nil {
 		if !conf.SupportServerOnly {
-			clientExecutePool = taskpool.New(runtime.NumCPU()*1024-1, 1024*64)
+			clientExecutePool = taskpool.New(runtime.GOMAXPROCS(0)*1024-1, 1024*64)
 			clientExecutor = clientExecutePool.Go
 		} else {
 			clientExecutor = goExecutor
