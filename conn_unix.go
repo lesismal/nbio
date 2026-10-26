@@ -936,7 +936,13 @@ func (c *Conn) flush() error {
 			continue
 		}
 		if errors.Is(err, syscall.EAGAIN) {
-			// c.modWrite()
+			// Under EPOLLONESHOT the write event that led here was disarmed
+			// when it was delivered. Without re-arming it the remaining
+			// buffers stay queued forever for a write-only flow, because no
+			// other event arrives to call modWrite again.
+			if c.p.g.isOneshot {
+				_ = c.p.modWrite(c.fd)
+			}
 			return nil
 		}
 		if err != nil {
