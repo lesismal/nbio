@@ -288,7 +288,7 @@ func (p *poller) readWriteLoop() {
 										_ = c.closeWithError(err)
 										break
 									}
-									if n < bufLen {
+									if n < bufLen && !isDatagram(c) {
 										break
 									}
 								}

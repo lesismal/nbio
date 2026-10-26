@@ -204,7 +204,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 						}
 						_ = c.closeWithError(err)
 					}
-					if n < bufLen {
+					if n < bufLen && !isDatagram(c) {
 						break
 					}
 				}
