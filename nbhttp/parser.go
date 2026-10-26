@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/lesismal/nbio/logging"
@@ -74,6 +75,22 @@ type Parser struct {
 	chunked      bool
 	isClient     bool
 	headerExists bool
+
+	initialReadDeadlinePending bool
+}
+
+// initReadDeadline initializes the server deadline once, before request dispatch.
+// The caller must hold p.mux.
+//
+//go:norace
+func (p *Parser) initReadDeadline() {
+	if !p.initialReadDeadlinePending {
+		return
+	}
+	p.initialReadDeadlinePending = false
+	if p.state != stateClose {
+		_ = p.Conn.SetReadDeadline(time.Now().Add(p.Engine.KeepaliveTime))
+	}
 }
 
 //go:norace
@@ -164,6 +181,7 @@ func (p *Parser) Parse(data []byte) error {
 	if p.state == stateClose {
 		return net.ErrClosed
 	}
+	p.initReadDeadline()
 
 	if len(data) == 0 {
 		return nil
