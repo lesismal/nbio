@@ -31,3 +31,15 @@ func TestStopRightAfterStart(t *testing.T) {
 		}
 	}
 }
+
+// Stop used to decrement the connection WaitGroup and close the pollers
+// unconditionally, so a second Stop panicked with
+// "sync: negative WaitGroup counter".
+func TestStopIsIdempotent(t *testing.T) {
+	g := NewEngine(Config{})
+	if err := g.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	g.Stop()
+	g.Stop()
+}
