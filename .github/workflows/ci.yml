@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [master, dev]
+    tags: [v*]
+  pull_request:
+    branches: [master, dev]
+  schedule:
+    - cron: "41 10 * * 3"
+
+jobs:
+  lint:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: golangci/golangci-lint-action@v8.0.0
+        with:
+          version: v2.2.1
+
+  test:
+    if: github.event_name != 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.22.x
+      - name: go test
+        shell: bash
+        run: |
+          [ "$RUNNER_OS" = "Windows" ] || ulimit -n 30000
+          go test -covermode=atomic -timeout 60s -coverprofile=./coverage
+      - name: codecov
+        if: runner.os == 'Windows'
+        uses: codecov/codecov-action@v1.2.1
+        with:
+          files: ./coverage
+          flags: unittests
+          name: codecov-nbio
+
+  autobahn:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.18.x
+      - name: autobahn test
+        run: bash ./autobahn/script/run.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: autobahn-report
+          path: autobahn/report
+          retention-days: 7
+
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: go
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3

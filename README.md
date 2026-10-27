@@ -13,8 +13,8 @@
 [6]: LICENSE
 [7]: https://img.shields.io/badge/go-%3E%3D1.16-30dff3?style=flat-square&logo=go
 [8]: https://github.com/lesismal/nbio
-[9]: https://img.shields.io/github/actions/workflow/status/lesismal/nbio/autobahn.yml?branch=master&style=flat-square&logo=github-actions
-[10]: https://github.com/lesismal/nbio/actions?query=workflow%3autobahn
+[9]: https://img.shields.io/github/actions/workflow/status/lesismal/nbio/ci.yml?branch=master&style=flat-square&logo=github-actions
+[10]: https://github.com/lesismal/nbio/actions/workflows/ci.yml
 [11]: https://goreportcard.com/badge/github.com/lesismal/nbio
 [12]: https://goreportcard.com/report/github.com/lesismal/nbio
 [13]: https://codecov.io/gh/lesismal/nbio/branch/master/graph/badge.svg
