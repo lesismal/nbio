@@ -264,12 +264,25 @@ func (p *poller) readWriteLoop() {
 						}
 					}
 
-					if ev.Events&epollEventsRead != 0 {
+					// A peer FIN/RST usually arrives together with the last
+					// readable bytes. Treat the hangup as a read event and drain
+					// what the kernel already buffered; otherwise the close
+					// below drops it. Draining is bounded because the peer has
+					// closed its write side, so no new bytes can be produced.
+					// The asynchronous read path is left alone here: it needs a
+					// completion signal before the close can be deferred.
+					peerHangup := ev.Events&(syscall.EPOLLHUP|syscall.EPOLLRDHUP) != 0
+					drainPeer := peerHangup && g.onRead == nil && !asyncReadEnabled && !isDatagram(c)
+					if ev.Events&epollEventsRead != 0 || drainPeer {
 						if g.onRead == nil {
 							if asyncReadEnabled {
 								c.AsyncRead()
 							} else {
-								for i := 0; i < g.MaxConnReadTimesPerEventLoop; i++ {
+								readLimit := g.MaxConnReadTimesPerEventLoop
+								if drainPeer {
+									readLimit = -1
+								}
+								for i := 0; readLimit < 0 || i < readLimit; i++ {
 									pbuf := g.borrow(c)
 									bufLen := len(*pbuf)
 									rc, n, err := c.ReadAndGetConn(pbuf)
@@ -288,7 +301,11 @@ func (p *poller) readWriteLoop() {
 										_ = c.closeWithError(err)
 										break
 									}
-									if n < bufLen {
+									if drainPeer {
+										if n == 0 {
+											break
+										}
+									} else if n < bufLen && !isDatagram(c) {
 										break
 									}
 								}

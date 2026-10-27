@@ -153,6 +153,21 @@ func (c *Conn) Hash() int {
 	return c.fd
 }
 
+// isDatagram reports whether reads on c return one datagram at a time instead
+// of a byte stream. A short read only means that the datagram was smaller than
+// the buffer: it says nothing about whether more data is already queued, so
+// the read loops must not treat it as "nothing left".
+//
+//go:norace
+func isDatagram(c *Conn) bool {
+	switch c.typ {
+	case ConnTypeUDPServer, ConnTypeUDPClientFromRead, ConnTypeUDPClientFromDial:
+		return true
+	default:
+		return false
+	}
+}
+
 // AsyncReadInPoller is used for reading data async.
 //
 //go:norace
@@ -179,7 +194,7 @@ func (c *Conn) AsyncRead() {
 					_ = c.closeWithError(err)
 					return
 				}
-				if n < len(*pbuf) {
+				if n < len(*pbuf) && !isDatagram(c) {
 					break
 				}
 			}
@@ -219,7 +234,7 @@ func (c *Conn) AsyncRead() {
 					_ = c.closeWithError(err)
 					return
 				}
-				if n < len(*pBuf) {
+				if n < len(*pBuf) && !isDatagram(c) {
 					break
 				}
 			}
