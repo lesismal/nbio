@@ -81,6 +81,7 @@ If anyone is just interested in exploring the epoll wrapper part, I recommend:
 ## Contents
 
 - [NBIO - NON-BLOCKING IO](#nbio---non-blocking-io)
+	- [📢 New Project: fib](#-new-project-fib)
 	- [Recommendation](#recommendation)
 		- [For WebSocket in regular connection scenarios](#for-websocket-in-regular-connection-scenarios)
 		- [Some other well-implemented epoll libs](#some-other-well-implemented-epoll-libs)
@@ -371,9 +372,11 @@ Thanks Everyone:
 - [liwnn](https://github.com/liwnn)
 - [manjun21](https://github.com/manjun21)
 - [maxkidd](https://github.com/maxkidd)
+- [null-enjoyer](https://github.com/null-enjoyer)
 - [om26er](https://github.com/om26er)
 - [radixdev](https://github.com/radixdev)
 - [rfyiamcool](https://github.com/rfyiamcool)
+- [ruimya](https://github.com/ruimya)
 - [sunny352](https://github.com/sunny352)
 - [sunvim](https://github.com/sunvim)
 - [wuqinqiang](https://github.com/wuqinqiang)
