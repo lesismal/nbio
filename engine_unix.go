@@ -120,7 +120,10 @@ func (g *Engine) Start() error {
 
 	if g.AsyncReadInPoller {
 		if g.IOExecute == nil {
-			g.ioTaskPool = taskpool.NewIO(0, 0, 0)
+			// The IO task pool allocates the read buffer handed to AsyncRead,
+			// so it must match ReadBufferSize. With a zero-length buffer every
+			// read returns 0 bytes and the connection never makes progress.
+			g.ioTaskPool = taskpool.NewIO(0, 0, g.ReadBufferSize)
 			g.IOExecute = g.ioTaskPool.Go
 		}
 	}
