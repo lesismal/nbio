@@ -710,6 +710,7 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 	engine._onOpen(conn.Conn)
 	processor := NewServerProcessor()
 	parser := NewParser(conn, engine, processor, false, nbc.Execute)
+	parser.initialReadDeadlinePending = true
 	// if engine.isOneshot {
 	// 	parser.Execute = SyncExecutor
 	// }
@@ -723,7 +724,9 @@ func (engine *Engine) AddConnNonTLSNonBlocking(conn *Conn, tlsConfig *tls.Config
 		engine.mux.Unlock()
 		return
 	}
-	_ = nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+	parser.mux.Lock()
+	parser.initReadDeadline()
+	parser.mux.Unlock()
 }
 
 // AddConnNonTLSBlocking .
@@ -811,6 +814,7 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 	conn = &Conn{Conn: tlsConn}
 	processor := NewServerProcessor()
 	parser := NewParser(conn, engine, processor, false, nbc.Execute)
+	parser.initialReadDeadlinePending = true
 	// if engine.isOneshot {
 	// 	parser.Execute = SyncExecutor
 	// }
@@ -825,8 +829,11 @@ func (engine *Engine) AddConnTLSNonBlocking(conn *Conn, tlsConfig *tls.Config, d
 		engine.mux.Lock()
 		delete(engine.conns, key)
 		engine.mux.Unlock()
+		return
 	}
-	_ = nbc.SetReadDeadline(time.Now().Add(engine.KeepaliveTime))
+	parser.mux.Lock()
+	parser.initReadDeadline()
+	parser.mux.Unlock()
 }
 
 // AddConnTLSBlocking .
