@@ -203,6 +203,7 @@ func (p *poller) readWrite(ev *syscall.Kevent_t) {
 							err = io.EOF
 						}
 						_ = c.closeWithError(err)
+						break
 					}
 					if n < bufLen && !isDatagram(c) {
 						break
