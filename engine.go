@@ -9,6 +9,7 @@ import (
 	"net"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -128,6 +129,7 @@ type Engine struct {
 	mux     sync.Mutex
 
 	isOneshot bool
+	stopped   int32
 
 	wgConn sync.WaitGroup
 
@@ -195,9 +197,14 @@ func (e *Engine) SetLTSyncRead() {
 }
 
 // Stop closes listeners/pollers/conns/timer.
+// It is safe to call more than once; only the first call stops the engine.
 //
 //go:norace
 func (g *Engine) Stop() {
+	if !atomic.CompareAndSwapInt32(&g.stopped, 0, 1) {
+		return
+	}
+
 	for _, l := range g.listeners {
 		l.stop()
 	}
