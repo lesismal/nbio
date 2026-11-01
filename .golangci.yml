@@ -1,0 +1,14 @@
+# golangci-lint v2 config (used by .github/workflows/ci.yml).
+version: "2"
+linters:
+  exclusions:
+    paths:
+      # Verbatim copies of Go's sources (tools/tlssync/sync.sh): they must stay byte-identical to Go
+      # (diff-upstream.sh), so they are not linted. Our files in crypto/tls are nonblock*.go and arco_*.go
+      # (named so these patterns skip them) and the shims under internal/.
+      - ^crypto/tls/(al|au|[b-mo-z])[^/]*\.go$
+      - ^crypto/tls/internal/(byteorder|fips140tls|fips140/tls12|fips140/tls13)/
+    rules:
+      # Tests close connections and write to pipes without checking errors, as Go's own crypto/tls tests do.
+      - path: _test\.go$
+        linters: [errcheck]

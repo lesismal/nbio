@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
+	"github.com/lesismal/nbio/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 	"github.com/lesismal/nbio/nbhttp/websocket"
 	"github.com/lesismal/nbio/taskpool"

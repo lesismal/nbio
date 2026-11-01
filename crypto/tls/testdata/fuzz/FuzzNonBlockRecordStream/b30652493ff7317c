@@ -1,0 +1,5 @@
+go test fuzz v1
+bool(false)
+[]byte("\xea\xea")
+int(-199)
+byte('w')

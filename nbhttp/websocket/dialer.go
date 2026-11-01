@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/crypto/tls"
 	"github.com/lesismal/nbio/nbhttp"
 )
 

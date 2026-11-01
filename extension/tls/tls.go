@@ -3,8 +3,8 @@ package tls
 // deprecated.
 
 import (
-	"github.com/lesismal/llib/std/crypto/tls"
 	"github.com/lesismal/nbio"
+	"github.com/lesismal/nbio/crypto/tls"
 	"github.com/lesismal/nbio/mempool"
 )
 
@@ -18,7 +18,7 @@ type Config = tls.Config
 //
 //go:norace
 func Dial(network, addr string, config *Config) (*tls.Conn, error) {
-	tlsConn, err := tls.Dial(network, addr, config, mempool.DefaultMemPool)
+	tlsConn, err := tls.Dial(network, addr, config)
 	if err != nil {
 		return nil, err
 	}
@@ -51,9 +51,17 @@ func WrapOpen(tlsConfig *Config, isClient bool, h func(c *nbio.Conn, tlsConn *Co
 //go:norace
 func WrapClose(h func(c *nbio.Conn, tlsConn *Conn, err error)) func(c *nbio.Conn, err error) {
 	return func(c *nbio.Conn, err error) {
-		if h != nil && c != nil {
-			if session := c.Session(); session != nil {
-				if tlsConn, ok := session.(*Conn); ok {
+		if c == nil {
+			return
+		}
+		if session := c.Session(); session != nil {
+			if tlsConn, ok := session.(*Conn); ok {
+				if !tlsConn.HandshakeComplete() {
+					// Wake a handshake goroutine waiting for input, so it
+					// exits now rather than at its timeout (as nbhttp's OnClose).
+					_ = tlsConn.Close()
+				}
+				if h != nil {
 					h(c, tlsConn, err)
 				}
 			}
@@ -76,16 +84,19 @@ func WrapData(h func(c *nbio.Conn, tlsConn *Conn, data []byte), args ...interfac
 	return func(c *nbio.Conn, data []byte) {
 		if session := c.Session(); session != nil {
 			if tlsConn, ok := session.(*Conn); ok {
-				_, _ = tlsConn.Append(data)
+				defer tlsConn.ResetOrFreeBuffer()
 				buffer := getBuffer()
 				for {
-					n, err := tlsConn.Read(buffer)
+					_, n, err := tlsConn.AppendAndRead(data, buffer)
+					data = nil
+					// Use the plaintext before the error: Read returns
+					// (n > 0, io.EOF) when a close_notify follows the data.
+					if h != nil && n > 0 {
+						h(c, tlsConn, buffer[:n])
+					}
 					if err != nil {
 						_ = c.Close()
 						return
-					}
-					if h != nil && n > 0 {
-						h(c, tlsConn, buffer[:n])
 					}
 					if n == 0 {
 						return
