@@ -387,6 +387,7 @@ Thanks Everyone:
 - [DevNewbie1826](https://github.com/DevNewbie1826)
 - [FJSDS](https://github.com/FJSDS)
 - [IceflowRE](https://github.com/IceflowRE)
+- [JGamboa](https://github.com/JGamboa)
 - [Jourmey](https://github.com/Jourmey)
 - [YanKawaYu](https://github.com/YanKawaYu)
 
