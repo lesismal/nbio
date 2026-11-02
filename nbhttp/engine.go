@@ -618,10 +618,8 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 			for {
 				_, nread, err := tlsConn.AppendAndRead(readed, buffer)
 				readed = nil
-				if err != nil {
-					_ = c.CloseWithError(err)
-					return
-				}
+				// Use the plaintext before the error: Read returns
+				// (n > 0, io.EOF) when a close_notify follows the last data.
 				if nread > 0 {
 					parserCloser = c.Session().(ParserCloser)
 					err := parserCloser.Parse(buffer[:nread])
@@ -630,6 +628,10 @@ func (e *Engine) TLSDataHandler(c *nbio.Conn, data []byte) {
 						_ = c.CloseWithError(err)
 						return
 					}
+				}
+				if err != nil {
+					_ = c.CloseWithError(err)
+					return
 				}
 				if nread == 0 {
 					return
@@ -974,9 +976,7 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 		for {
 			_, nread, err = tlsConn.AppendAndRead(readed, *pbuf)
 			readed = nil
-			if err != nil {
-				return
-			}
+			errRead := err // use the plaintext before the error (see TLSDataHandler)
 			if nread > 0 {
 				err = parserCloser.Parse((*pbuf)[:nread])
 				if err != nil {
@@ -994,6 +994,10 @@ func (engine *Engine) readTLSConnBlocking(conn *Conn, rconn net.Conn, tlsConn *t
 					parser.CloseAndClean(nil)
 					parser = nil
 				}
+			}
+			if errRead != nil {
+				err = errRead
+				return
 			}
 			if nread == 0 {
 				break
