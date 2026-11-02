@@ -732,7 +732,7 @@ func (c *Conn) write(b []byte) (int, error) {
 			n = 0
 		}
 		left := len(b) - n
-		if left > 0 && c.typ == ConnTypeTCP {
+		if left > 0 && (c.typ == ConnTypeTCP || c.typ == ConnTypeUnix) {
 			c.newToWriteBuf(b[n:])
 			// c.appendWrite(t)
 		}
