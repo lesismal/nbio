@@ -72,7 +72,7 @@ func (c *holdConn) flush() error {
 	defer c.mu.Unlock()
 	c.hold = false
 	// crypto/tls sets a past write deadline after sending close_notify.
-	_ = c.Conn.SetWriteDeadline(time.Time{})
+	_ = c.SetWriteDeadline(time.Time{})
 	_, err := c.Conn.Write(c.buf.Bytes())
 	return err
 }
@@ -87,7 +87,7 @@ func TestTLSRequestWithCloseNotify(t *testing.T) {
 		t.Fatal(err)
 	}
 	addr := ln.Addr().String()
-	ln.Close()
+	_ = ln.Close()
 
 	handled := make(chan struct{}, 1)
 	mux := http.NewServeMux()
@@ -135,6 +135,6 @@ func TestTLSRequestWithCloseNotify(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatalf("TLS %x: request sent together with close_notify was not handled", vers)
 		}
-		c.Close()
+		_ = c.Close()
 	}
 }
